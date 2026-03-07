@@ -1,9 +1,9 @@
-import { defineConfig } from "vite"
-import solid from "vite-plugin-solid"
-import tailwindcss from "@tailwindcss/vite"
-import path from "path"
+import tailwindcss from "@tailwindcss/vite";
+import path from "path";
+import { defineConfig } from "vite";
+import solid from "vite-plugin-solid";
 
-const host = process.env.TAURI_DEV_HOST
+const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [solid(), tailwindcss()],
@@ -30,4 +30,4 @@ export default defineConfig({
       ignored: ["**/src-tauri/**"],
     },
   },
-})
+});

@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "types": ["bun-types"],
     "composite": true,
     "declaration": true,
     "declarationMap": true,
@@ -20,8 +21,6 @@
       "@zulip/desktop/*": ["../desktop/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "references": [
-    { "path": "../ui" }
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../desktop/src/bindings.ts"],
+  "references": [{ "path": "../ui" }]
 }

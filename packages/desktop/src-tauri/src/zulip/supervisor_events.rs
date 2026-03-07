@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use super::{ZulipClient, sanitize_event_id};
+use super::{sanitize_event_id, ZulipClient};
 
 /// Start a long-lived SSE connection to the supervisor session stream.
 /// Events are parsed and emitted to the frontend via Tauri's event system.
@@ -42,10 +42,7 @@ pub async fn start_supervisor_stream(
             "Connecting supervisor SSE stream"
         );
 
-        let result = client
-            .build_sse_request(&sse_client, &path)
-            .send()
-            .await;
+        let result = client.build_sse_request(&sse_client, &path).send().await;
 
         match result {
             Ok(resp) if resp.status().is_success() => {
@@ -93,10 +90,7 @@ pub async fn start_supervisor_stream(
             }
             Ok(resp) => {
                 let status = resp.status();
-                let body = resp
-                    .text()
-                    .await
-                    .unwrap_or_default();
+                let body = resp.text().await.unwrap_or_default();
                 tracing::warn!(
                     org_id = %org_id,
                     status = %status,
@@ -135,12 +129,7 @@ pub async fn start_supervisor_stream(
 /// SSE frames consist of lines:
 /// - `data: {...}` — JSON event data
 /// - `: keepalive` or `: ` — comment/heartbeat, ignored
-fn process_sse_frame(
-    app: &tauri::AppHandle,
-    org_id: &str,
-    frame: &str,
-    cursor: &mut i64,
-) {
+fn process_sse_frame(app: &tauri::AppHandle, org_id: &str, frame: &str, cursor: &mut i64) {
     let event_id = sanitize_event_id(org_id);
 
     for line in frame.lines() {
@@ -155,10 +144,7 @@ fn process_sse_frame(
                 Ok(value) => {
                     // Check if this is a periodic session_state snapshot
                     if value.get("type").and_then(|t| t.as_str()) == Some("session_state") {
-                        let _ = app.emit(
-                            &format!("supervisor:{}:session", event_id),
-                            &value,
-                        );
+                        let _ = app.emit(&format!("supervisor:{}:session", event_id), &value);
                     } else {
                         // Regular supervisor event — update cursor and emit
                         if let Some(id) = value.get("id").and_then(|v| v.as_i64()) {
@@ -166,10 +152,7 @@ fn process_sse_frame(
                                 *cursor = id;
                             }
                         }
-                        let _ = app.emit(
-                            &format!("supervisor:{}:events", event_id),
-                            &value,
-                        );
+                        let _ = app.emit(&format!("supervisor:{}:events", event_id), &value);
                     }
                 }
                 Err(e) => {

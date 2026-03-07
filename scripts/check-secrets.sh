@@ -39,7 +39,8 @@ if [[ -n "$heuristic_hits" ]]; then
 fi
 
 if command -v gitleaks >/dev/null 2>&1; then
-  gitleaks dir "$repo_root" --no-banner --redact --exit-code 1
+  # Scan the published Git content instead of local build artifacts like src-tauri/target.
+  gitleaks git "$repo_root" --no-banner --redact --exit-code 1
 else
   echo "gitleaks not installed; heuristic secret scan passed."
 fi

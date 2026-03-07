@@ -1,12 +1,12 @@
-import { Show } from "solid-js"
-import { useSupervisor } from "../../context/supervisor"
-import { SupervisorHeader } from "./supervisor-header"
-import { TaskDashboard } from "./task-dashboard"
-import { SupervisorTimeline } from "./supervisor-timeline"
-import { SupervisorComposer } from "./supervisor-composer"
+import { Show } from "solid-js";
+import { useSupervisor } from "../../context/supervisor";
+import { SupervisorComposer } from "./supervisor-composer";
+import { SupervisorHeader } from "./supervisor-header";
+import { SupervisorTimeline } from "./supervisor-timeline";
+import { TaskDashboard } from "./task-dashboard";
 
 export function SupervisorPanel() {
-  const supervisor = useSupervisor()
+  const supervisor = useSupervisor();
 
   return (
     <Show when={supervisor.store.active}>
@@ -36,5 +36,5 @@ export function SupervisorPanel() {
         <SupervisorComposer />
       </aside>
     </Show>
-  )
+  );
 }

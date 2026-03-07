@@ -1,12 +1,14 @@
-import { useSettings } from "../context/settings"
-import { SettingToggle, SettingRow } from "./settings-general"
+import { useSettings } from "../context/settings";
+import { SettingRow, SettingToggle } from "./settings-general";
 
 export function SettingsNotifications() {
-  const { store, setSetting } = useSettings()
+  const { store, setSetting } = useSettings();
 
   return (
     <div class="space-y-6">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">Notifications</h3>
+      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+        Notifications
+      </h3>
 
       <SettingToggle
         label="Desktop notifications"
@@ -30,7 +32,9 @@ export function SettingsNotifications() {
       />
 
       <hr class="border-[var(--border-default)]" />
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Notify me about</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Notify me about
+      </div>
 
       <SettingToggle
         label="Direct messages"
@@ -62,11 +66,16 @@ export function SettingsNotifications() {
 
       <hr class="border-[var(--border-default)]" />
 
-      <SettingRow label="Wildcard mentions (@all)" description="Behavior when someone uses @all or @everyone">
+      <SettingRow
+        label="Wildcard mentions (@all)"
+        description="Behavior when someone uses @all or @everyone"
+      >
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={store.wildcardMentions}
-          onChange={(e) => setSetting("wildcardMentions", e.currentTarget.value)}
+          onChange={(e) =>
+            setSetting("wildcardMentions", e.currentTarget.value)
+          }
         >
           <option value="default">Follow channel default</option>
           <option value="notify">Always notify</option>
@@ -74,5 +83,5 @@ export function SettingsNotifications() {
         </select>
       </SettingRow>
     </div>
-  )
+  );
 }

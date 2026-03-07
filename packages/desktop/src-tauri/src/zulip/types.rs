@@ -218,6 +218,7 @@ pub struct SavedServer {
 }
 
 /// Message type for sending
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub enum MessageType {
     #[serde(rename = "stream")]
@@ -227,6 +228,7 @@ pub enum MessageType {
 }
 
 /// Target for sending a message
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(untagged)]
 pub enum MessageTarget {
@@ -235,6 +237,7 @@ pub enum MessageTarget {
 }
 
 /// Flag operations
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub enum FlagOp {
     #[serde(rename = "add")]
@@ -244,6 +247,7 @@ pub enum FlagOp {
 }
 
 /// Message flags
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub enum MessageFlag {
     #[serde(rename = "read")]
@@ -255,6 +259,7 @@ pub enum MessageFlag {
 }
 
 /// Typing operation
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub enum TypingOp {
     #[serde(rename = "start")]
@@ -264,6 +269,7 @@ pub enum TypingOp {
 }
 
 /// Presence status
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub enum PresenceStatus {
     #[serde(rename = "active")]
@@ -273,6 +279,7 @@ pub enum PresenceStatus {
 }
 
 /// Anchor for message queries
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(untagged)]
 pub enum Anchor {

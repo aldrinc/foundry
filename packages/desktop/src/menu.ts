@@ -1,4 +1,9 @@
-import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu"
+import {
+  Menu,
+  MenuItem,
+  PredefinedMenuItem,
+  Submenu,
+} from "@tauri-apps/api/menu";
 
 export async function createMenu(trigger: (id: string) => void) {
   try {
@@ -100,10 +105,10 @@ export async function createMenu(trigger: (id: string) => void) {
           ],
         }),
       ],
-    })
+    });
 
-    await menu.setAsAppMenu()
+    await menu.setAsAppMenu();
   } catch (e) {
-    console.warn("Failed to create native menu:", e)
+    console.warn("Failed to create native menu:", e);
   }
 }

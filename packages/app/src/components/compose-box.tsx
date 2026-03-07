@@ -1,44 +1,46 @@
-import { Show, createEffect, createSignal } from "solid-js"
-import { commands } from "@zulip/desktop/bindings"
-import { useNavigation } from "../context/navigation"
-import { useOrg } from "../context/org"
-import { useZulipSync } from "../context/zulip-sync"
+import { commands } from "@zulip/desktop/bindings";
+import { createEffect, createSignal, Show } from "solid-js";
+import { useNavigation } from "../context/navigation";
+import { useOrg } from "../context/org";
+import { useZulipSync } from "../context/zulip-sync";
 
 export function ComposeBox(props: { narrow: string }) {
-  const sync = useZulipSync()
-  const org = useOrg()
-  const nav = useNavigation()
+  const sync = useZulipSync();
+  const org = useOrg();
+  const nav = useNavigation();
 
-  const [content, setContent] = createSignal("")
-  const [sending, setSending] = createSignal(false)
-  const [error, setError] = createSignal("")
+  const [content, setContent] = createSignal("");
+  const [sending, setSending] = createSignal(false);
+  const [error, setError] = createSignal("");
 
-  let textareaRef!: HTMLTextAreaElement
-
-  createEffect(() => {
-    const draft = sync.store.drafts[props.narrow]
-    setContent(draft || "")
-    setError("")
-  })
+  let textareaRef!: HTMLTextAreaElement;
 
   createEffect(() => {
-    const _ = content()
-    if (!textareaRef) return
-    textareaRef.style.height = "auto"
-    textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 180)}px`
-  })
+    const draft = sync.store.drafts[props.narrow];
+    setContent(draft || "");
+    setError("");
+  });
+
+  createEffect(() => {
+    const _ = content();
+    if (!textareaRef) return;
+    textareaRef.style.height = "auto";
+    textareaRef.style.height = `${Math.min(textareaRef.scrollHeight, 180)}px`;
+  });
 
   const messageTarget = () => {
-    const parsed = nav.parseNarrow(props.narrow)
-    if (!parsed) return null
+    const parsed = nav.parseNarrow(props.narrow);
+    if (!parsed) return null;
 
     if (parsed.type === "topic" || parsed.type === "stream") {
-      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
+      const stream = sync.store.subscriptions.find(
+        (s) => s.stream_id === parsed.streamId,
+      );
       return {
         msgType: "stream",
         to: stream?.name || String(parsed.streamId),
         topic: parsed.topic || "(no topic)",
-      }
+      };
     }
 
     if (parsed.type === "dm") {
@@ -46,51 +48,55 @@ export function ComposeBox(props: { narrow: string }) {
         msgType: "direct",
         to: JSON.stringify(parsed.userIds),
         topic: null,
-      }
+      };
     }
 
-    return null
-  }
+    return null;
+  };
 
   const placeholder = () => {
-    const parsed = nav.parseNarrow(props.narrow)
-    if (!parsed) return "Type a message..."
+    const parsed = nav.parseNarrow(props.narrow);
+    if (!parsed) return "Type a message...";
 
     if (parsed.type === "topic") {
-      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
-      return `Message #${stream?.name || parsed.streamId} > ${parsed.topic}`
+      const stream = sync.store.subscriptions.find(
+        (s) => s.stream_id === parsed.streamId,
+      );
+      return `Message #${stream?.name || parsed.streamId} > ${parsed.topic}`;
     }
 
     if (parsed.type === "stream") {
-      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
-      return `Message #${stream?.name || parsed.streamId}`
+      const stream = sync.store.subscriptions.find(
+        (s) => s.stream_id === parsed.streamId,
+      );
+      return `Message #${stream?.name || parsed.streamId}`;
     }
 
-    return "Type a message..."
-  }
+    return "Type a message...";
+  };
 
   const handleInput = (value: string) => {
-    setContent(value)
-    setError("")
+    setContent(value);
+    setError("");
     if (value.trim()) {
-      sync.saveDraft(props.narrow, value)
+      sync.saveDraft(props.narrow, value);
     } else {
-      sync.clearDraft(props.narrow)
+      sync.clearDraft(props.narrow);
     }
-  }
+  };
 
   const handleSend = async () => {
-    const text = content().trim()
-    if (!text || sending()) return
+    const text = content().trim();
+    if (!text || sending()) return;
 
-    const target = messageTarget()
+    const target = messageTarget();
     if (!target) {
-      setError("Cannot determine message destination")
-      return
+      setError("Cannot determine message destination");
+      return;
     }
 
-    setSending(true)
-    setError("")
+    setSending(true);
+    setError("");
 
     try {
       const result = await commands.sendMessage(
@@ -99,28 +105,28 @@ export function ComposeBox(props: { narrow: string }) {
         target.to,
         text,
         target.topic,
-      )
+      );
 
       if (result.status === "error") {
-        setError(result.error || "Failed to send message")
-        return
+        setError(result.error || "Failed to send message");
+        return;
       }
 
-      setContent("")
-      sync.clearDraft(props.narrow)
+      setContent("");
+      sync.clearDraft(props.narrow);
     } catch (e: any) {
-      setError(e?.toString() || "Failed to send message")
+      setError(e?.toString() || "Failed to send message");
     } finally {
-      setSending(false)
+      setSending(false);
     }
-  }
+  };
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      void handleSend()
+      e.preventDefault();
+      void handleSend();
     }
-  }
+  };
 
   return (
     <div
@@ -158,5 +164,5 @@ export function ComposeBox(props: { narrow: string }) {
         <p class="text-xs text-[var(--status-error)] mt-1">{error()}</p>
       </Show>
     </div>
-  )
+  );
 }

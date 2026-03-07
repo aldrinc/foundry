@@ -1,0 +1,57 @@
+exclude: ^packages/desktop/src/bindings\.ts$
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.9.0
+    hooks:
+      - id: gitleaks
+        args: ["--redact"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        exclude: ^packages/desktop/src-tauri/icons/icon\.icns$
+      - id: check-case-conflict
+      - id: check-illegal-windows-names
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  - repo: https://github.com/biomejs/pre-commit
+    rev: v2.4.6
+    hooks:
+      - id: biome-check
+
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.9.0
+    hooks:
+      - id: typos
+
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+
+  - repo: local
+    hooks:
+      - id: solid-eslint
+        name: solid · eslint
+        entry: bun run lint:eslint
+        language: system
+        pass_filenames: false
+        files: ^packages/(app|ui|desktop)/src/.*\.(ts|tsx)$
+
+      - id: cargo-fmt
+        name: rust · cargo fmt
+        entry: cargo fmt --manifest-path packages/desktop/src-tauri/Cargo.toml --all -- --check
+        language: system
+        pass_filenames: false
+        files: ^packages/desktop/src-tauri/.*\.(rs|toml)$

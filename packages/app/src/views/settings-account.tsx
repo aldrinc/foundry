@@ -1,51 +1,72 @@
-import { useZulipSync } from "../context/zulip-sync"
-import { useOrg } from "../context/org"
-import { useSettings } from "../context/settings"
-import { SettingToggle, SettingRow } from "./settings-general"
+import { useOrg } from "../context/org";
+import { useSettings } from "../context/settings";
+import { useZulipSync } from "../context/zulip-sync";
+import { SettingRow, SettingToggle } from "./settings-general";
 
 export function SettingsAccount(props: { onLogout: () => void }) {
-  const sync = useZulipSync()
-  const org = useOrg()
-  const { store, setSetting } = useSettings()
+  const sync = useZulipSync();
+  const org = useOrg();
+  const { store, setSetting } = useSettings();
 
-  const currentUser = () => sync.store.users.find(u => u.user_id === sync.store.currentUserId)
+  const currentUser = () =>
+    sync.store.users.find((u) => u.user_id === sync.store.currentUserId);
 
   const roleLabel = () => {
-    const role = currentUser()?.role
-    if (role === 100) return "Owner"
-    if (role === 200) return "Administrator"
-    if (role === 300) return "Moderator"
-    if (role === 400) return "Member"
-    if (role === 600) return "Guest"
-    return "Member"
-  }
+    const role = currentUser()?.role;
+    if (role === 100) return "Owner";
+    if (role === 200) return "Administrator";
+    if (role === 300) return "Moderator";
+    if (role === 400) return "Member";
+    if (role === 600) return "Guest";
+    return "Member";
+  };
 
   return (
     <div class="space-y-6">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">Account & Privacy</h3>
+      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+        Account & Privacy
+      </h3>
 
       {/* Profile info */}
       <div class="space-y-3 p-3 bg-[var(--background-base)] rounded-[var(--radius-md)] border border-[var(--border-default)]">
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Full name</label>
-          <div class="text-sm text-[var(--text-primary)] mt-0.5">{currentUser()?.full_name || "Unknown"}</div>
+          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            Full name
+          </label>
+          <div class="text-sm text-[var(--text-primary)] mt-0.5">
+            {currentUser()?.full_name || "Unknown"}
+          </div>
         </div>
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Email</label>
-          <div class="text-sm text-[var(--text-primary)] mt-0.5">{currentUser()?.email || sync.store.currentEmail || "—"}</div>
+          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            Email
+          </label>
+          <div class="text-sm text-[var(--text-primary)] mt-0.5">
+            {currentUser()?.email || sync.store.currentUserEmail || "—"}
+          </div>
         </div>
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Role</label>
-          <div class="text-sm text-[var(--text-primary)] mt-0.5">{roleLabel()}</div>
+          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            Role
+          </label>
+          <div class="text-sm text-[var(--text-primary)] mt-0.5">
+            {roleLabel()}
+          </div>
         </div>
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Organization</label>
-          <div class="text-sm text-[var(--text-primary)] mt-0.5">{org.realmName}</div>
+          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            Organization
+          </label>
+          <div class="text-sm text-[var(--text-primary)] mt-0.5">
+            {org.realmName}
+          </div>
         </div>
       </div>
 
       <hr class="border-[var(--border-default)]" />
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Privacy</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Privacy
+      </div>
 
       <SettingToggle
         label="Send typing notifications"
@@ -68,7 +89,10 @@ export function SettingsAccount(props: { onLogout: () => void }) {
         onChange={(v) => setSetting("showAvailability", v)}
       />
 
-      <SettingRow label="Email address visibility" description="Who can see your email address">
+      <SettingRow
+        label="Email address visibility"
+        description="Who can see your email address"
+      >
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={store.emailVisibility}
@@ -90,5 +114,5 @@ export function SettingsAccount(props: { onLogout: () => void }) {
         Log out
       </button>
     </div>
-  )
+  );
 }

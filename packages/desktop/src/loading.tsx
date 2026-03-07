@@ -1,5 +1,5 @@
-import { render } from "solid-js/web"
-import "./styles.css"
+import { render } from "solid-js/web";
+import "./styles.css";
 
 function LoadingScreen() {
   return (
@@ -12,7 +12,14 @@ function LoadingScreen() {
           fill="none"
           class="animate-pulse opacity-50"
         >
-          <circle cx="24" cy="24" r="20" stroke="currentColor" stroke-width="2" fill="none" />
+          <circle
+            cx="24"
+            cy="24"
+            r="20"
+            stroke="currentColor"
+            stroke-width="2"
+            fill="none"
+          />
           <text
             x="24"
             y="30"
@@ -24,13 +31,15 @@ function LoadingScreen() {
             Z
           </text>
         </svg>
-        <p class="text-sm text-[var(--text-secondary)] animate-pulse">Loading...</p>
+        <p class="text-sm text-[var(--text-secondary)] animate-pulse">
+          Loading...
+        </p>
       </div>
     </div>
-  )
+  );
 }
 
-const root = document.getElementById("root")
+const root = document.getElementById("root");
 if (root) {
-  render(() => <LoadingScreen />, root)
+  render(() => <LoadingScreen />, root);
 }

@@ -1,34 +1,34 @@
-import { Show, onCleanup } from "solid-js"
-import { useZulipSync } from "../context/zulip-sync"
+import { onCleanup, Show } from "solid-js";
+import { useZulipSync } from "../context/zulip-sync";
 
 export function PersonalMenu(props: {
-  onClose: () => void
-  onOpenSettings: () => void
-  onLogout: () => void
+  onClose: () => void;
+  onOpenSettings: () => void;
+  onLogout: () => void;
 }) {
-  const sync = useZulipSync()
-  let menuRef!: HTMLDivElement
+  const sync = useZulipSync();
+  let menuRef!: HTMLDivElement;
 
   const currentUser = () => {
-    const userId = sync.store.currentUserId
-    if (!userId) return null
-    return sync.store.users.find(u => u.user_id === userId) ?? null
-  }
+    const userId = sync.store.currentUserId;
+    if (!userId) return null;
+    return sync.store.users.find((u) => u.user_id === userId) ?? null;
+  };
 
   const handleClickOutside = (e: MouseEvent) => {
     if (menuRef && !menuRef.contains(e.target as Node)) {
-      props.onClose()
+      props.onClose();
     }
-  }
+  };
 
-  setTimeout(() => document.addEventListener("click", handleClickOutside), 0)
-  onCleanup(() => document.removeEventListener("click", handleClickOutside))
+  setTimeout(() => document.addEventListener("click", handleClickOutside), 0);
+  onCleanup(() => document.removeEventListener("click", handleClickOutside));
 
   const handleAction = (action: () => void) => {
-    document.removeEventListener("click", handleClickOutside)
-    props.onClose()
-    action()
-  }
+    document.removeEventListener("click", handleClickOutside);
+    props.onClose();
+    action();
+  };
 
   return (
     <div
@@ -53,24 +53,37 @@ export function PersonalMenu(props: {
       </div>
 
       {/* Actions */}
-      <MenuItem label="Settings" onClick={() => handleAction(props.onOpenSettings)} />
+      <MenuItem
+        label="Settings"
+        onClick={() => handleAction(props.onOpenSettings)}
+      />
       <div class="my-1 border-t border-[var(--border-default)]" />
-      <MenuItem label="Log out" onClick={() => handleAction(props.onLogout)} danger />
+      <MenuItem
+        label="Log out"
+        onClick={() => handleAction(props.onLogout)}
+        danger
+      />
     </div>
-  )
+  );
 }
 
-function MenuItem(props: { label: string; onClick: () => void; danger?: boolean }) {
+function MenuItem(props: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
   return (
     <button
       class="w-full text-left px-3 py-1.5 text-xs transition-colors"
       classList={{
-        "text-[var(--status-error)] hover:bg-[var(--status-error)]/10": props.danger,
-        "text-[var(--text-primary)] hover:bg-[var(--background-elevated)]": !props.danger,
+        "text-[var(--status-error)] hover:bg-[var(--status-error)]/10":
+          props.danger,
+        "text-[var(--text-primary)] hover:bg-[var(--background-elevated)]":
+          !props.danger,
       }}
       onClick={props.onClick}
     >
       {props.label}
     </button>
-  )
+  );
 }

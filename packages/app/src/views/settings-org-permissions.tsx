@@ -1,27 +1,32 @@
-import { createSignal } from "solid-js"
-import { SettingRow, SettingToggle } from "./settings-general"
+import { createSignal } from "solid-js";
+import { SettingRow, SettingToggle } from "./settings-general";
 
 export function SettingsOrgPermissions() {
-  const [invitePolicy, setInvitePolicy] = createSignal("members")
-  const [createPublic, setCreatePublic] = createSignal("members")
-  const [createPrivate, setCreatePrivate] = createSignal("members")
-  const [addSubscribers, setAddSubscribers] = createSignal("members")
-  const [moveMessages, setMoveMessages] = createSignal("members")
-  const [editPolicy, setEditPolicy] = createSignal("time-limited")
-  const [deletePolicy, setDeletePolicy] = createSignal("admins")
-  const [requireTopics, setRequireTopics] = createSignal(true)
-  const [inviteOnly, setInviteOnly] = createSignal(true)
-  const [emailDomains, setEmailDomains] = createSignal("")
+  const [invitePolicy, setInvitePolicy] = createSignal("members");
+  const [createPublic, setCreatePublic] = createSignal("members");
+  const [createPrivate, setCreatePrivate] = createSignal("members");
+  const [addSubscribers, setAddSubscribers] = createSignal("members");
+  const [moveMessages, setMoveMessages] = createSignal("members");
+  const [editPolicy, setEditPolicy] = createSignal("time-limited");
+  const [deletePolicy, setDeletePolicy] = createSignal("admins");
+  const [requireTopics, setRequireTopics] = createSignal(true);
+  const [inviteOnly, setInviteOnly] = createSignal(true);
+  const [emailDomains, setEmailDomains] = createSignal("");
 
   return (
     <div class="space-y-6">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">Organization Permissions</h3>
+      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+        Organization Permissions
+      </h3>
       <p class="text-xs text-[var(--text-tertiary)]">
-        These settings control what actions members can take in your organization. Only administrators can modify these.
+        These settings control what actions members can take in your
+        organization. Only administrators can modify these.
       </p>
 
       {/* Joining */}
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Joining the organization</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Joining the organization
+      </div>
 
       <SettingToggle
         label="Require invitation to join"
@@ -30,11 +35,17 @@ export function SettingsOrgPermissions() {
         onChange={setInviteOnly}
       />
 
-      <SettingRow label="Who can invite users" description="Permission to send invitations">
+      <SettingRow
+        label="Who can invite users"
+        description="Permission to send invitations"
+      >
         <PermissionSelect value={invitePolicy()} onChange={setInvitePolicy} />
       </SettingRow>
 
-      <SettingRow label="Email domain restrictions" description="Restrict signups to specific email domains">
+      <SettingRow
+        label="Email domain restrictions"
+        description="Restrict signups to specific email domains"
+      >
         <input
           type="text"
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] w-[140px]"
@@ -47,26 +58,45 @@ export function SettingsOrgPermissions() {
       <hr class="border-[var(--border-default)]" />
 
       {/* Channels */}
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Channel permissions</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Channel permissions
+      </div>
 
-      <SettingRow label="Create public channels" description="Who can create new public channels">
+      <SettingRow
+        label="Create public channels"
+        description="Who can create new public channels"
+      >
         <PermissionSelect value={createPublic()} onChange={setCreatePublic} />
       </SettingRow>
 
-      <SettingRow label="Create private channels" description="Who can create new private channels">
+      <SettingRow
+        label="Create private channels"
+        description="Who can create new private channels"
+      >
         <PermissionSelect value={createPrivate()} onChange={setCreatePrivate} />
       </SettingRow>
 
-      <SettingRow label="Add subscribers" description="Who can add other users to channels">
-        <PermissionSelect value={addSubscribers()} onChange={setAddSubscribers} />
+      <SettingRow
+        label="Add subscribers"
+        description="Who can add other users to channels"
+      >
+        <PermissionSelect
+          value={addSubscribers()}
+          onChange={setAddSubscribers}
+        />
       </SettingRow>
 
       <hr class="border-[var(--border-default)]" />
 
       {/* Messages */}
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Message permissions</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Message permissions
+      </div>
 
-      <SettingRow label="Message editing" description="Policy for editing sent messages">
+      <SettingRow
+        label="Message editing"
+        description="Policy for editing sent messages"
+      >
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={editPolicy()}
@@ -79,7 +109,10 @@ export function SettingsOrgPermissions() {
         </select>
       </SettingRow>
 
-      <SettingRow label="Message deletion" description="Policy for deleting messages">
+      <SettingRow
+        label="Message deletion"
+        description="Policy for deleting messages"
+      >
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={deletePolicy()}
@@ -92,7 +125,10 @@ export function SettingsOrgPermissions() {
         </select>
       </SettingRow>
 
-      <SettingRow label="Move messages" description="Who can move messages between topics">
+      <SettingRow
+        label="Move messages"
+        description="Who can move messages between topics"
+      >
         <PermissionSelect value={moveMessages()} onChange={setMoveMessages} />
       </SettingRow>
 
@@ -103,10 +139,13 @@ export function SettingsOrgPermissions() {
         onChange={setRequireTopics}
       />
     </div>
-  )
+  );
 }
 
-function PermissionSelect(props: { value: string; onChange: (v: string) => void }) {
+function PermissionSelect(props: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <select
       class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
@@ -119,5 +158,5 @@ function PermissionSelect(props: { value: string; onChange: (v: string) => void 
       <option value="members">All members</option>
       <option value="full-members">Full members only</option>
     </select>
-  )
+  );
 }

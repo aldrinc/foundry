@@ -10,10 +10,24 @@
     "build": "bun run --cwd packages/desktop build",
     "test": "bun test",
     "typecheck": "turbo typecheck",
-    "lint": "turbo lint",
-    "test:e2e": "turbo test:e2e"
+    "lint": "bun run lint:web && bun run lint:rust",
+    "lint:web": "bun run lint:biome && bun run lint:eslint",
+    "lint:biome": "biome check .",
+    "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src",
+    "lint:rust": "cargo fmt --manifest-path packages/desktop/src-tauri/Cargo.toml --all -- --check && cargo clippy --manifest-path packages/desktop/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings",
+    "check:rust": "cargo check --manifest-path packages/desktop/src-tauri/Cargo.toml --all-targets",
+    "format": "biome check --write . && cargo fmt --manifest-path packages/desktop/src-tauri/Cargo.toml --all",
+    "test:e2e": "turbo test:e2e",
+    "verify": "bun test && bun run typecheck && bun run lint && bun run build && bun run check:rust"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@eslint/js": "^9.39.4",
+    "@typescript-eslint/parser": "^8.56.1",
+    "bun-types": "^1.3.10",
+    "eslint": "^9.39.4",
+    "eslint-plugin-solid": "^0.14.5",
+    "globals": "^17.4.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }

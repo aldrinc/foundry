@@ -1,68 +1,68 @@
-import { createSignal, Show } from "solid-js"
-import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
-import type { LoginResult } from "@zulip/desktop/bindings"
+import type { LoginResult } from "@zulip/desktop/bindings";
+import { commands } from "@zulip/desktop/bindings";
+import { createSignal, Show } from "solid-js";
+import { usePlatform } from "../context/platform";
 
 /**
  * Login view — server URL input + authentication form.
  */
 export function LoginView(props: {
-  onLogin: (result: LoginResult) => void
-  onLoginWithEmail?: (result: LoginResult, email: string) => void
+  onLogin: (result: LoginResult) => void;
+  onLoginWithEmail?: (result: LoginResult, email: string) => void;
 }) {
-  const platform = usePlatform()
+  const platform = usePlatform();
 
-  const [serverUrl, setServerUrl] = createSignal("")
-  const [email, setEmail] = createSignal("")
-  const [apiKey, setApiKey] = createSignal("")
-  const [step, setStep] = createSignal<"server" | "auth">("server")
-  const [error, setError] = createSignal("")
-  const [loading, setLoading] = createSignal(false)
-  const [serverName, setServerName] = createSignal("")
+  const [serverUrl, setServerUrl] = createSignal("");
+  const [email, setEmail] = createSignal("");
+  const [apiKey, setApiKey] = createSignal("");
+  const [step, setStep] = createSignal<"server" | "auth">("server");
+  const [error, setError] = createSignal("");
+  const [loading, setLoading] = createSignal(false);
+  const [serverName, setServerName] = createSignal("");
 
   const handleConnect = async () => {
-    const url = serverUrl().trim()
+    const url = serverUrl().trim();
     if (!url) {
-      setError("Please enter a server URL")
-      return
+      setError("Please enter a server URL");
+      return;
     }
 
-    setLoading(true)
-    setError("")
+    setLoading(true);
+    setError("");
 
     try {
-      const result = await commands.getServerSettings(url)
+      const result = await commands.getServerSettings(url);
       if (result.status === "error") {
-        setError(result.error)
-        return
+        setError(result.error);
+        return;
       }
-      setServerName(result.data.realm_name || url)
-      setStep("auth")
+      setServerName(result.data.realm_name || url);
+      setStep("auth");
     } catch (e: any) {
-      setError(e?.toString() || "Failed to connect to server")
+      setError(e?.toString() || "Failed to connect to server");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleLogin = async () => {
-    const url = serverUrl().trim()
-    const userEmail = email().trim()
-    const key = apiKey().trim()
+    const url = serverUrl().trim();
+    const userEmail = email().trim();
+    const key = apiKey().trim();
 
     if (!userEmail || !key) {
-      setError("Please enter your email and API key")
-      return
+      setError("Please enter your email and API key");
+      return;
     }
 
-    setLoading(true)
-    setError("")
+    setLoading(true);
+    setError("");
 
     try {
-      const result = await commands.login(url, userEmail, key)
+      const result = await commands.login(url, userEmail, key);
       if (result.status === "error") {
-        setError(result.error)
-        return
+        setError(result.error);
+        return;
       }
       // Save server for auto-login next time
       await commands.addServer({
@@ -72,22 +72,22 @@ export function LoginView(props: {
         api_key: key,
         realm_name: result.data.realm_name,
         realm_icon: result.data.realm_icon,
-      })
+      });
       if (props.onLoginWithEmail) {
-        props.onLoginWithEmail(result.data, userEmail)
+        props.onLoginWithEmail(result.data, userEmail);
       } else {
-        props.onLogin(result.data)
+        props.onLogin(result.data);
       }
     } catch (e: any) {
-      setError(e?.toString() || "Login failed")
+      setError(e?.toString() || "Login failed");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleCreateOrg = () => {
-    platform.openLink("https://zulip.com/new/")
-  }
+    platform.openLink("https://zulip.com/new/");
+  };
 
   return (
     <div
@@ -213,8 +213,8 @@ export function LoginView(props: {
             <button
               class="w-full py-2 px-4 rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)] text-sm hover:bg-[var(--background-surface)] transition-colors"
               onClick={() => {
-                setStep("server")
-                setError("")
+                setStep("server");
+                setError("");
               }}
             >
               Back
@@ -223,5 +223,5 @@ export function LoginView(props: {
         </Show>
       </div>
     </div>
-  )
+  );
 }

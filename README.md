@@ -17,16 +17,34 @@ cd packages/desktop
 bun run build
 ```
 
-## Safe Publishing
+## Code Quality
 
-Before pushing this repository to a remote:
+Foundry uses a mixed repo-hygiene setup:
+
+- `pre-commit` runs fast local checks for secrets, file hygiene, docs, typos, Biome formatting, Solid ESLint, and Rust formatting.
+- `.githooks/pre-push` keeps the existing publish-safety secret scan and adds the heavier TypeScript, Rust lint, and Rust compile checks.
+- Forgejo CI reruns the same checks remotely from [`.forgejo/workflows/ci.yml`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/.forgejo/workflows/ci.yml).
+
+Install the local hooks once per clone:
 
 ```bash
+python3 -m pip install --user pre-commit
 git config core.hooksPath .githooks
-./scripts/check-secrets.sh
+pre-commit install --hook-type pre-commit
 ```
 
-The repo is configured to keep build output, local tool state, `.env` files, and common credential file types out of version control. The pre-push hook runs the same secret check script.
+Useful local commands:
+
+```bash
+bun run lint
+bun run typecheck
+bun run check:rust
+bun run verify
+```
+
+## Safe Publishing
+
+The repo is configured to keep build output, local tool state, `.env` files, and common credential file types out of version control. The secret scan lives in [`scripts/check-secrets.sh`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/scripts/check-secrets.sh) and is reused both locally and in CI.
 
 ## Remote Setup
 

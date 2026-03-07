@@ -1,14 +1,18 @@
-import { useSettings } from "../context/settings"
-import { SettingToggle, SettingRow } from "./settings-general"
+import { useSettings } from "../context/settings";
+import { SettingRow, SettingToggle } from "./settings-general";
 
 export function SettingsApp() {
-  const { store, setSetting } = useSettings()
+  const { store, setSetting } = useSettings();
 
   return (
     <div class="space-y-6">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">Desktop App</h3>
+      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+        Desktop App
+      </h3>
 
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Startup</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Startup
+      </div>
 
       <SettingToggle
         label="Start at login"
@@ -39,7 +43,9 @@ export function SettingsApp() {
       />
 
       <hr class="border-[var(--border-default)]" />
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Updates</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Updates
+      </div>
 
       <SettingToggle
         label="Auto-update"
@@ -56,7 +62,9 @@ export function SettingsApp() {
       />
 
       <hr class="border-[var(--border-default)]" />
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Editor</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Editor
+      </div>
 
       <SettingToggle
         label="Spellcheck"
@@ -66,17 +74,26 @@ export function SettingsApp() {
       />
 
       <hr class="border-[var(--border-default)]" />
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Advanced</div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+        Advanced
+      </div>
 
-      <SettingRow label="Download location" description="Default folder for file downloads">
+      <SettingRow
+        label="Download location"
+        description="Default folder for file downloads"
+      >
         <button class="text-xs text-[var(--interactive-primary)] hover:underline">
           {store.downloadLocation || "Choose folder..."}
         </button>
       </SettingRow>
 
       <div>
-        <label class="text-xs font-medium text-[var(--text-primary)] block mb-1">Custom CSS</label>
-        <div class="text-[11px] text-[var(--text-tertiary)] mb-2">Add custom styles to customize the app appearance</div>
+        <label class="text-xs font-medium text-[var(--text-primary)] block mb-1">
+          Custom CSS
+        </label>
+        <div class="text-[11px] text-[var(--text-tertiary)] mb-2">
+          Add custom styles to customize the app appearance
+        </div>
         <textarea
           class="w-full text-xs font-mono bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-h-[80px] resize-y"
           placeholder="/* Custom CSS */"
@@ -92,9 +109,10 @@ export function SettingsApp() {
           Factory reset
         </button>
         <div class="text-[10px] text-[var(--text-tertiary)] mt-1">
-          Deletes all connected organizations and resets all settings. This cannot be undone.
+          Deletes all connected organizations and resets all settings. This
+          cannot be undone.
         </div>
       </div>
     </div>
-  )
+  );
 }

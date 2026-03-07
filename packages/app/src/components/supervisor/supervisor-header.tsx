@@ -1,20 +1,24 @@
-import { useSupervisor } from "../../context/supervisor"
+import { useSupervisor } from "../../context/supervisor";
 
 export function SupervisorHeader() {
-  const supervisor = useSupervisor()
+  const supervisor = useSupervisor();
 
   const statusColor = () => {
     switch (supervisor.store.status) {
-      case "connected": return "bg-[var(--status-success)]"
-      case "connecting": return "bg-[var(--status-warning)]"
-      case "disconnected": return "bg-[var(--status-error)]"
-      default: return "bg-[var(--text-tertiary)]"
+      case "connected":
+        return "bg-[var(--status-success)]";
+      case "connecting":
+        return "bg-[var(--status-warning)]";
+      case "disconnected":
+        return "bg-[var(--status-error)]";
+      default:
+        return "bg-[var(--text-tertiary)]";
     }
-  }
+  };
 
   const engineLabel = () => {
-    return supervisor.store.session?.metadata?.engine || "Supervisor"
-  }
+    return supervisor.store.session?.metadata?.engine || "Supervisor";
+  };
 
   return (
     <div
@@ -39,9 +43,14 @@ export function SupervisorHeader() {
         title="Close supervisor"
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          <path
+            d="M4 4l8 8M12 4l-8 8"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
         </svg>
       </button>
     </div>
-  )
+  );
 }

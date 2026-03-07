@@ -410,7 +410,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | Partial
 /**
  * Result of login flow
  */
-export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; queue_id: string; 
+export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; queue_id: string;
 /**
  * The logged-in user's ID (from Zulip register response)
  */
@@ -462,16 +462,16 @@ export type Subscription = { stream_id: number; name: string; description?: stri
 /**
  * A single event in the supervisor timeline
  */
-export type SupervisorEvent = { id: number; topic_scope_id: string; session_id: string; ts: string; 
+export type SupervisorEvent = { id: number; topic_scope_id: string; session_id: string; ts: string;
 /**
  * Event kind: "message", "thinking", "tool_call", "tool_result",
  * "dispatch_result", "plan_draft", "assistant"
  */
-kind: string; 
+kind: string;
 /**
  * Role: "user", "assistant", "system"
  */
-role: string; author_id?: string | null; author_name?: string | null; content_md?: string; 
+role: string; author_id?: string | null; author_name?: string | null; content_md?: string;
 /**
  * Polymorphic payload - structure varies by event kind
  */

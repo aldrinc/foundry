@@ -1,34 +1,37 @@
-import { createSignal, Show, onCleanup } from "solid-js"
-import { useOrg } from "../context/org"
+import { createSignal, onCleanup, Show } from "solid-js";
+import { useOrg } from "../context/org";
 
 export function GearMenu(props: { onOpenSettings: () => void }) {
-  const org = useOrg()
-  const [open, setOpen] = createSignal(false)
-  let menuRef!: HTMLDivElement
+  const org = useOrg();
+  const [open, setOpen] = createSignal(false);
+  let menuRef!: HTMLDivElement;
 
   const handleClickOutside = (e: MouseEvent) => {
     if (menuRef && !menuRef.contains(e.target as Node)) {
-      setOpen(false)
+      setOpen(false);
     }
-  }
+  };
 
   const toggle = (e: MouseEvent) => {
-    e.stopPropagation()
+    e.stopPropagation();
     if (open()) {
-      setOpen(false)
+      setOpen(false);
     } else {
-      setOpen(true)
-      setTimeout(() => document.addEventListener("click", handleClickOutside), 0)
+      setOpen(true);
+      setTimeout(
+        () => document.addEventListener("click", handleClickOutside),
+        0,
+      );
     }
-  }
+  };
 
-  onCleanup(() => document.removeEventListener("click", handleClickOutside))
+  onCleanup(() => document.removeEventListener("click", handleClickOutside));
 
   const handleAction = (action: () => void) => {
-    setOpen(false)
-    document.removeEventListener("click", handleClickOutside)
-    action()
-  }
+    setOpen(false);
+    document.removeEventListener("click", handleClickOutside);
+    action();
+  };
 
   return (
     <div class="relative" ref={menuRef!}>
@@ -37,7 +40,16 @@ export function GearMenu(props: { onOpenSettings: () => void }) {
         onClick={toggle}
         title="Settings"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
           <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
           <circle cx="12" cy="12" r="3" />
         </svg>
@@ -47,23 +59,36 @@ export function GearMenu(props: { onOpenSettings: () => void }) {
         <div class="absolute right-0 top-full mt-1 w-[200px] bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-lg z-50 py-1">
           {/* Organization */}
           <div class="px-3 py-2 border-b border-[var(--border-default)]">
-            <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">Organization</div>
-            <div class="text-xs text-[var(--text-primary)] truncate">{org.realmName}</div>
+            <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider mb-0.5">
+              Organization
+            </div>
+            <div class="text-xs text-[var(--text-primary)] truncate">
+              {org.realmName}
+            </div>
           </div>
 
           {/* Actions */}
-          <MenuItem label="Settings" onClick={() => handleAction(props.onOpenSettings)} />
+          <MenuItem
+            label="Settings"
+            onClick={() => handleAction(props.onOpenSettings)}
+          />
           <div class="my-1 border-t border-[var(--border-default)]" />
           <div class="px-3 py-1">
-            <span class="text-[10px] text-[var(--text-tertiary)]">Foundry Desktop</span>
+            <span class="text-[10px] text-[var(--text-tertiary)]">
+              Foundry Desktop
+            </span>
           </div>
         </div>
       </Show>
     </div>
-  )
+  );
 }
 
-function MenuItem(props: { label: string; onClick: () => void; shortcut?: string }) {
+function MenuItem(props: {
+  label: string;
+  onClick: () => void;
+  shortcut?: string;
+}) {
   return (
     <button
       class="w-full text-left px-3 py-1.5 text-xs text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors flex items-center justify-between"
@@ -71,8 +96,10 @@ function MenuItem(props: { label: string; onClick: () => void; shortcut?: string
     >
       <span>{props.label}</span>
       <Show when={props.shortcut}>
-        <span class="text-[10px] text-[var(--text-tertiary)]">{props.shortcut}</span>
+        <span class="text-[10px] text-[var(--text-tertiary)]">
+          {props.shortcut}
+        </span>
       </Show>
     </button>
-  )
+  );
 }

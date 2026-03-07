@@ -1,31 +1,36 @@
-import { createSignal, For, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js";
 
 interface MutedUser {
-  id: number
-  name: string
-  email: string
-  mutedAt: string
+  id: number;
+  name: string;
+  email: string;
+  mutedAt: string;
 }
 
 export function SettingsMutedUsers() {
-  const [mutedUsers, setMutedUsers] = createSignal<MutedUser[]>([])
+  const [mutedUsers, setMutedUsers] = createSignal<MutedUser[]>([]);
 
   const handleUnmute = (userId: number) => {
-    setMutedUsers(prev => prev.filter(u => u.id !== userId))
-  }
+    setMutedUsers((prev) => prev.filter((u) => u.id !== userId));
+  };
 
   return (
     <div class="space-y-6">
-      <h3 class="text-sm font-semibold text-[var(--text-primary)]">Muted Users</h3>
+      <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+        Muted Users
+      </h3>
       <p class="text-xs text-[var(--text-tertiary)]">
-        Messages from muted users will be hidden. You can mute a user by clicking on their name in a message and selecting "Mute this user".
+        Messages from muted users will be hidden. You can mute a user by
+        clicking on their name in a message and selecting "Mute this user".
       </p>
 
       <Show
         when={mutedUsers().length > 0}
         fallback={
           <div class="text-center py-8">
-            <div class="text-sm text-[var(--text-tertiary)]">No muted users</div>
+            <div class="text-sm text-[var(--text-tertiary)]">
+              No muted users
+            </div>
             <div class="text-xs text-[var(--text-quaternary)] mt-1">
               Users you mute will appear here
             </div>
@@ -41,8 +46,12 @@ export function SettingsMutedUsers() {
                     {user.name.charAt(0).toUpperCase()}
                   </div>
                   <div class="min-w-0">
-                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">{user.name}</div>
-                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">{user.email}</div>
+                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">
+                      {user.name}
+                    </div>
+                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">
+                      {user.email}
+                    </div>
                   </div>
                 </div>
                 <button
@@ -57,5 +66,5 @@ export function SettingsMutedUsers() {
         </div>
       </Show>
     </div>
-  )
+  );
 }

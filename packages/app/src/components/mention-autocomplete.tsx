@@ -1,85 +1,89 @@
-import { createMemo, For, Show, createSignal, createEffect } from "solid-js"
-import { useZulipSync } from "../context/zulip-sync"
-import type { User, Subscription } from "../context/zulip-sync"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js";
+import type { Subscription, User } from "../context/zulip-sync";
+import { useZulipSync } from "../context/zulip-sync";
 
 /**
  * MentionAutocomplete — floating autocomplete panel for @mentions and #stream links.
  * Shows when the user types `@` or `#` in the compose box.
  */
 export function MentionAutocomplete(props: {
-  query: string
-  type: "user" | "stream"
-  onSelect: (text: string) => void
-  onClose: () => void
-  position?: { top: number; left: number }
+  query: string;
+  type: "user" | "stream";
+  onSelect: (text: string) => void;
+  onClose: () => void;
+  position?: { top: number; left: number };
 }) {
-  const sync = useZulipSync()
-  const [selectedIndex, setSelectedIndex] = createSignal(0)
+  const sync = useZulipSync();
+  const [selectedIndex, setSelectedIndex] = createSignal(0);
 
   // Filter users or streams based on query
   const userResults = createMemo(() => {
-    if (props.type !== "user") return []
-    const q = props.query.toLowerCase()
+    if (props.type !== "user") return [];
+    const q = props.query.toLowerCase();
     return sync.store.users
-      .filter(u => {
-        if (u.is_bot) return false
-        if (!q) return true
-        return u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      .filter((u) => {
+        if (u.is_bot) return false;
+        if (!q) return true;
+        return (
+          u.full_name.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q)
+        );
       })
-      .slice(0, 8)
-  })
+      .slice(0, 8);
+  });
 
   const streamResults = createMemo(() => {
-    if (props.type !== "stream") return []
-    const q = props.query.toLowerCase()
+    if (props.type !== "stream") return [];
+    const q = props.query.toLowerCase();
     return sync.store.subscriptions
-      .filter(s => {
-        if (!q) return true
-        return s.name.toLowerCase().includes(q)
+      .filter((s) => {
+        if (!q) return true;
+        return s.name.toLowerCase().includes(q);
       })
-      .slice(0, 8)
-  })
+      .slice(0, 8);
+  });
 
-  const results = () => props.type === "user" ? userResults() : streamResults()
-  const resultCount = () => results().length
+  const results = () =>
+    props.type === "user" ? userResults() : streamResults();
+  const resultCount = () => results().length;
 
   // Reset selection when query changes
   createEffect(() => {
-    const _ = props.query
-    setSelectedIndex(0)
-  })
+    const _ = props.query;
+    setSelectedIndex(0);
+  });
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown") {
-      e.preventDefault()
-      setSelectedIndex(i => Math.min(i + 1, resultCount() - 1))
+      e.preventDefault();
+      setSelectedIndex((i) => Math.min(i + 1, resultCount() - 1));
     } else if (e.key === "ArrowUp") {
-      e.preventDefault()
-      setSelectedIndex(i => Math.max(i - 1, 0))
+      e.preventDefault();
+      setSelectedIndex((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter" || e.key === "Tab") {
-      e.preventDefault()
-      const idx = selectedIndex()
-      const items = results()
+      e.preventDefault();
+      const idx = selectedIndex();
+      const items = results();
       if (idx < items.length) {
-        selectItem(items[idx])
+        selectItem(items[idx]);
       }
     } else if (e.key === "Escape") {
-      props.onClose()
+      props.onClose();
     }
-  }
+  };
 
   const selectItem = (item: User | Subscription) => {
     if (props.type === "user") {
-      const user = item as User
-      props.onSelect(`**${user.full_name}** `)
+      const user = item as User;
+      props.onSelect(`**${user.full_name}** `);
     } else {
-      const stream = item as Subscription
-      props.onSelect(`**${stream.name}** `)
+      const stream = item as Subscription;
+      props.onSelect(`**${stream.name}** `);
     }
-  }
+  };
 
   // Expose keyboard handler for the parent
-  ;(window as any).__mentionAutocompleteKeyDown = handleKeyDown
+  (window as any).__mentionAutocompleteKeyDown = handleKeyDown;
 
   return (
     <Show when={resultCount() > 0}>
@@ -95,13 +99,15 @@ export function MentionAutocomplete(props: {
           <For each={results()}>
             {(item, idx) => {
               if (props.type === "user") {
-                const user = item as User
+                const user = item as User;
                 return (
                   <button
                     class="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors"
                     classList={{
-                      "bg-[var(--interactive-primary)]/10": selectedIndex() === idx(),
-                      "hover:bg-[var(--background-elevated)]": selectedIndex() !== idx(),
+                      "bg-[var(--interactive-primary)]/10":
+                        selectedIndex() === idx(),
+                      "hover:bg-[var(--background-elevated)]":
+                        selectedIndex() !== idx(),
                     }}
                     onClick={() => selectItem(user)}
                     onMouseEnter={() => setSelectedIndex(idx())}
@@ -110,35 +116,46 @@ export function MentionAutocomplete(props: {
                       {user.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div class="flex-1 min-w-0">
-                      <span class="text-xs text-[var(--text-primary)] truncate block">{user.full_name}</span>
-                      <span class="text-[10px] text-[var(--text-tertiary)] truncate block">{user.email}</span>
+                      <span class="text-xs text-[var(--text-primary)] truncate block">
+                        {user.full_name}
+                      </span>
+                      <span class="text-[10px] text-[var(--text-tertiary)] truncate block">
+                        {user.email}
+                      </span>
                     </div>
                   </button>
-                )
+                );
               } else {
-                const stream = item as Subscription
+                const stream = item as Subscription;
                 return (
                   <button
                     class="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors"
                     classList={{
-                      "bg-[var(--interactive-primary)]/10": selectedIndex() === idx(),
-                      "hover:bg-[var(--background-elevated)]": selectedIndex() !== idx(),
+                      "bg-[var(--interactive-primary)]/10":
+                        selectedIndex() === idx(),
+                      "hover:bg-[var(--background-elevated)]":
+                        selectedIndex() !== idx(),
                     }}
                     onClick={() => selectItem(stream)}
                     onMouseEnter={() => setSelectedIndex(idx())}
                   >
                     <span
                       class="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ "background-color": stream.color || "var(--text-tertiary)" }}
+                      style={{
+                        "background-color":
+                          stream.color || "var(--text-tertiary)",
+                      }}
                     />
-                    <span class="text-xs text-[var(--text-primary)] truncate">{stream.name}</span>
+                    <span class="text-xs text-[var(--text-primary)] truncate">
+                      {stream.name}
+                    </span>
                   </button>
-                )
+                );
               }
             }}
           </For>
         </div>
       </div>
     </Show>
-  )
+  );
 }

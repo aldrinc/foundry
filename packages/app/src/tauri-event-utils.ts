@@ -11,5 +11,5 @@
  * `supervisor:chat.zulip.org:connected` become
  * `supervisor:chat_zulip_org:connected`. */
 export function sanitizeEventId(orgId: string): string {
-  return orgId.replace(/\./g, "_")
+  return orgId.replace(/\./g, "_");
 }
