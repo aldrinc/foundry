@@ -1,5 +1,5 @@
-import { commands } from "@zulip/desktop/bindings";
 import type { MeridianProviderAuth } from "@zulip/desktop/bindings";
+import { commands } from "@zulip/desktop/bindings";
 import { createContext, type JSX, onMount, useContext } from "solid-js";
 import { createStore } from "solid-js/store";
 
@@ -48,8 +48,7 @@ export const DELEGATE_TEMPLATES: DelegateTemplate[] = [
     purpose:
       "Collect context, references, and comparative information before the Supervisor decides what to do next.",
     theme: "thorough and evidence-driven",
-    soul:
-      "You are a research delegate. Gather facts, summarize the strongest evidence, and avoid making product or code changes yourself.",
+    soul: "You are a research delegate. Gather facts, summarize the strongest evidence, and avoid making product or code changes yourself.",
   },
   {
     id: "reviewer",
@@ -58,8 +57,7 @@ export const DELEGATE_TEMPLATES: DelegateTemplate[] = [
     purpose:
       "Review plans, outputs, and implementation risks before the Supervisor reports back to the topic.",
     theme: "skeptical and exact",
-    soul:
-      "You are a review delegate. Focus on correctness, edge cases, regressions, and missing evidence.",
+    soul: "You are a review delegate. Focus on correctness, edge cases, regressions, and missing evidence.",
   },
   {
     id: "product-spec",
@@ -68,8 +66,7 @@ export const DELEGATE_TEMPLATES: DelegateTemplate[] = [
     purpose:
       "Turn topic discussion into structured product requirements, open questions, and acceptance criteria.",
     theme: "clear and structured",
-    soul:
-      "You are a product-spec delegate. Convert messy discussion into crisp requirements, constraints, and acceptance checks.",
+    soul: "You are a product-spec delegate. Convert messy discussion into crisp requirements, constraints, and acceptance checks.",
   },
 ];
 
@@ -107,9 +104,7 @@ export interface AgentsStore {
 
 export interface AgentsContextValue {
   store: AgentsStore;
-  upsertAgent(
-    agent: DelegateAgent,
-  ): Promise<{ ok: boolean; error?: string }>;
+  upsertAgent(agent: DelegateAgent): Promise<{ ok: boolean; error?: string }>;
   deleteAgent(id: string): Promise<void>;
   refreshProviders(): Promise<void>;
   availableDelegatesForStream(streamId: number | null): DelegateAgent[];
@@ -191,17 +186,17 @@ function hydrateDelegates(raw: unknown): DelegateAgent[] {
   );
 }
 
-function delegateMatchesStream(
-  agent: DelegateAgent,
-  streamId: number | null,
-) {
+function delegateMatchesStream(agent: DelegateAgent, streamId: number | null) {
   if (!agent.enabled || !agent.delegateEligible) return false;
   if (agent.scopeMode === "all_topics") return true;
   if (!streamId) return false;
   return agent.streamIds.includes(streamId);
 }
 
-export function AgentsProvider(props: { orgId: string; children: JSX.Element }) {
+export function AgentsProvider(props: {
+  orgId: string;
+  children: JSX.Element;
+}) {
   const [store, setStore] = createStore<AgentsStore>({
     delegates: [],
     providers: [],
@@ -212,7 +207,10 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
 
   async function persistDelegates(nextDelegates: DelegateAgent[]) {
     try {
-      await commands.setConfig(AGENTS_CONFIG_KEY, JSON.stringify(nextDelegates));
+      await commands.setConfig(
+        AGENTS_CONFIG_KEY,
+        JSON.stringify(nextDelegates),
+      );
     } catch {
       // Persistence failure should not break the settings UI.
     }
@@ -233,12 +231,17 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
       if (result.status === "ok") {
         setStore("providers", result.data.providers || []);
       } else {
-        setStore("providerError", result.error || "Failed to load Moltis providers");
+        setStore(
+          "providerError",
+          result.error || "Failed to load Moltis providers",
+        );
       }
     } catch (error: any) {
       setStore(
         "providerError",
-        error?.message || error?.toString() || "Failed to load Moltis providers",
+        error?.message ||
+          error?.toString() ||
+          "Failed to load Moltis providers",
       );
     } finally {
       setStore("providersLoading", false);
@@ -276,7 +279,10 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
     },
 
     async upsertAgent(agent) {
-      const trimmedId = agent.id.trim().toLowerCase().replace(/[^a-z0-9-]/g, "");
+      const trimmedId = agent.id
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9-]/g, "");
       const trimmedName = agent.name.trim();
 
       if (!trimmedId) {
@@ -305,7 +311,13 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
         purpose: agent.purpose.trim(),
         theme: agent.theme.trim(),
         soul: agent.soul.trim(),
-        streamIds: [...new Set(agent.streamIds.map(Number).filter((value) => Number.isFinite(value)))],
+        streamIds: [
+          ...new Set(
+            agent.streamIds
+              .map(Number)
+              .filter((value) => Number.isFinite(value)),
+          ),
+        ],
         providerOverride: agent.inheritProviders
           ? null
           : agent.providerOverride || null,
@@ -346,7 +358,9 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
   };
 
   return (
-    <AgentsContext.Provider value={ctx}>{props.children}</AgentsContext.Provider>
+    <AgentsContext.Provider value={ctx}>
+      {props.children}
+    </AgentsContext.Provider>
   );
 }
 
