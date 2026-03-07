@@ -1,0 +1,43 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tileGradient" x1="136" y1="116" x2="874" y2="920" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8F8F3"/>
+      <stop offset="0.55" stop-color="#EEF0E8"/>
+      <stop offset="1" stop-color="#D9DDD0"/>
+    </linearGradient>
+    <radialGradient id="tileGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(334 214) rotate(36.8) scale(374 270)">
+      <stop stop-color="white" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="white" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="panelLight" x1="266" y1="184" x2="772" y2="832" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D211A"/>
+      <stop offset="1" stop-color="#10130D"/>
+    </linearGradient>
+    <filter id="tileShadow" x="42" y="54" width="940" height="946" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="28" stdDeviation="22" flood-color="#64705B" flood-opacity="0.22"/>
+    </filter>
+    <filter id="panelShadow" x="184" y="150" width="656" height="738" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#20281B" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="panelClip">
+      <rect x="240" y="182" width="544" height="660" rx="118"/>
+    </clipPath>
+    <clipPath id="tileClip">
+      <rect x="88" y="88" width="848" height="848" rx="188"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#tileShadow)">
+    <g clip-path="url(#tileClip)">
+      <rect x="88" y="88" width="848" height="848" rx="188" fill="url(#tileGradient)"/>
+      <ellipse cx="334" cy="214" rx="286" ry="206" fill="url(#tileGlow)"/>
+    </g>
+    <rect x="89.5" y="89.5" width="845" height="845" rx="186.5" stroke="white" stroke-opacity="0.78" stroke-width="3"/>
+  </g>
+
+  <g filter="url(#panelShadow)">
+    <rect x="240" y="182" width="544" height="660" rx="118" fill="url(#panelLight)"/>
+    <image href="legacy-mark.png" x="240" y="182" width="544" height="660" preserveAspectRatio="xMidYMid slice" clip-path="url(#panelClip)"/>
+    <rect x="241.5" y="183.5" width="541" height="657" rx="116.5" stroke="white" stroke-opacity="0.1" stroke-width="3"/>
+  </g>
+</svg>
