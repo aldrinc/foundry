@@ -428,9 +428,9 @@ export const commands = {
     /**
      * Get available AI providers and their auth status
      */
-    async getMeridianProviders(orgId) {
+    async getFoundryProviders(orgId) {
         try {
-            return { status: "ok", data: await TAURI_INVOKE("get_meridian_providers", { orgId }) };
+            return { status: "ok", data: await TAURI_INVOKE("get_foundry_providers", { orgId }) };
         }
         catch (e) {
             if (e instanceof Error)

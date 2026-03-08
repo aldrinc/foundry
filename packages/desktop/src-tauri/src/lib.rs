@@ -109,13 +109,13 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         server::remove_server,
         server::get_config,
         server::set_config,
-        // Meridian supervisor commands
+        // Foundry supervisor commands
         supervisor_commands::get_supervisor_session,
         supervisor_commands::post_supervisor_message,
         supervisor_commands::get_supervisor_sidebar,
         supervisor_commands::control_supervisor_task,
         supervisor_commands::reply_to_task_clarification,
-        supervisor_commands::get_meridian_providers,
+        supervisor_commands::get_foundry_providers,
         supervisor_commands::get_task_events,
         supervisor_commands::start_supervisor_stream,
         supervisor_commands::stop_supervisor_stream,

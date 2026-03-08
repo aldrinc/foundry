@@ -1,5 +1,5 @@
 import { type JSX } from "solid-js";
-import type { MeridianProviderAuth } from "@zulip/desktop/bindings";
+import type { FoundryProviderAuth } from "@zulip/desktop/bindings";
 export type AgentScopeMode = "all_topics" | "selected_streams";
 export interface DelegateAgent {
     id: string;
@@ -33,7 +33,7 @@ export interface DelegateTemplate {
 export declare const DELEGATE_TEMPLATES: DelegateTemplate[];
 export interface AgentsStore {
     delegates: DelegateAgent[];
-    providers: MeridianProviderAuth[];
+    providers: FoundryProviderAuth[];
     loading: boolean;
     providersLoading: boolean;
     providerError: string;

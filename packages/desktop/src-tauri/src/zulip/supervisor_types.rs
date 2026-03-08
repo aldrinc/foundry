@@ -46,7 +46,7 @@ pub struct SupervisorEvent {
     pub client_msg_id: Option<String>,
 }
 
-/// Response from GET /json/meridian/topics/{scope}/supervisor/session
+/// Response from GET /json/foundry/topics/{scope}/supervisor/session
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SupervisorSessionResponse {
     #[serde(default)]
@@ -55,7 +55,7 @@ pub struct SupervisorSessionResponse {
     pub events: Vec<SupervisorEvent>,
 }
 
-/// Response from POST /json/meridian/topics/{scope}/supervisor/message
+/// Response from POST /json/foundry/topics/{scope}/supervisor/message
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SupervisorMessageResponse {
     #[serde(default)]
@@ -102,7 +102,7 @@ pub struct SupervisorTask {
     pub blockers: Vec<String>,
 }
 
-/// Response from GET /json/meridian/topics/{scope}/sidebar
+/// Response from GET /json/foundry/topics/{scope}/sidebar
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SupervisorSidebarResponse {
     #[serde(default)]
@@ -125,7 +125,7 @@ pub struct TaskEvent {
     pub data: serde_json::Value,
 }
 
-/// Response from GET /json/meridian/topics/{scope}/tasks/{task_id}/events
+/// Response from GET /json/foundry/topics/{scope}/tasks/{task_id}/events
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TaskEventsResponse {
     pub task_id: String,
@@ -135,7 +135,7 @@ pub struct TaskEventsResponse {
 
 /// Provider authentication entry
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-pub struct MeridianProviderAuth {
+pub struct FoundryProviderAuth {
     pub provider: String,
     #[serde(default)]
     pub display_name: String,
@@ -147,9 +147,9 @@ pub struct MeridianProviderAuth {
     pub credential_status: Option<String>,
 }
 
-/// Response from GET /json/meridian/providers/auth
+/// Response from GET /json/foundry/providers/auth
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
-pub struct MeridianProvidersResponse {
+pub struct FoundryProvidersResponse {
     #[serde(default)]
-    pub providers: Vec<MeridianProviderAuth>,
+    pub providers: Vec<FoundryProviderAuth>,
 }

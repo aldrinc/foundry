@@ -1,6 +1,6 @@
 # Foundry
 
-Foundry is a Tauri desktop client for Zulip with Meridian supervisor integration.
+Foundry is a Tauri desktop client for Zulip with Foundry supervisor integration.
 
 ## Workspace
 

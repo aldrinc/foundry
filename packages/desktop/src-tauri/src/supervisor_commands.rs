@@ -94,12 +94,12 @@ pub async fn reply_to_task_clarification(
 /// Get available AI providers and their auth status
 #[tauri::command]
 #[specta::specta]
-pub async fn get_meridian_providers(
+pub async fn get_foundry_providers(
     state: State<'_, AppState>,
     org_id: String,
-) -> Result<MeridianProvidersResponse, String> {
+) -> Result<FoundryProvidersResponse, String> {
     let client = get_client(&state, &org_id)?;
-    client.get_meridian_providers().await
+    client.get_foundry_providers().await
 }
 
 /// Get events for a specific task

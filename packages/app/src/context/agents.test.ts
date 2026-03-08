@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import type { MeridianProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
   getProviderConnectionStatus,
@@ -56,14 +56,14 @@ function createDelegate(overrides: Partial<DelegateAgent> = {}): DelegateAgent {
 }
 
 describe("agents helpers", () => {
-  test("maps live Meridian provider payloads to a usable connection status", () => {
+  test("maps live Foundry provider payloads to a usable connection status", () => {
     const provider = {
       provider: "codex",
       display_name: "Codex",
       auth_modes: ["oauth"],
       oauth_configured: false,
       connected: true,
-    } as MeridianProviderAuth
+    } as FoundryProviderAuth
 
     expect(getProviderConnectionStatus(provider)).toBe("connected")
   })

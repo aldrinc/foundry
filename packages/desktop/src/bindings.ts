@@ -342,9 +342,9 @@ async replyToTaskClarification(orgId: string, topicScopeId: string, taskId: stri
 /**
  * Get available AI providers and their auth status
  */
-async getMeridianProviders(orgId: string) : Promise<Result<MeridianProvidersResponse, string>> {
+async getFoundryProviders(orgId: string) : Promise<Result<FoundryProvidersResponse, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_meridian_providers", { orgId }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_foundry_providers", { orgId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -406,6 +406,14 @@ export type DisplayRecipient = string | DisplayRecipientUser[]
  * User in a DM display_recipient
  */
 export type DisplayRecipientUser = { id: number; email: string; full_name: string }
+/**
+ * Provider authentication entry
+ */
+export type FoundryProviderAuth = { provider: string; display_name?: string; auth_modes?: string[]; oauth_configured?: boolean; credential_status?: string | null }
+/**
+ * Response from GET /json/foundry/providers/auth
+ */
+export type FoundryProvidersResponse = { providers?: FoundryProviderAuth[] }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * Result of login flow
@@ -415,14 +423,6 @@ export type LoginResult = { org_id: string; realm_name: string; realm_icon: stri
  * The logged-in user's ID (from Zulip register response)
  */
 user_id: number | null; subscriptions: Subscription[]; users: User[] }
-/**
- * Provider authentication entry
- */
-export type MeridianProviderAuth = { provider: string; display_name?: string; auth_modes?: string[]; oauth_configured?: boolean; credential_status?: string | null }
-/**
- * Response from GET /json/meridian/providers/auth
- */
-export type MeridianProvidersResponse = { providers?: MeridianProviderAuth[] }
 /**
  * A Zulip message
  */
@@ -477,7 +477,7 @@ role: string; author_id?: string | null; author_name?: string | null; content_md
  */
 payload?: JsonValue; client_msg_id?: string | null }
 /**
- * Response from POST /json/meridian/topics/{scope}/supervisor/message
+ * Response from POST /json/foundry/topics/{scope}/supervisor/message
  */
 export type SupervisorMessageResponse = { session?: SupervisorSession | null; events?: SupervisorEvent[] }
 /**
@@ -489,11 +489,11 @@ export type SupervisorSession = { session_id: string; topic_scope_id: string; st
  */
 export type SupervisorSessionMetadata = { engine?: string | null; moltis_model?: string | null }
 /**
- * Response from GET /json/meridian/topics/{scope}/supervisor/session
+ * Response from GET /json/foundry/topics/{scope}/supervisor/session
  */
 export type SupervisorSessionResponse = { session?: SupervisorSession | null; events?: SupervisorEvent[] }
 /**
- * Response from GET /json/meridian/topics/{scope}/sidebar
+ * Response from GET /json/foundry/topics/{scope}/sidebar
  */
 export type SupervisorSidebarResponse = { tasks?: SupervisorTask[] }
 /**
@@ -505,7 +505,7 @@ export type SupervisorTask = { task_id: string; title?: string; assigned_role?: 
  */
 export type TaskEvent = { id: number; task_id: string; ts: string; level?: string; event_type?: string; message?: string; data?: JsonValue }
 /**
- * Response from GET /json/meridian/topics/{scope}/tasks/{task_id}/events
+ * Response from GET /json/foundry/topics/{scope}/tasks/{task_id}/events
  */
 export type TaskEventsResponse = { task_id: string; events?: TaskEvent[] }
 /**

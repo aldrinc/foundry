@@ -2,7 +2,7 @@ use super::supervisor_types::*;
 use super::ZulipClient;
 
 impl ZulipClient {
-    /// GET /api/v1/meridian/topics/{scope}/supervisor/session
+    /// GET /api/v1/foundry/topics/{scope}/supervisor/session
     /// Poll supervisor session state and events
     pub async fn get_supervisor_session(
         &self,
@@ -11,7 +11,7 @@ impl ZulipClient {
         limit: u32,
     ) -> Result<SupervisorSessionResponse, String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/supervisor/session",
+            "/api/v1/foundry/topics/{}/supervisor/session",
             urlencoding::encode(topic_scope_id)
         );
 
@@ -39,7 +39,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse supervisor session response: {}", e))
     }
 
-    /// POST /api/v1/meridian/topics/{scope}/supervisor/message
+    /// POST /api/v1/foundry/topics/{scope}/supervisor/message
     /// Send a message to the supervisor
     pub async fn post_supervisor_message(
         &self,
@@ -51,7 +51,7 @@ impl ZulipClient {
         topic: Option<&str>,
     ) -> Result<SupervisorMessageResponse, String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/supervisor/message",
+            "/api/v1/foundry/topics/{}/supervisor/message",
             urlencoding::encode(topic_scope_id)
         );
 
@@ -88,14 +88,14 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse supervisor message response: {}", e))
     }
 
-    /// GET /api/v1/meridian/topics/{scope}/sidebar
+    /// GET /api/v1/foundry/topics/{scope}/sidebar
     /// Get task list for the supervisor dashboard
     pub async fn get_supervisor_sidebar(
         &self,
         topic_scope_id: &str,
     ) -> Result<SupervisorSidebarResponse, String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/sidebar",
+            "/api/v1/foundry/topics/{}/sidebar",
             urlencoding::encode(topic_scope_id)
         );
 
@@ -116,7 +116,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse supervisor sidebar response: {}", e))
     }
 
-    /// POST /api/v1/meridian/topics/{scope}/tasks/{task_id}/control
+    /// POST /api/v1/foundry/topics/{scope}/tasks/{task_id}/control
     /// Control a task (pause/resume/cancel)
     pub async fn control_supervisor_task(
         &self,
@@ -125,7 +125,7 @@ impl ZulipClient {
         action: &str,
     ) -> Result<(), String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/tasks/{}/control",
+            "/api/v1/foundry/topics/{}/tasks/{}/control",
             urlencoding::encode(topic_scope_id),
             urlencoding::encode(task_id)
         );
@@ -146,7 +146,7 @@ impl ZulipClient {
         Ok(())
     }
 
-    /// POST /api/v1/meridian/topics/{scope}/tasks/{task_id}/reply
+    /// POST /api/v1/foundry/topics/{scope}/tasks/{task_id}/reply
     /// Reply to a task clarification question
     pub async fn reply_to_task_clarification(
         &self,
@@ -155,7 +155,7 @@ impl ZulipClient {
         message: &str,
     ) -> Result<(), String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/tasks/{}/reply",
+            "/api/v1/foundry/topics/{}/tasks/{}/reply",
             urlencoding::encode(topic_scope_id),
             urlencoding::encode(task_id)
         );
@@ -176,11 +176,11 @@ impl ZulipClient {
         Ok(())
     }
 
-    /// GET /api/v1/meridian/providers/auth
+    /// GET /api/v1/foundry/providers/auth
     /// Get available AI providers and their auth status
-    pub async fn get_meridian_providers(&self) -> Result<MeridianProvidersResponse, String> {
+    pub async fn get_foundry_providers(&self) -> Result<FoundryProvidersResponse, String> {
         let resp = self
-            .get("/api/v1/meridian/providers/auth")
+            .get("/api/v1/foundry/providers/auth")
             .send()
             .await
             .map_err(|e| format!("Failed to get providers: {}", e))?;
@@ -196,7 +196,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse providers response: {}", e))
     }
 
-    /// GET /api/v1/meridian/topics/{scope}/tasks/{task_id}/events
+    /// GET /api/v1/foundry/topics/{scope}/tasks/{task_id}/events
     /// Get events for a specific task
     pub async fn get_task_events(
         &self,
@@ -206,7 +206,7 @@ impl ZulipClient {
         limit: u32,
     ) -> Result<TaskEventsResponse, String> {
         let path = format!(
-            "/api/v1/meridian/topics/{}/tasks/{}/events",
+            "/api/v1/foundry/topics/{}/tasks/{}/events",
             urlencoding::encode(topic_scope_id),
             urlencoding::encode(task_id)
         );

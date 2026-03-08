@@ -31,7 +31,7 @@ pub async fn start_supervisor_stream(
     loop {
         let encoded_scope = urlencoding::encode(&topic_scope_id);
         let path = format!(
-            "/api/v1/meridian/topics/{}/supervisor/session/stream?after_id={}",
+            "/api/v1/foundry/topics/{}/supervisor/session/stream?after_id={}",
             encoded_scope, cursor,
         );
 

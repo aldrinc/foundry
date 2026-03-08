@@ -127,7 +127,7 @@ export declare const commands: {
     /**
      * Get available AI providers and their auth status
      */
-    getMeridianProviders(orgId: string): Promise<Result<MeridianProvidersResponse, string>>;
+    getFoundryProviders(orgId: string): Promise<Result<FoundryProvidersResponse, string>>;
     /**
      * Get events for a specific task
      */
@@ -165,6 +165,22 @@ export type DisplayRecipientUser = {
     email: string;
     full_name: string;
 };
+/**
+ * Provider authentication entry
+ */
+export type FoundryProviderAuth = {
+    provider: string;
+    display_name?: string;
+    auth_modes?: string[];
+    oauth_configured?: boolean;
+    credential_status?: string | null;
+};
+/**
+ * Response from GET /json/foundry/providers/auth
+ */
+export type FoundryProvidersResponse = {
+    providers?: FoundryProviderAuth[];
+};
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{
     [key in string]: JsonValue;
 }>;
@@ -182,22 +198,6 @@ export type LoginResult = {
     user_id: number | null;
     subscriptions: Subscription[];
     users: User[];
-};
-/**
- * Provider authentication entry
- */
-export type MeridianProviderAuth = {
-    provider: string;
-    display_name?: string;
-    auth_modes?: string[];
-    oauth_configured?: boolean;
-    credential_status?: string | null;
-};
-/**
- * Response from GET /json/meridian/providers/auth
- */
-export type MeridianProvidersResponse = {
-    providers?: MeridianProviderAuth[];
 };
 /**
  * A Zulip message
@@ -314,7 +314,7 @@ export type SupervisorEvent = {
     client_msg_id?: string | null;
 };
 /**
- * Response from POST /json/meridian/topics/{scope}/supervisor/message
+ * Response from POST /json/foundry/topics/{scope}/supervisor/message
  */
 export type SupervisorMessageResponse = {
     session?: SupervisorSession | null;
@@ -338,14 +338,14 @@ export type SupervisorSessionMetadata = {
     moltis_model?: string | null;
 };
 /**
- * Response from GET /json/meridian/topics/{scope}/supervisor/session
+ * Response from GET /json/foundry/topics/{scope}/supervisor/session
  */
 export type SupervisorSessionResponse = {
     session?: SupervisorSession | null;
     events?: SupervisorEvent[];
 };
 /**
- * Response from GET /json/meridian/topics/{scope}/sidebar
+ * Response from GET /json/foundry/topics/{scope}/sidebar
  */
 export type SupervisorSidebarResponse = {
     tasks?: SupervisorTask[];
@@ -385,7 +385,7 @@ export type TaskEvent = {
     data?: JsonValue;
 };
 /**
- * Response from GET /json/meridian/topics/{scope}/tasks/{task_id}/events
+ * Response from GET /json/foundry/topics/{scope}/tasks/{task_id}/events
  */
 export type TaskEventsResponse = {
     task_id: string;

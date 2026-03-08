@@ -25,7 +25,7 @@ function createDelegate(overrides = {}) {
     };
 }
 describe("agents helpers", () => {
-    test("maps live Meridian provider payloads to a usable connection status", () => {
+    test("maps live Foundry provider payloads to a usable connection status", () => {
         const provider = {
             provider: "codex",
             display_name: "Codex",

@@ -1,4 +1,4 @@
-import type { MeridianProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
 
 export interface DelegateAgentRuntimeShape {
   id: string
@@ -17,14 +17,14 @@ export interface DelegateAgentRuntimeShape {
   preferredModel: string
 }
 
-type MeridianProviderRuntime = MeridianProviderAuth & {
+type FoundryProviderRuntime = FoundryProviderAuth & {
   connected?: boolean | null
   default_model?: string | null
   credential?: string | null
 }
 
-export function getProviderConnectionStatus(provider: MeridianProviderAuth) {
-  const runtime = provider as MeridianProviderRuntime
+export function getProviderConnectionStatus(provider: FoundryProviderAuth) {
+  const runtime = provider as FoundryProviderRuntime
   if (provider.credential_status) return provider.credential_status
   if (runtime.connected === true) return "connected"
   if (runtime.credential) return "configured"
@@ -32,15 +32,15 @@ export function getProviderConnectionStatus(provider: MeridianProviderAuth) {
   return "not_connected"
 }
 
-export function getProviderDefaultModel(provider: MeridianProviderAuth) {
-  const runtime = provider as MeridianProviderRuntime
+export function getProviderDefaultModel(provider: FoundryProviderAuth) {
+  const runtime = provider as FoundryProviderRuntime
   if (typeof runtime.default_model === "string" && runtime.default_model) {
     return runtime.default_model
   }
   return null
 }
 
-export function normalizeProvider(provider: MeridianProviderAuth): MeridianProviderAuth {
+export function normalizeProvider(provider: FoundryProviderAuth): FoundryProviderAuth {
   return {
     ...provider,
     credential_status: getProviderConnectionStatus(provider),

@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import type { MeridianProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
 import {
   createAgentFromTemplate,
   DELEGATE_TEMPLATES,
@@ -116,8 +116,8 @@ export function SettingsAgents() {
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-primary)]">Moltis Runtime</h3>
             <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              Provider state comes from Meridian today. Delegate definitions are stored locally and injected into
-              Supervisor requests until native Meridian agent sync endpoints land.
+              Provider state comes from Foundry today. Delegate definitions are stored locally and injected into
+              Supervisor requests until native Foundry agent sync endpoints land.
             </div>
           </div>
           <button
@@ -439,7 +439,7 @@ export function SettingsAgents() {
   )
 }
 
-function ProviderCard(props: { provider: MeridianProviderAuth }) {
+function ProviderCard(props: { provider: FoundryProviderAuth }) {
   const label = () => props.provider.display_name || props.provider.provider
   const defaultModel = () => getProviderDefaultModel(props.provider)
   const authLabel = () => {
@@ -500,7 +500,7 @@ function SupervisorCard() {
 
 function DelegateCard(props: {
   delegate: DelegateAgent
-  provider: MeridianProviderAuth | null
+  provider: FoundryProviderAuth | null
   onEdit: () => void
   onDelete: () => void
 }) {

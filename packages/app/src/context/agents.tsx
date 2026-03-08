@@ -1,7 +1,7 @@
 import { createContext, useContext, type JSX, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { commands } from "@zulip/desktop/bindings"
-import type { MeridianProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
   normalizeProvider,
@@ -73,7 +73,7 @@ export const DELEGATE_TEMPLATES: DelegateTemplate[] = [
   },
 ]
 
-const DEMO_PROVIDERS: MeridianProviderAuth[] = [
+const DEMO_PROVIDERS: FoundryProviderAuth[] = [
   {
     provider: "openai-codex",
     display_name: "OpenAI Codex",
@@ -99,7 +99,7 @@ const DEMO_PROVIDERS: MeridianProviderAuth[] = [
 
 export interface AgentsStore {
   delegates: DelegateAgent[]
-  providers: MeridianProviderAuth[]
+  providers: FoundryProviderAuth[]
   loading: boolean
   providersLoading: boolean
   providerError: string
@@ -220,7 +220,7 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
     }
 
     try {
-      const result = await commands.getMeridianProviders(props.orgId)
+      const result = await commands.getFoundryProviders(props.orgId)
       if (result.status === "ok") {
         setStore(
           "providers",

@@ -87,8 +87,8 @@ export function SettingsAgents() {
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-primary)]">Moltis Runtime</h3>
             <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              Provider state comes from Meridian today. Delegate definitions are stored locally and injected into
-              Supervisor requests until native Meridian agent sync endpoints land.
+              Provider state comes from Foundry today. Delegate definitions are stored locally and injected into
+              Supervisor requests until native Foundry agent sync endpoints land.
             </div>
           </div>
           <button class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors" onClick={() => void agents.refreshProviders()} disabled={agents.store.providersLoading}>

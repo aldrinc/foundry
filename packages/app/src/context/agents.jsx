@@ -156,7 +156,7 @@ export function AgentsProvider(props) {
             return;
         }
         try {
-            const result = await commands.getMeridianProviders(props.orgId);
+            const result = await commands.getFoundryProviders(props.orgId);
             if (result.status === "ok") {
                 setStore("providers", (result.data.providers || []).map((provider) => normalizeProvider(provider)));
             }
