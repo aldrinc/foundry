@@ -15,14 +15,14 @@
     "outDir": ".tsc-out",
     "noEmit": true,
     "paths": {
+      "@zulip/ui": ["../ui/src/index.ts"],
       "@zulip/ui/*": ["../ui/src/*"],
-      "@zulip/app/*": ["../app/src/*"]
+      "@zulip/app": ["../app/src/index.ts"],
+      "@zulip/app/*": ["../app/src/*"],
+      "@zulip/desktop": ["./src/index.tsx"],
+      "@zulip/desktop/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.d.ts", "src/**/*.d.ts.map", "src/**/*.js", "src/**/*.jsx"],
-  "references": [
-    { "path": "../ui" },
-    { "path": "../app" }
-  ]
+  "exclude": ["src/**/*.d.ts", "src/**/*.d.ts.map", "src/**/*.js", "src/**/*.jsx"]
 }

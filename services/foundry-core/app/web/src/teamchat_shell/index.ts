@@ -1,0 +1,18 @@
+export {initialize_shell, teardown_shell} from "./bootstrap.ts";
+export {install_bridge, teardown_bridge} from "./bridge.ts";
+export * as teamchat_server_events from "./events.ts";
+export {is_shell_layout_ready, initialize_shell_layout, teardown_shell_layout} from "./layout.ts";
+export {run_parity_assertions} from "./parity_assertions.ts";
+export {is_shell_active, set_shell_active, clear_shell_active} from "./state.ts";
+export {TEAMCHAT_REGION_IDS, initialize_regions, teardown_regions} from "./registry.ts";
+export * as teamchat_conversation_adapter from "./adapters/conversation.ts";
+export * as teamchat_message_adapter from "./adapters/messages.ts";
+export * as teamchat_sidebar_adapter from "./adapters/sidebar.ts";
+export * as teamchat_composer_adapter from "./adapters/composer.ts";
+export * as teamchat_events_adapter from "./adapters/events.ts";
+export * as teamchat_meridian_adapter from "./adapters/meridian.ts";
+export * as teamchat_navigation_actions from "./actions/navigation.ts";
+export * as teamchat_message_actions from "./actions/messages.ts";
+export * as teamchat_composer_actions from "./actions/composer.ts";
+export * as teamchat_sidebar_actions from "./actions/sidebar.ts";
+export * as teamchat_overlay_actions from "./actions/overlays.ts";

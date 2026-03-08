@@ -1,0 +1,974 @@
+#teamchat-root.teamchat-shell-root,
+.teamchat-shell {
+    --teamchat-font-family:
+        "Graphik", ui-sans-serif, system-ui, -apple-system,
+        "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica", "Arial",
+        "Apple Color Emoji", "Segoe UI Emoji";
+    --teamchat-shell-bg: hsl(0deg 0% 100%);
+    --teamchat-surface: hsl(0deg 0% 100%);
+    --teamchat-panel: hsl(0deg 0% 100%);
+    --teamchat-panel-soft: hsl(0deg 0% 100%);
+    --teamchat-panel-muted: hsl(0deg 0% 97%);
+    --teamchat-border: hsl(220deg 9% 84%);
+    --teamchat-border-strong: hsl(220deg 9% 78%);
+    --teamchat-text: hsl(223deg 14% 15%);
+    --teamchat-text-soft: hsl(220deg 11% 45%);
+    --teamchat-text-subtle: hsl(219deg 12% 59%);
+    --teamchat-unread-bg: hsl(220deg 27% 94%);
+    --teamchat-unread-text: hsl(220deg 11% 45%);
+    --teamchat-focus: hsl(181deg 43% 55%);
+    --teamchat-shadow: 0 10px 28px hsl(220deg 47% 11% / 14%);
+    --teamchat-scroll-track: hsl(219deg 50% 11% / 7%);
+    --teamchat-scroll-thumb: hsl(216deg 28% 29% / 32%);
+    --teamchat-scroll-thumb-hover: hsl(216deg 28% 29% / 48%);
+    --teamchat-titlebar-height: 44px;
+}
+
+html.teamchat-shell,
+body.teamchat-shell {
+    min-height: 100dvh;
+    height: 100dvh;
+    overflow: hidden;
+    background: var(--teamchat-shell-bg);
+}
+
+body.teamchat-shell {
+    --base-font-size-px: 15px;
+    --header-height: 2.75em;
+    font-family: var(--teamchat-font-family);
+}
+
+/* TeamChat layout should not inherit Zulip readability width limits. */
+body.teamchat-shell .header-main,
+body.teamchat-shell .app .app-main,
+body.teamchat-shell #compose-container {
+    max-width: inherit;
+}
+
+#teamchat-root.teamchat-shell-root {
+    --left-sidebar-width: 18.5rem;
+    --left-sidebar-max-width: 18.5rem;
+    --left-sidebar-padding-left: 0px;
+    --right-sidebar-width: 18rem;
+    --right-sidebar-max-width: 18rem;
+    --right-sidebar-left-spacing: 0px;
+    --teamchat-middle-gap: 12px;
+    --message-area-max-width: 58rem;
+    --teamchat-icon: hsl(0deg 0% 9%);
+    min-height: 100dvh;
+    height: 100dvh;
+}
+
+#teamchat-root.teamchat-shell-root .app {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    border: 0;
+    background: var(--teamchat-shell-bg);
+    box-shadow: none;
+    overflow: hidden;
+}
+
+#teamchat-root.teamchat-shell-root .app-main {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    background: var(--teamchat-surface) !important;
+}
+
+/* Shared shell surfaces. */
+body.teamchat-shell #header-container,
+body.teamchat-shell #navbar-fixed-container,
+#teamchat-root.teamchat-shell-root #message_feed_container,
+#teamchat-root.teamchat-shell-root #inbox-view,
+#teamchat-root.teamchat-shell-root #recent_view {
+    background: var(--teamchat-panel);
+}
+
+body.teamchat-shell #navbar-fixed-container {
+    border-bottom: 1px solid var(--teamchat-border);
+    background: var(--teamchat-surface);
+}
+
+body.teamchat-shell #header-container {
+    max-width: none !important;
+    margin: 0;
+    padding: 0;
+    border-top: 0;
+    background: var(--teamchat-panel);
+}
+
+body.teamchat-shell #header-container .header {
+    max-width: none !important;
+    padding: 0;
+}
+
+body.teamchat-shell #top_navbar.header-main {
+    min-height: var(--teamchat-titlebar-height);
+    color: var(--teamchat-text);
+}
+
+body.teamchat-shell #top_navbar .top-navbar-container,
+body.teamchat-shell #top_navbar .navbar-search {
+    width: 100%;
+}
+
+body.teamchat-shell #top_navbar .column-middle-inner,
+body.teamchat-shell #top_navbar .column-right,
+body.teamchat-shell #top_navbar .column-left {
+    align-items: center;
+    font-family: var(--teamchat-font-family);
+}
+
+body.teamchat-shell #top_navbar .column-left {
+    min-width: 72px;
+    flex: 0 0 auto;
+    padding-left: 2px;
+    border-right: 1px solid var(--teamchat-border-strong);
+}
+
+body.teamchat-shell #top_navbar .column-middle {
+    min-width: 0;
+    padding: 0 8px;
+    background: var(--teamchat-panel);
+}
+
+body.teamchat-shell #top_navbar .column-right {
+    min-width: 17.5rem;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-left: 10px;
+    border-left: 0;
+    background: var(--teamchat-panel);
+}
+
+body.teamchat-shell #top_navbar .brand {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 2px;
+    opacity: 0.9;
+}
+
+body.teamchat-shell #top_navbar .brand .nav-logo {
+    width: auto;
+    height: 15px;
+}
+
+body.teamchat-shell #top_navbar .header-button {
+    width: 29px;
+    height: 29px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    color: var(--teamchat-icon);
+}
+
+body.teamchat-shell #top_navbar .header-button:hover,
+body.teamchat-shell #top_navbar .header-button:focus-visible {
+    color: var(--teamchat-text);
+    background: hsl(0deg 0% 0% / 4%);
+}
+
+body.teamchat-shell #top_navbar #searchbox_form {
+    width: min(17rem, 40vw);
+    min-width: min(17rem, 40vw);
+    max-width: min(17rem, 40vw);
+    margin-left: auto;
+    overflow: visible;
+}
+
+body.teamchat-shell
+    #top_navbar
+    #searchbox_form.expanded:not(:focus-within, :hover) {
+    width: min(17rem, 40vw);
+    min-width: min(17rem, 40vw);
+    max-width: min(17rem, 40vw);
+}
+
+body.teamchat-shell #top_navbar #searchbox_form.expanded,
+body.teamchat-shell #top_navbar #searchbox_form:hover,
+body.teamchat-shell #top_navbar #searchbox_form:focus-within {
+    width: min(17rem, 40vw);
+    min-width: min(17rem, 40vw);
+    max-width: min(17rem, 40vw);
+}
+
+body.teamchat-shell #top_navbar #searchbox {
+    width: 100%;
+}
+
+body.teamchat-shell #top_navbar #searchbox,
+body.teamchat-shell #top_navbar #searchbox-input-container {
+    border-radius: 999px;
+    border-color: var(--teamchat-border);
+    background: var(--teamchat-panel);
+    min-height: 34px;
+}
+
+body.teamchat-shell #top_navbar #searchbox-input-container {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    padding: 0 10px;
+    cursor: text;
+}
+
+body.teamchat-shell #top_navbar #search_query {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    opacity: 1;
+    pointer-events: auto;
+    color: var(--teamchat-text-soft);
+    font-size: 13px;
+}
+
+body.teamchat-shell #top_navbar #searchbox_form.expanded #search_query,
+body.teamchat-shell #top_navbar #searchbox_form:hover #search_query,
+body.teamchat-shell #top_navbar #searchbox_form:focus-within #search_query {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+body.teamchat-shell #top_navbar #searchbox-input-container:focus-within {
+    border-color: var(--teamchat-focus);
+    box-shadow: 0 0 0 2px hsl(181deg 43% 55% / 20%);
+}
+
+body.teamchat-shell #top_navbar .search_icon {
+    margin-right: 8px;
+    color: var(--teamchat-icon);
+}
+
+/* Main column containers. */
+#teamchat-root.teamchat-shell-root .app-main .column-left {
+    width: var(--left-sidebar-width);
+    max-width: var(--left-sidebar-max-width);
+    border-right: 1px solid var(--teamchat-border-strong);
+    background: var(--teamchat-panel);
+}
+
+#teamchat-root.teamchat-shell-root .app-main .column-middle {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    background: hsl(0deg 0% 100%) !important;
+}
+
+#teamchat-root.teamchat-shell-root .app-main .column-right {
+    width: var(--right-sidebar-width);
+    max-width: var(--right-sidebar-max-width);
+    border-left: 1px solid var(--teamchat-border);
+    background: var(--teamchat-panel);
+}
+
+#teamchat-root.teamchat-shell-root .column-middle .column-middle-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    gap: 0;
+    background: hsl(0deg 0% 100%);
+}
+
+#teamchat-root.teamchat-shell-root #teamchat-center-feed-region {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: hsl(0deg 0% 100%);
+}
+
+#teamchat-root.teamchat-shell-root #inbox-view,
+#teamchat-root.teamchat-shell-root #recent_view,
+#teamchat-root.teamchat-shell-root #message_feed_container {
+    border: 0;
+    border-radius: 0;
+    overflow: hidden;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: hsl(0deg 0% 100%);
+    width: 100%;
+    max-width: 100%;
+    margin-right: 0;
+    margin-left: 0;
+}
+
+#teamchat-root.teamchat-shell-root #main_div {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 0 164px;
+    background: hsl(0deg 0% 100%);
+    scrollbar-gutter: stable both-edges;
+}
+
+#teamchat-root.teamchat-shell-root #main_div > .recipient_row {
+    margin: 0 auto 14px;
+    max-width: var(--message-area-max-width);
+    width: 100%;
+}
+
+#teamchat-root.teamchat-shell-root .recipient_row .message_header {
+    border: 1px solid var(--teamchat-border);
+    border-bottom: 0;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    overflow: hidden;
+    box-shadow: none;
+}
+
+#teamchat-root.teamchat-shell-root .recipient_row .message-header-contents {
+    min-height: 36px;
+    padding: 0 12px;
+    border-bottom: 0;
+    background: var(--teamchat-panel-soft) !important;
+}
+
+#teamchat-root.teamchat-shell-root .recipient_row .stream_topic,
+#teamchat-root.teamchat-shell-root .recipient_row .message-header-stream-name {
+    color: var(--teamchat-text);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container .message_row {
+    margin: 0;
+    padding: 4px 0;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container .messagebox {
+    border: 1px solid var(--teamchat-border);
+    border-radius: 12px;
+    background: var(--teamchat-panel);
+    box-shadow: none;
+}
+
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .message_row:hover
+    .messagebox {
+    background: hsl(0deg 0% 0% / 2%);
+}
+
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .selected_message
+    .messagebox-content {
+    outline: 0 !important;
+    outline-offset: 0;
+}
+
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .selected_message
+    .messagebox {
+    border-color: var(--teamchat-border);
+}
+
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .recipient_row
+    .message_header
+    + .message_row
+    .messagebox {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container .messagebox-content {
+    padding: 11px 13px;
+}
+
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .message_sender
+    .user-name {
+    color: var(--teamchat-text);
+    font-size: 13.5px;
+    font-weight: 700;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container .message-time,
+#teamchat-root.teamchat-shell-root
+    #message_feed_container
+    .message_edit_notice {
+    color: var(--teamchat-text-soft);
+    font-size: 12px;
+}
+
+#teamchat-root.teamchat-shell-root #message_feed_container .message_content {
+    color: hsl(223deg 13% 16%);
+    line-height: 1.48;
+}
+
+/* Left rail container ownership and scroll behavior. */
+#teamchat-root.teamchat-shell-root .left-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    padding: 10px 10px 12px;
+    background: var(--teamchat-panel);
+}
+
+#left-sidebar #views-label-container,
+#left-sidebar #direct-messages-section-header,
+#left-sidebar .stream-list-subsection-header {
+    min-height: 27px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: transparent;
+}
+
+#teamchat-root.teamchat-shell-root #left-sidebar-search {
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+
+#teamchat-root.teamchat-shell-root .left-sidebar-search-section {
+    border: 1px solid var(--teamchat-border);
+    border-radius: 10px;
+    background: var(--teamchat-panel);
+    min-height: 34px;
+}
+
+#teamchat-root.teamchat-shell-root #left-sidebar #left-sidebar-navigation-area,
+#teamchat-root.teamchat-shell-root #left-sidebar #left_sidebar_scroll_container,
+#teamchat-root.teamchat-shell-root #left-sidebar #left-sidebar-search,
+#teamchat-root.teamchat-shell-root #left-sidebar #views-label-container,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    #direct-messages-section-header,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .stream-list-subsection-header {
+    background: hsl(0deg 0% 100%);
+}
+
+#teamchat-root.teamchat-shell-root #left-sidebar hr,
+#teamchat-root.teamchat-shell-root #left-sidebar .sidebar-section-separator {
+    border-color: var(--teamchat-border);
+    background: transparent;
+}
+
+#teamchat-root.teamchat-shell-root #left-sidebar-navigation-area {
+    flex: 0 0 auto;
+    max-height: 42%;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+#teamchat-root.teamchat-shell-root #left_sidebar_scroll_container {
+    margin-top: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto !important;
+    max-height: none !important;
+}
+
+#teamchat-root.teamchat-shell-root
+    #left_sidebar_scroll_container
+    .simplebar-wrapper,
+#teamchat-root.teamchat-shell-root
+    #left_sidebar_scroll_container
+    .simplebar-mask,
+#teamchat-root.teamchat-shell-root
+    #left_sidebar_scroll_container
+    .simplebar-offset,
+#teamchat-root.teamchat-shell-root
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper {
+    height: 100%;
+}
+
+#teamchat-root.teamchat-shell-root
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+#teamchat-root.teamchat-shell-root .left-sidebar-title {
+    color: hsl(220deg 8% 54%);
+    font-size: 12.5px;
+    text-transform: none;
+    letter-spacing: 0.01em;
+    opacity: 1 !important;
+}
+
+#left-sidebar .sidebar-heading-icon,
+#left-sidebar .stream-list-section-toggle,
+#left-sidebar .left-sidebar-controls .zulip-icon,
+#left-sidebar .left-sidebar-controls .fa {
+    color: var(--teamchat-icon);
+}
+
+#teamchat-root.teamchat-shell-root .stream-name,
+#teamchat-root.teamchat-shell-root .sidebar-topic-name-inner,
+#teamchat-root.teamchat-shell-root .conversation-partners-list,
+#teamchat-root.teamchat-shell-root .left-sidebar-navigation-label {
+    color: hsl(225deg 8% 20%);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+#teamchat-root.teamchat-shell-root
+    .selected-home-view
+    .left-sidebar-navigation-label,
+#teamchat-root.teamchat-shell-root
+    .top_left_row.active-sub-filter
+    .left-sidebar-navigation-label,
+#teamchat-root.teamchat-shell-root .stream-expanded .stream-name,
+#teamchat-root.teamchat-shell-root
+    .topic-list-item.active-sub-filter
+    .sidebar-topic-name-inner,
+#teamchat-root.teamchat-shell-root
+    .dm-list-item.active-sub-filter
+    .conversation-partners-list {
+    color: hsl(0deg 0% 7%);
+    font-weight: 700;
+}
+
+#teamchat-root.teamchat-shell-root #left-sidebar .top_left_row.active-filter,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .top_left_row.active-sub-filter,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .topic-list-item.active-sub-filter,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .dm-list-item.active-sub-filter {
+    background: transparent !important;
+}
+
+#teamchat-root.teamchat-shell-root
+    .top_left_row
+    > .left-sidebar-navigation-label-container,
+#teamchat-root.teamchat-shell-root .dm-list-item > .dm-box,
+#teamchat-root.teamchat-shell-root .topic-list-item > .topic-box,
+#teamchat-root.teamchat-shell-root .subscription_block {
+    min-height: 32px;
+    border-radius: 10px;
+    padding-right: 10px;
+}
+
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .top_left_row.active-filter
+    > .left-sidebar-navigation-label-container,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .top_left_row.active-sub-filter
+    > .left-sidebar-navigation-label-container,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .topic-list-item.active-sub-filter
+    > .topic-box,
+#teamchat-root.teamchat-shell-root
+    #left-sidebar
+    .dm-list-item.active-sub-filter
+    > .dm-box {
+    background: hsl(0deg 0% 100%) !important;
+    box-shadow: inset 0 0 0 1px var(--teamchat-border);
+}
+
+#teamchat-root.teamchat-shell-root
+    .top_left_row:hover
+    > .left-sidebar-navigation-label-container,
+#teamchat-root.teamchat-shell-root .dm-list-item:hover > .dm-box,
+#teamchat-root.teamchat-shell-root .topic-list-item:hover > .topic-box,
+#teamchat-root.teamchat-shell-root .subscription_block:hover {
+    background: hsl(0deg 0% 0% / 2%);
+}
+
+#teamchat-root.teamchat-shell-root .unread_count,
+#teamchat-root.teamchat-shell-root .count {
+    border: 1px solid var(--teamchat-border);
+    border-radius: 999px;
+    background: var(--teamchat-unread-bg);
+    color: var(--teamchat-unread-text);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Inbox / Recent rows. */
+#teamchat-root.teamchat-shell-root #inbox-filters {
+    padding: 10px 12px 6px;
+}
+
+#teamchat-root.teamchat-shell-root #inbox-filter_widget,
+#teamchat-root.teamchat-shell-root .inbox-search-wrapper {
+    min-height: 34px;
+    border-radius: 10px;
+    border-color: var(--teamchat-border);
+    background: var(--teamchat-panel);
+    color: var(--teamchat-text-soft);
+}
+
+#teamchat-root.teamchat-shell-root .inbox-row {
+    border-radius: 10px;
+}
+
+#teamchat-root.teamchat-shell-root .inbox-row:hover,
+#teamchat-root.teamchat-shell-root .inbox-row.is-selected {
+    background: var(--teamchat-panel-soft);
+}
+
+#teamchat-root.teamchat-shell-root #inbox-view,
+#teamchat-root.teamchat-shell-root #recent_view {
+    background: hsl(0deg 0% 100%);
+}
+
+/* Composer should look floating while preserving feed boundary and scroll. */
+#teamchat-root.teamchat-shell-root #teamchat-composer-region {
+    margin-top: 0;
+    padding: 0 4px 12px;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 12;
+}
+
+#teamchat-root.teamchat-shell-root #compose {
+    position: relative;
+    inset: auto;
+    pointer-events: none;
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+#teamchat-root.teamchat-shell-root #compose-container {
+    pointer-events: none;
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-content {
+    pointer-events: auto;
+    margin-left: auto;
+    margin-right: auto;
+    width: min(calc(var(--message-area-max-width) + 14rem), calc(100% - 8px));
+    max-width: calc(100% - 8px);
+    border: 1px solid var(--teamchat-border);
+    border-radius: 14px;
+    background: hsl(0deg 0% 100% / 92%);
+    box-shadow: var(--teamchat-shadow);
+    backdrop-filter: blur(8px);
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose_top {
+    min-height: 38px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--teamchat-border-strong);
+    background: var(--teamchat-panel);
+    border-top-left-radius: 14px;
+    border-top-right-radius: 14px;
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-textarea {
+    min-height: 106px;
+    max-height: 36dvh;
+    padding: 10px 12px 44px;
+    color: hsl(223deg 13% 16%);
+    font-size: 13.5px;
+    font-weight: 500;
+    line-height: 1.35;
+    background: transparent;
+    border: 0;
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-textarea:focus {
+    box-shadow: none;
+    border: 0;
+}
+
+#teamchat-root.teamchat-shell-root #compose .compose_control_button,
+#teamchat-root.teamchat-shell-root #compose .send-control-button {
+    color: var(--teamchat-icon);
+    border-radius: 8px;
+}
+
+#teamchat-root.teamchat-shell-root #compose .compose_control_button:hover,
+#teamchat-root.teamchat-shell-root #compose .send-control-button:hover {
+    color: var(--teamchat-text);
+    background: hsl(0deg 0% 0% / 4%);
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-send-button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 0;
+    background: hsl(0deg 0% 7%);
+    color: hsl(0deg 0% 100%);
+    box-shadow: 0 2px 6px hsl(0deg 0% 0% / 20%);
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-send-button:hover {
+    background: hsl(0deg 0% 0%);
+}
+
+#teamchat-root.teamchat-shell-root #compose .messagebox {
+    border: 1px solid var(--teamchat-border-strong);
+    border-radius: 11px;
+    background: var(--teamchat-panel);
+    overflow: hidden;
+}
+
+#teamchat-root.teamchat-shell-root #compose #message-content-container {
+    border: 0;
+}
+
+#teamchat-root.teamchat-shell-root
+    #compose
+    #message-formatting-controls-container {
+    border-top: 1px solid var(--teamchat-border);
+    background: var(--teamchat-panel);
+}
+
+#teamchat-root.teamchat-shell-root #compose .divider {
+    width: 1px;
+    height: 14px;
+    background: hsl(220deg 12% 80%);
+}
+
+#teamchat-root.teamchat-shell-root #compose #message-send-controls-container {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 6px;
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose-drafts-button {
+    order: 2;
+    align-self: flex-end;
+    margin: 0 2px 0 0;
+    padding: 3px 8px;
+    border-radius: 8px;
+    color: var(--teamchat-icon);
+    background: var(--teamchat-panel-soft);
+}
+
+#teamchat-root.teamchat-shell-root #compose .message-send-controls {
+    order: 3;
+}
+
+#teamchat-root.teamchat-shell-root #compose #send_later {
+    color: var(--teamchat-icon);
+}
+
+#teamchat-root.teamchat-shell-root #compose #compose_close {
+    color: var(--teamchat-icon);
+}
+
+#teamchat-root.teamchat-shell-root
+    #closed-compose-controls
+    #legacy-closed-compose-box {
+    width: min(calc(var(--message-area-max-width) + 220px), calc(100% - 8px));
+    margin-left: auto;
+    margin-right: auto;
+    border: 1px solid var(--teamchat-border);
+    border-radius: 10px;
+    background: hsl(0deg 0% 100% / 92%);
+    backdrop-filter: blur(8px);
+}
+
+#teamchat-root.teamchat-shell-root
+    #closed-compose-controls
+    .compose_mobile_button,
+#teamchat-root.teamchat-shell-root
+    #closed-compose-controls
+    .compose_new_conversation_button,
+#teamchat-root.teamchat-shell-root
+    #closed-compose-controls
+    .compose_new_direct_message_button,
+#teamchat-root.teamchat-shell-root
+    #closed-compose-controls
+    .compose_reply_button {
+    color: var(--teamchat-icon);
+}
+
+/* Keep expected fullscreen compose behavior from legacy states. */
+#teamchat-root.teamchat-shell-root #compose.compose-fullscreen,
+#teamchat-root.teamchat-shell-root #compose.compose-intermediate {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: auto;
+}
+
+.teamchat-shell-banner {
+    display: none !important;
+}
+
+#feedback_container > .teamchat-shell-banner {
+    width: 100%;
+    margin: 8px 0;
+}
+
+/* Standardize TeamChat shell icon color. */
+body.teamchat-shell #top_navbar .zulip-icon,
+body.teamchat-shell #top_navbar .fa,
+body.teamchat-shell #compose .zulip-icon,
+body.teamchat-shell #compose .fa {
+    color: var(--teamchat-icon) !important;
+}
+
+/* TeamChat-specific scrollbar styling. */
+body.teamchat-shell #left-sidebar-navigation-area,
+body.teamchat-shell #left_sidebar_scroll_container .simplebar-content-wrapper,
+body.teamchat-shell #main_div,
+body.teamchat-shell #inbox-view,
+body.teamchat-shell #recent_view {
+    scrollbar-width: thin;
+    scrollbar-color: var(--teamchat-scroll-thumb) var(--teamchat-scroll-track);
+}
+
+body.teamchat-shell #left-sidebar-navigation-area::-webkit-scrollbar,
+body.teamchat-shell
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper::-webkit-scrollbar,
+body.teamchat-shell #main_div::-webkit-scrollbar,
+body.teamchat-shell #inbox-view::-webkit-scrollbar,
+body.teamchat-shell #recent_view::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+body.teamchat-shell #left-sidebar-navigation-area::-webkit-scrollbar-track,
+body.teamchat-shell
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper::-webkit-scrollbar-track,
+body.teamchat-shell #main_div::-webkit-scrollbar-track,
+body.teamchat-shell #inbox-view::-webkit-scrollbar-track,
+body.teamchat-shell #recent_view::-webkit-scrollbar-track {
+    background: var(--teamchat-scroll-track);
+    border-radius: 8px;
+}
+
+body.teamchat-shell #left-sidebar-navigation-area::-webkit-scrollbar-thumb,
+body.teamchat-shell
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper::-webkit-scrollbar-thumb,
+body.teamchat-shell #main_div::-webkit-scrollbar-thumb,
+body.teamchat-shell #inbox-view::-webkit-scrollbar-thumb,
+body.teamchat-shell #recent_view::-webkit-scrollbar-thumb {
+    background: var(--teamchat-scroll-thumb);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    background-clip: content-box;
+}
+
+body.teamchat-shell
+    #left-sidebar-navigation-area::-webkit-scrollbar-thumb:hover,
+body.teamchat-shell
+    #left_sidebar_scroll_container
+    .simplebar-content-wrapper::-webkit-scrollbar-thumb:hover,
+body.teamchat-shell #main_div::-webkit-scrollbar-thumb:hover,
+body.teamchat-shell #inbox-view::-webkit-scrollbar-thumb:hover,
+body.teamchat-shell #recent_view::-webkit-scrollbar-thumb:hover {
+    background: var(--teamchat-scroll-thumb-hover);
+    background-clip: content-box;
+}
+
+@media (width < 1100px) {
+    #teamchat-root.teamchat-shell-root {
+        --left-sidebar-width: 17.25rem;
+        --left-sidebar-max-width: 17.25rem;
+        --right-sidebar-width: 15.5rem;
+        --right-sidebar-max-width: 15.5rem;
+    }
+
+    #teamchat-root.teamchat-shell-root #teamchat-composer-region {
+        padding-bottom: 10px;
+    }
+}
+
+@media (width < 760px) {
+    #teamchat-root.teamchat-shell-root {
+        --left-sidebar-width: min(86vw, 22rem);
+        --left-sidebar-max-width: min(86vw, 22rem);
+        --right-sidebar-width: min(86vw, 22rem);
+        --right-sidebar-max-width: min(86vw, 22rem);
+        --teamchat-middle-gap: 8px;
+    }
+
+    #teamchat-root.teamchat-shell-root .app-main .column-middle {
+        padding: 8px 6px 0;
+    }
+
+    #teamchat-root.teamchat-shell-root #main_div {
+        padding: 10px 8px 156px;
+    }
+
+    #teamchat-root.teamchat-shell-root #teamchat-composer-region {
+        padding-right: 2px;
+        padding-left: 2px;
+        padding-bottom: 8px;
+    }
+
+    #teamchat-root.teamchat-shell-root #compose #compose-content {
+        width: calc(100% - 4px);
+        max-width: calc(100% - 4px);
+        border-radius: 11px;
+    }
+
+    #teamchat-root.teamchat-shell-root #compose #compose-textarea {
+        min-height: 84px;
+        padding: 8px 10px 52px;
+    }
+
+    #teamchat-root.teamchat-shell-root
+        #closed-compose-controls
+        #legacy-closed-compose-box {
+        width: calc(100% - 4px);
+    }
+
+    body.teamchat-shell #top_navbar #searchbox_form,
+    body.teamchat-shell #top_navbar #searchbox_form.expanded,
+    body.teamchat-shell #top_navbar #searchbox_form:hover,
+    body.teamchat-shell #top_navbar #searchbox_form:focus-within {
+        width: 34px;
+        min-width: 34px;
+        max-width: 34px;
+    }
+
+    body.teamchat-shell #top_navbar .column-right {
+        min-width: 0;
+        padding-left: 6px;
+        border-left: 0;
+    }
+
+    .teamchat-shell-banner {
+        width: calc(100% - 8px);
+        margin: 4px;
+        border-radius: 10px;
+        font-size: 12px;
+    }
+}

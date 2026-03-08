@@ -4,7 +4,7 @@ import { useZulipSync } from "../context/zulip-sync"
 export function PersonalMenu(props: {
   onClose: () => void
   onOpenSettings: () => void
-  onLogout: () => void
+  onLogout: () => void | Promise<void>
 }) {
   const sync = useZulipSync()
   let menuRef!: HTMLDivElement
@@ -24,10 +24,10 @@ export function PersonalMenu(props: {
   setTimeout(() => document.addEventListener("click", handleClickOutside), 0)
   onCleanup(() => document.removeEventListener("click", handleClickOutside))
 
-  const handleAction = (action: () => void) => {
+  const handleAction = (action: () => void | Promise<void>) => {
     document.removeEventListener("click", handleClickOutside)
     props.onClose()
-    action()
+    void action()
   }
 
   return (

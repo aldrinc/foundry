@@ -37,11 +37,14 @@ export function SettingsNetwork() {
             <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">PAC script URL</label>
             <input
               type="text"
-              class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
-              placeholder="https://example.com/proxy.pac"
+              class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono opacity-50 cursor-not-allowed"
+              placeholder="PAC URLs are not currently supported"
               value={store.pacUrl}
-              onInput={(e) => setSetting("pacUrl", e.currentTarget.value)}
+              disabled
             />
+            <div class="text-[10px] text-[var(--text-tertiary)] mt-1">
+              PAC URL support is not yet available
+            </div>
           </div>
 
           <div>

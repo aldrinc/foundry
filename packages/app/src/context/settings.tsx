@@ -1,6 +1,7 @@
 import { createContext, useContext, createSignal, onMount, type JSX } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { commands } from "@zulip/desktop/bindings"
+import type { DesktopSettings, DesktopCapabilities } from "@zulip/desktop/bindings"
 import {
   buildServerSettingsPatch,
   mergeServerSettings,
@@ -50,7 +51,7 @@ export interface AppSettings {
 
 const DEFAULTS: AppSettings = {
   // Local
-  theme: "system",
+  theme: "foundry",
   fontSize: "normal",
   homeView: "inbox",
   animateImages: "always",
@@ -87,12 +88,22 @@ const DEFAULTS: AppSettings = {
   wildcardMentions: "default",
 }
 
+// ── Desktop-synced keys ──────────────────────────────────────────────
+
+const DESKTOP_SYNCED_KEYS = new Set<keyof AppSettings>([
+  "startAtLogin", "startMinimized", "showTray", "quitOnClose",
+  "autoUpdate", "betaUpdates", "spellcheck", "customCSS",
+  "downloadLocation", "useSystemProxy", "manualProxy",
+  "pacUrl", "proxyRules", "bypassRules",
+])
+
 // ── Context type ────────────────────────────────────────────────────
 
 export interface SettingsContextValue {
   store: AppSettings
   setSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
   loaded: () => boolean
+  capabilities: () => DesktopCapabilities | null
 }
 
 const SETTINGS_KEY = "app_settings"
@@ -104,9 +115,11 @@ const SettingsContext = createContext<SettingsContextValue>()
 export function SettingsProvider(props: { orgId: string; children: JSX.Element }) {
   const [store, setStore] = createStore<AppSettings>({ ...DEFAULTS })
   const [loaded, setLoaded] = createSignal(false)
+  const [caps, setCaps] = createSignal<DesktopCapabilities | null>(null)
   let persistTimer: ReturnType<typeof setTimeout> | undefined
+  let desktopSyncTimer: ReturnType<typeof setTimeout> | undefined
 
-  // Load settings from persistent store on mount, then merge server settings
+  // Load settings from persistent store on mount, then merge server + desktop settings
   onMount(async () => {
     // Step 1: Load locally persisted settings
     try {
@@ -118,9 +131,41 @@ export function SettingsProvider(props: { orgId: string; children: JSX.Element }
     } catch {
       // Use defaults if loading fails
     }
+
+    // Step 2: Load native desktop settings (take precedence for platform keys)
+    try {
+      const dsResult = await commands.getDesktopSettings()
+      if (dsResult.status === "ok") {
+        const ds = dsResult.data
+        setStore("startAtLogin", ds.start_at_login)
+        setStore("startMinimized", ds.start_minimized)
+        setStore("showTray", ds.show_tray)
+        setStore("quitOnClose", ds.quit_on_close)
+        setStore("autoUpdate", ds.auto_update)
+        setStore("betaUpdates", ds.beta_updates)
+        setStore("spellcheck", ds.spellcheck)
+        setStore("customCSS", ds.custom_css)
+        setStore("downloadLocation", ds.download_location)
+        setStore("useSystemProxy", ds.use_system_proxy)
+        setStore("manualProxy", ds.manual_proxy)
+        setStore("pacUrl", ds.pac_url)
+        setStore("proxyRules", ds.proxy_rules)
+        setStore("bypassRules", ds.bypass_rules)
+      }
+    } catch {
+      // Non-critical — local settings are fine
+    }
+
+    // Step 3: Load desktop capabilities for feature gating
+    try {
+      setCaps(await commands.getDesktopCapabilities())
+    } catch {
+      // Non-critical
+    }
+
     setLoaded(true)
 
-    // Step 2: Fetch server settings and merge Zulip-synced keys
+    // Step 4: Fetch server settings and merge Zulip-synced keys
     // (runs after UI is visible — non-blocking)
     try {
       const result = await commands.getZulipSettings(props.orgId)
@@ -145,6 +190,11 @@ export function SettingsProvider(props: { orgId: string; children: JSX.Element }
     // If this key should sync to the Zulip server, fire-and-forget
     if (ZULIP_SYNCED_KEYS.has(key)) {
       syncToZulip(key, value)
+    }
+
+    // If this key is a desktop platform setting, sync to native contract
+    if (DESKTOP_SYNCED_KEYS.has(key)) {
+      scheduleDesktopSync()
     }
   }
 
@@ -172,10 +222,39 @@ export function SettingsProvider(props: { orgId: string; children: JSX.Element }
     }
   }
 
+  /** Debounced sync of desktop settings to native contract (250ms) */
+  const scheduleDesktopSync = () => {
+    if (desktopSyncTimer) clearTimeout(desktopSyncTimer)
+    desktopSyncTimer = setTimeout(async () => {
+      try {
+        const ds: DesktopSettings = {
+          start_at_login: store.startAtLogin,
+          start_minimized: store.startMinimized,
+          show_tray: store.showTray,
+          quit_on_close: store.quitOnClose,
+          auto_update: store.autoUpdate,
+          beta_updates: store.betaUpdates,
+          spellcheck: store.spellcheck,
+          custom_css: store.customCSS,
+          download_location: store.downloadLocation,
+          use_system_proxy: store.useSystemProxy,
+          manual_proxy: store.manualProxy,
+          pac_url: store.pacUrl,
+          proxy_rules: store.proxyRules,
+          bypass_rules: store.bypassRules,
+        }
+        await commands.setDesktopSettings(ds)
+      } catch {
+        // Non-critical — native settings sync failure
+      }
+    }, 250)
+  }
+
   const ctx: SettingsContextValue = {
     get store() { return store },
     setSetting,
     loaded,
+    capabilities: caps,
   }
 
   return (

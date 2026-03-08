@@ -2,6 +2,7 @@ import { createContext, useContext, type JSX, onMount, onCleanup } from "solid-j
 import { createStore, produce } from "solid-js/store"
 import { listen } from "@tauri-apps/api/event"
 import { commands } from "@zulip/desktop/bindings"
+import type { UserTopic, UserTopicVisibilityPolicy } from "@zulip/desktop/bindings"
 import { sanitizeEventId } from "../tauri-event-utils"
 import { usePlatform } from "./platform"
 import { useSettings } from "./settings"
@@ -26,6 +27,12 @@ export interface Subscription {
   invite_only?: boolean
   is_muted?: boolean
   pin_to_top?: boolean
+  desktop_notifications?: boolean | null
+  audible_notifications?: boolean | null
+  push_notifications?: boolean | null
+  email_notifications?: boolean | null
+  wildcard_mentions_notify?: boolean | null
+  in_home_view?: boolean | null
 }
 
 export interface User {
@@ -109,6 +116,9 @@ export interface ZulipStore {
 
   // Derived data computed from events
   unreadItems: UnreadItem[]
+
+  // Topic visibility policies
+  userTopics: UserTopic[]
 }
 
 const initialStore: ZulipStore = {
@@ -126,13 +136,14 @@ const initialStore: ZulipStore = {
   typingUsers: {},
   drafts: {},
   unreadItems: [],
+  userTopics: [],
 }
 
 export interface ZulipSync {
   store: ZulipStore
 
   // Actions
-  setConnected(orgId: string, queueId: string, subscriptions: Subscription[], users: User[], loginEmail?: string, userId?: number | null): void
+  setConnected(orgId: string, queueId: string, subscriptions: Subscription[], users: User[], loginEmail?: string, userId?: number | null, userTopics?: UserTopic[]): void
   setDisconnected(): void
   addMessages(narrow: string, messages: Message[]): void
   setMessageLoadState(narrow: string, state: "idle" | "loading" | "loaded-all"): void
@@ -161,6 +172,8 @@ export interface ZulipSync {
   handleDeleteMessageEvent(data: any): void
   handleFlagEvent(data: any): void
   handleResync(data: any): void
+  handleUserTopicEvent(data: any): void
+  getTopicVisibility(streamId: number, topic: string): UserTopicVisibilityPolicy
 }
 
 const ZulipSyncContext = createContext<ZulipSync>()
@@ -202,7 +215,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
   const sync: ZulipSync = {
     get store() { return store },
 
-    setConnected(orgId, queueId, subscriptions, users, loginEmail, userId) {
+    setConnected(orgId, queueId, subscriptions, users, loginEmail, userId, userTopics) {
       // Resolve the current user ID:
       // 1. Use the user_id directly from the Zulip register API response (most reliable)
       // 2. Fall back to case-insensitive email matching
@@ -238,6 +251,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.users = users
         s.currentUserId = resolvedUserId
         s.currentUserEmail = resolvedEmail
+        s.userTopics = userTopics || []
       }))
     },
 
@@ -557,6 +571,31 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.messageHydrated = {}
       }))
     },
+
+    handleUserTopicEvent(data: any) {
+      if (!data) return
+      const { stream_id, topic_name, visibility_policy, last_updated } = data
+      setStore(produce(s => {
+        const idx = s.userTopics.findIndex(
+          ut => ut.stream_id === stream_id && ut.topic_name === topic_name,
+        )
+        if (visibility_policy === "Inherit") {
+          // Remove — "Inherit" means default (no override)
+          if (idx >= 0) s.userTopics.splice(idx, 1)
+        } else if (idx >= 0) {
+          s.userTopics[idx] = { stream_id, topic_name, visibility_policy, last_updated }
+        } else {
+          s.userTopics.push({ stream_id, topic_name, visibility_policy, last_updated })
+        }
+      }))
+    },
+
+    getTopicVisibility(streamId: number, topic: string): UserTopicVisibilityPolicy {
+      const ut = store.userTopics.find(
+        t => t.stream_id === streamId && t.topic_name === topic,
+      )
+      return (ut?.visibility_policy as UserTopicVisibilityPolicy) || "Inherit"
+    },
   }
 
   // Set up Tauri event listeners
@@ -571,6 +610,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       "update_message",
       "delete_message",
       "update_message_flags",
+      "user_topic",
       "resync",
       "disconnected",
       "connection_error",
@@ -617,6 +657,9 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         break
       case "update_message_flags":
         sync.handleFlagEvent(data)
+        break
+      case "user_topic":
+        sync.handleUserTopicEvent(data)
         break
       case "resync":
         sync.handleResync(data)

@@ -1,0 +1,27 @@
+title = "Foundry gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-safe upstream Foundry core tests and example fixtures"
+paths = [
+  '''(^|.*/)\.claude/''',
+  '''(^|.*/)packages/desktop/src-tauri/target/''',
+  '''(^|.*/)services/foundry-core/app/analytics/tests/''',
+  '''(^|.*/)services/foundry-core/app/api_docs/''',
+  '''(^|.*/)services/foundry-core/app/corporate/tests/''',
+  '''(^|.*/)services/foundry-core/app/docs/''',
+  '''(^|.*/)services/foundry-core/app/starlight_help/''',
+  '''(^|.*/)services/foundry-core/app/templates/zerver/integrations/''',
+  '''(^|.*/)services/foundry-core/app/tools/build-release-tarball$''',
+  '''(^|.*/)services/foundry-core/app/tools/zulip-export/zulip-export$''',
+  '''(^|.*/)services/foundry-core/app/web/e2e-tests/''',
+  '''(^|.*/)services/foundry-core/app/web/tests/''',
+  '''(^|.*/)services/foundry-core/app/zerver/data_import/slack.py$''',
+  '''(^|.*/)services/foundry-core/app/zerver/migrations/0209_user_profile_no_empty_password.py$''',
+  '''(^|.*/)services/foundry-core/app/zerver/openapi/''',
+  '''(^|.*/)services/foundry-core/app/zerver/tests/''',
+  '''(^|.*/)services/foundry-core/app/zerver/webhooks/[^/]+/fixtures/''',
+  '''(^|.*/)services/foundry-core/app/zerver/webhooks/[^/]+/tests\.py$''',
+]

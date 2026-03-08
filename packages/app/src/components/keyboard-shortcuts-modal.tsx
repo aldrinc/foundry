@@ -7,17 +7,20 @@ interface ShortcutGroup {
 
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
   {
+    title: "Navigation",
+    shortcuts: [
+      { keys: "c", description: "Focus compose box" },
+      { keys: "/", description: "Focus search" },
+      { keys: "?", description: "Show keyboard shortcuts" },
+      { keys: "Escape", description: "Close modals / panels" },
+    ],
+  },
+  {
     title: "Composing",
     shortcuts: [
       { keys: "Ctrl+Enter / Cmd+Enter", description: "Send message" },
       { keys: "Cmd+B / Ctrl+B", description: "Bold" },
       { keys: "Cmd+I / Ctrl+I", description: "Italic" },
-    ],
-  },
-  {
-    title: "Navigation",
-    shortcuts: [
-      { keys: "Cmd+K / Ctrl+K", description: "Search messages" },
     ],
   },
   {

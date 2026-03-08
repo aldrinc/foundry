@@ -52,6 +52,7 @@ pub async fn start_event_loop(
                             &serde_json::json!({
                                 "subscriptions": reg.subscriptions,
                                 "users": reg.realm_users,
+                                "user_topics": reg.user_topics,
                             }),
                         );
 

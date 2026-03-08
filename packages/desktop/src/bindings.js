@@ -257,6 +257,62 @@ export const commands = {
         }
     },
     /**
+     * Update one or more subscription properties for channels the user is subscribed to.
+     */
+    async updateSubscriptionProperties(orgId, subscriptionData) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_subscription_properties", { orgId, subscriptionData }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Update the current user's topic visibility policy within a channel.
+     */
+    async updateTopicVisibilityPolicy(orgId, streamId, topic, visibilityPolicy) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_topic_visibility_policy", { orgId, streamId, topic, visibilityPolicy }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Move or rename all messages in a topic.
+     */
+    async moveTopic(orgId, request) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("move_topic", { orgId, request }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Resolve or unresolve all messages in a topic.
+     */
+    async setTopicResolved(orgId, request) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("set_topic_resolved", { orgId, request }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
      * Update Zulip user settings (syncs to server)
      * `settings_json` is a JSON string with Zulip API key names, e.g. `{"enter_sends": true}`
      */
@@ -286,11 +342,460 @@ export const commands = {
         }
     },
     /**
+     * Fetch the current set of users from the Zulip server.
+     */
+    async getUsers(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_users", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Reactivate a deactivated user.
+     */
+    async reactivateUser(orgId, userId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("reactivate_user", { orgId, userId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch presence data for the current organization.
+     */
+    async getRealmPresence(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_realm_presence", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch a typed snapshot of organization settings and configured email domains.
+     */
+    async getRealmSettings(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_realm_settings", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Update organization-level settings using Zulip API key names.
+     * `settings_json` is a JSON string such as `{"name":"Acme","invite_required":true}`.
+     */
+    async updateRealmSettings(orgId, settingsJson) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_realm_settings", { orgId, settingsJson }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Add a new organization email domain restriction.
+     */
+    async createRealmDomain(orgId, domain, allowSubdomains) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("create_realm_domain", { orgId, domain, allowSubdomains }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Update the subdomain policy for an organization email domain.
+     */
+    async updateRealmDomain(orgId, domain, allowSubdomains) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_realm_domain", { orgId, domain, allowSubdomains }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Remove an organization email domain restriction.
+     */
+    async deleteRealmDomain(orgId, domain) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("delete_realm_domain", { orgId, domain }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch all manageable invitations.
+     */
+    async getInvites(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_invites", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Send email invitations.
+     */
+    async sendInvites(orgId, inviteeEmails, inviteExpiresInMinutes, inviteAs, streamIds) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("send_invites", { orgId, inviteeEmails, inviteExpiresInMinutes, inviteAs, streamIds }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Revoke an email invitation.
+     */
+    async revokeInvite(orgId, inviteId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("revoke_invite", { orgId, inviteId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Resend an email invitation.
+     */
+    async resendInvite(orgId, inviteId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("resend_invite", { orgId, inviteId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch user groups for the current organization.
+     */
+    async getUserGroups(orgId, includeDeactivatedGroups) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_user_groups", { orgId, includeDeactivatedGroups }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Create a user group.
+     */
+    async createUserGroup(orgId, name, description, members) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("create_user_group", { orgId, name, description, members }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Update the metadata for a user group.
+     */
+    async updateUserGroup(orgId, userGroupId, name, description) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_user_group", { orgId, userGroupId, name, description }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Deactivate a user group.
+     */
+    async deactivateUserGroup(orgId, userGroupId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("deactivate_user_group", { orgId, userGroupId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch all realm linkifiers.
+     */
+    async getLinkifiers(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_linkifiers", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Change linkifier evaluation order.
+     */
+    async reorderLinkifiers(orgId, orderedLinkifierIds) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("reorder_linkifiers", { orgId, orderedLinkifierIds }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Create a linkifier.
+     */
+    async createLinkifier(orgId, pattern, urlTemplate) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("create_linkifier", { orgId, pattern, urlTemplate }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Update a linkifier.
+     */
+    async updateLinkifier(orgId, filterId, pattern, urlTemplate) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("update_linkifier", { orgId, filterId, pattern, urlTemplate }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Delete a linkifier.
+     */
+    async deleteLinkifier(orgId, filterId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("delete_linkifier", { orgId, filterId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch custom emoji for the organization.
+     */
+    async getRealmEmoji(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_realm_emoji", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Upload a custom emoji asset.
+     */
+    async uploadCustomEmoji(orgId, emojiName, filePath) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("upload_custom_emoji", { orgId, emojiName, filePath }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Deactivate a custom emoji.
+     */
+    async deleteCustomEmoji(orgId, emojiName) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("delete_custom_emoji", { orgId, emojiName }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Upload an organization icon asset.
+     */
+    async uploadRealmIcon(orgId, filePath) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("upload_realm_icon", { orgId, filePath }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Reset the organization icon to the default source.
+     */
+    async deleteRealmIcon(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("delete_realm_icon", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Upload a light or dark organization logo asset.
+     */
+    async uploadRealmLogo(orgId, filePath, night) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("upload_realm_logo", { orgId, filePath, night }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Reset the light or dark organization logo to the default source.
+     */
+    async deleteRealmLogo(orgId, night) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("delete_realm_logo", { orgId, night }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch bots the current user can administer.
+     */
+    async getBots(orgId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_bots", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Create a bot or integration user.
+     */
+    async createBot(orgId, fullName, shortName, botType, serviceName, payloadUrl) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("create_bot", { orgId, fullName, shortName, botType, serviceName, payloadUrl }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch the API key for a bot.
+     */
+    async getBotApiKey(orgId, botId) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_bot_api_key", { orgId, botId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
      * Get all saved servers
      */
     async getServers() {
         try {
             return { status: "ok", data: await TAURI_INVOKE("get_servers") };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Get saved servers along with whether they are currently connected in this app session.
+     */
+    async getSavedServerStatuses() {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_saved_server_statuses") };
         }
         catch (e) {
             if (e instanceof Error)
@@ -319,6 +824,54 @@ export const commands = {
     async removeServer(serverId) {
         try {
             return { status: "ok", data: await TAURI_INVOKE("remove_server", { serverId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Return the native desktop settings contract as a typed object.
+     */
+    async getDesktopSettings() {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("get_desktop_settings") };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Persist the native desktop settings contract.
+     */
+    async setDesktopSettings(settings) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("set_desktop_settings", { settings }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Report native/backend feature support for frontend planning and gating.
+     */
+    async getDesktopCapabilities() {
+        return await TAURI_INVOKE("get_desktop_capabilities");
+    },
+    /**
+     * Update the platform unread badge count on the main window.
+     */
+    async setUnreadBadgeCount(count) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("set_unread_badge_count", { count }) };
         }
         catch (e) {
             if (e instanceof Error)

@@ -1,29 +1,19 @@
 use tauri::State;
 
+use crate::server::load_desktop_settings;
 use crate::zulip::types::*;
 use crate::zulip::ZulipClient;
 use crate::AppState;
 
-/// GET /api/v1/server_settings (unauthenticated)
-/// Discovers server capabilities and authentication methods
-#[tauri::command]
-#[specta::specta]
-pub async fn get_server_settings(url: String) -> Result<ServerSettings, String> {
-    let client = ZulipClient::new(&url, "", "");
-    client.server_settings().await
-}
-
-/// Authenticate with a Zulip server and start the event queue
-#[tauri::command]
-#[specta::specta]
-pub async fn login(
+async fn connect_with_api_key(
     app: tauri::AppHandle,
-    state: State<'_, AppState>,
-    url: String,
-    email: String,
-    api_key: String,
+    state: &AppState,
+    url: &str,
+    email: &str,
+    api_key: &str,
 ) -> Result<LoginResult, String> {
-    let client = ZulipClient::new(&url, &email, &api_key);
+    let settings = load_desktop_settings(&app)?;
+    let client = ZulipClient::with_desktop_settings(url, email, api_key, settings)?;
 
     // Validate credentials by fetching server settings
     let settings = client.server_settings().await?;
@@ -79,7 +69,48 @@ pub async fn login(
         user_id: reg.user_id,
         subscriptions: reg.subscriptions,
         users: reg.realm_users,
+        user_topics: reg.user_topics,
     })
+}
+
+/// GET /api/v1/server_settings (unauthenticated)
+/// Discovers server capabilities and authentication methods
+#[tauri::command]
+#[specta::specta]
+pub async fn get_server_settings(
+    app: tauri::AppHandle,
+    url: String,
+) -> Result<ServerSettings, String> {
+    let settings = load_desktop_settings(&app)?;
+    let client = ZulipClient::with_desktop_settings(&url, "", "", settings)?;
+    client.server_settings().await
+}
+
+/// Authenticate with a Zulip server and start the event queue
+#[tauri::command]
+#[specta::specta]
+pub async fn login(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    url: String,
+    email: String,
+    api_key: String,
+) -> Result<LoginResult, String> {
+    connect_with_api_key(app, state.inner(), &url, &email, &api_key).await
+}
+
+/// Exchange a password for an API key using Zulip's fetch_api_key endpoint
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_api_key(
+    app: tauri::AppHandle,
+    url: String,
+    username: String,
+    password: String,
+) -> Result<FetchApiKeyResult, String> {
+    let settings = load_desktop_settings(&app)?;
+    let client = ZulipClient::with_desktop_settings(&url, "", "", settings)?;
+    client.fetch_api_key(&username, &password).await
 }
 
 /// Disconnect from a Zulip server
@@ -322,6 +353,60 @@ pub async fn unsubscribe_stream(
 ) -> Result<(), String> {
     let client = get_client(&state, &org_id)?;
     client.unsubscribe(&stream_names).await
+}
+
+/// Update one or more subscription properties for channels the user is subscribed to.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_subscription_properties(
+    state: State<'_, AppState>,
+    org_id: String,
+    subscription_data: Vec<SubscriptionPropertyChange>,
+) -> Result<(), String> {
+    let client = get_client(&state, &org_id)?;
+    client
+        .update_subscription_properties(&subscription_data)
+        .await
+}
+
+/// Update the current user's topic visibility policy within a channel.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_topic_visibility_policy(
+    state: State<'_, AppState>,
+    org_id: String,
+    stream_id: u64,
+    topic: String,
+    visibility_policy: UserTopicVisibilityPolicy,
+) -> Result<(), String> {
+    let client = get_client(&state, &org_id)?;
+    client
+        .update_topic_visibility_policy(stream_id, &topic, visibility_policy)
+        .await
+}
+
+/// Move or rename all messages in a topic.
+#[tauri::command]
+#[specta::specta]
+pub async fn move_topic(
+    state: State<'_, AppState>,
+    org_id: String,
+    request: MoveTopicRequest,
+) -> Result<(), String> {
+    let client = get_client(&state, &org_id)?;
+    client.move_topic(&request).await
+}
+
+/// Resolve or unresolve all messages in a topic.
+#[tauri::command]
+#[specta::specta]
+pub async fn set_topic_resolved(
+    state: State<'_, AppState>,
+    org_id: String,
+    request: ResolveTopicRequest,
+) -> Result<(), String> {
+    let client = get_client(&state, &org_id)?;
+    client.set_topic_resolved(&request).await
 }
 
 /// Update Zulip user settings (syncs to server)

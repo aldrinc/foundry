@@ -1,7 +1,103 @@
+use serde::de::DeserializeOwned;
+
 use super::types::*;
 use super::ZulipClient;
 
+const RESOLVED_TOPIC_PREFIX: &str = "✔ ";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct RealmSettingsRegisterResponse {
+    queue_id: String,
+    #[serde(flatten)]
+    snapshot: RealmSettingsSnapshot,
+}
+
+fn is_resolved_topic(topic_name: &str) -> bool {
+    topic_name.starts_with(RESOLVED_TOPIC_PREFIX)
+}
+
+fn resolve_topic_name(topic_name: &str) -> String {
+    if is_resolved_topic(topic_name) {
+        topic_name.to_string()
+    } else {
+        format!("{RESOLVED_TOPIC_PREFIX}{topic_name}")
+    }
+}
+
+fn unresolve_topic_name(topic_name: &str) -> String {
+    if !is_resolved_topic(topic_name) {
+        return topic_name.to_string();
+    }
+
+    let tail = &topic_name[RESOLVED_TOPIC_PREFIX.len()..];
+    tail.trim_start_matches([' ', '✔']).to_string()
+}
+
+fn json_value_to_form_value(value: serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(string) => string,
+        other => other.to_string(),
+    }
+}
+
 impl ZulipClient {
+    async fn register_queue_with<T>(
+        &self,
+        event_types: &[&str],
+        fetch_event_types: &[&str],
+    ) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        let event_types_json =
+            serde_json::to_string(event_types).map_err(|e| format!("Serialize error: {}", e))?;
+        let fetch_event_types_json = serde_json::to_string(fetch_event_types)
+            .map_err(|e| format!("Serialize error: {}", e))?;
+
+        let resp = self
+            .post("/api/v1/register")
+            .form(&[
+                ("apply_markdown", "true".to_string()),
+                ("client_gravatar", "true".to_string()),
+                ("event_types", event_types_json),
+                ("fetch_event_types", fetch_event_types_json),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Failed to register queue: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Register failed ({}): {}", status, body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse register response: {}", e))
+    }
+
+    /// GET /api/v1/users — Fetch all users in the organization.
+    pub async fn get_users(&self) -> Result<Vec<User>, String> {
+        let resp = self
+            .get("/api/v1/users")
+            .send()
+            .await
+            .map_err(|e| format!("Get users failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get users failed: {}", body));
+        }
+
+        let users: UsersResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse users: {}", e))?;
+
+        Ok(users.members)
+    }
+
     /// GET /api/v1/server_settings (unauthenticated)
     pub async fn server_settings(&self) -> Result<ServerSettings, String> {
         let resp = self
@@ -19,35 +115,187 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
-    /// POST /api/v1/register — Register event queue and get initial state
-    pub async fn register_queue(&self) -> Result<RegisterResponse, String> {
+    /// POST /api/v1/fetch_api_key — exchange a password for an API key
+    pub async fn fetch_api_key(
+        &self,
+        username: &str,
+        password: &str,
+    ) -> Result<FetchApiKeyResult, String> {
         let resp = self
-            .post("/api/v1/register")
+            .post_unauth("/api/v1/fetch_api_key")
             .form(&[
-                ("apply_markdown", "true"),
-                ("client_gravatar", "true"),
-                (
-                    "event_types",
-                    r#"["message","typing","presence","reaction","subscription","update_message","delete_message","update_message_flags","realm_user","heartbeat"]"#,
-                ),
-                (
-                    "fetch_event_types",
-                    r#"["subscription","realm_user"]"#,
-                ),
+                ("username", username.to_string()),
+                ("password", password.to_string()),
             ])
             .send()
             .await
-            .map_err(|e| format!("Failed to register queue: {}", e))?;
+            .map_err(|e| format!("Fetch API key failed: {}", e))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Register failed ({}): {}", status, body));
+            return Err(format!("Fetch API key failed ({}): {}", status, body));
         }
 
         resp.json()
             .await
-            .map_err(|e| format!("Failed to parse register response: {}", e))
+            .map_err(|e| format!("Failed to parse fetch_api_key response: {}", e))
+    }
+
+    /// POST /api/v1/register — Register event queue and get initial state
+    pub async fn register_queue(&self) -> Result<RegisterResponse, String> {
+        self.register_queue_with(
+            &[
+                "message",
+                "typing",
+                "presence",
+                "reaction",
+                "subscription",
+                "update_message",
+                "delete_message",
+                "update_message_flags",
+                "realm",
+                "realm_domains",
+                "realm_user",
+                "user_topic",
+                "heartbeat",
+            ],
+            &[
+                "subscription",
+                "realm",
+                "realm_domains",
+                "realm_user",
+                "user_topic",
+            ],
+        )
+        .await
+    }
+
+    /// DELETE /api/v1/events — Delete a previously-registered event queue.
+    pub async fn delete_queue(&self, queue_id: &str) -> Result<(), String> {
+        let resp = self
+            .delete("/api/v1/events")
+            .form(&[("queue_id", queue_id.to_string())])
+            .send()
+            .await
+            .map_err(|e| format!("Delete queue failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete queue failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// Fetch a typed snapshot of organization settings and email-domain rules.
+    pub async fn get_realm_settings(&self) -> Result<RealmSettingsSnapshot, String> {
+        let response: RealmSettingsRegisterResponse = self
+            .register_queue_with(&["realm", "realm_domains"], &["realm", "realm_domains"])
+            .await?;
+
+        if let Err(error) = self.delete_queue(&response.queue_id).await {
+            tracing::warn!(
+                queue_id = %response.queue_id,
+                error = %error,
+                "Failed to delete temporary realm settings queue"
+            );
+        }
+
+        Ok(response.snapshot)
+    }
+
+    /// PATCH /api/v1/realm — Update organization-level settings.
+    pub async fn update_realm_settings(&self, settings_json: &str) -> Result<(), String> {
+        let settings: std::collections::HashMap<String, serde_json::Value> =
+            serde_json::from_str(settings_json)
+                .map_err(|e| format!("Invalid realm settings JSON: {}", e))?;
+
+        let params: Vec<(String, String)> = settings
+            .into_iter()
+            .map(|(key, value)| (key, json_value_to_form_value(value)))
+            .collect();
+
+        let resp = self
+            .patch("/api/v1/realm")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Update realm settings failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update realm settings failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/realm/domains — Add an email domain restriction.
+    pub async fn create_realm_domain(
+        &self,
+        domain: &str,
+        allow_subdomains: bool,
+    ) -> Result<(), String> {
+        let resp = self
+            .post("/api/v1/realm/domains")
+            .form(&[
+                ("domain", domain.to_string()),
+                ("allow_subdomains", allow_subdomains.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Create realm domain failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Create realm domain failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// PATCH /api/v1/realm/domains/{domain} — Update the subdomain policy for a realm domain.
+    pub async fn update_realm_domain(
+        &self,
+        domain: &str,
+        allow_subdomains: bool,
+    ) -> Result<(), String> {
+        let resp = self
+            .patch(&format!(
+                "/api/v1/realm/domains/{}",
+                urlencoding::encode(domain)
+            ))
+            .form(&[("allow_subdomains", allow_subdomains.to_string())])
+            .send()
+            .await
+            .map_err(|e| format!("Update realm domain failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update realm domain failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /api/v1/realm/domains/{domain} — Remove an email domain restriction.
+    pub async fn delete_realm_domain(&self, domain: &str) -> Result<(), String> {
+        let resp = self
+            .delete(&format!(
+                "/api/v1/realm/domains/{}",
+                urlencoding::encode(domain)
+            ))
+            .send()
+            .await
+            .map_err(|e| format!("Delete realm domain failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete realm domain failed: {}", body));
+        }
+
+        Ok(())
     }
 
     /// GET /api/v1/events — Long-poll for events
@@ -385,6 +633,125 @@ impl ZulipClient {
         Ok(())
     }
 
+    /// POST /api/v1/users/me/subscriptions/properties — Bulk update subscription properties.
+    pub async fn update_subscription_properties(
+        &self,
+        subscription_data: &[SubscriptionPropertyChange],
+    ) -> Result<(), String> {
+        let payload = subscription_data
+            .iter()
+            .map(subscription_property_change_to_wire)
+            .collect::<Result<Vec<_>, _>>()?;
+        let payload_json =
+            serde_json::to_string(&payload).map_err(|e| format!("Serialize error: {}", e))?;
+
+        let resp = self
+            .post("/api/v1/users/me/subscriptions/properties")
+            .form(&[("subscription_data", payload_json.as_str())])
+            .send()
+            .await
+            .map_err(|e| format!("Update subscription properties failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update subscription properties failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/user_topics — Set topic visibility for a user within a stream.
+    pub async fn update_topic_visibility_policy(
+        &self,
+        stream_id: u64,
+        topic: &str,
+        visibility_policy: UserTopicVisibilityPolicy,
+    ) -> Result<(), String> {
+        let params = vec![
+            ("stream_id".to_string(), stream_id.to_string()),
+            ("topic".to_string(), topic.to_string()),
+            (
+                "visibility_policy".to_string(),
+                visibility_policy.as_api_value().to_string(),
+            ),
+        ];
+
+        let resp = self
+            .post("/api/v1/user_topics")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Update topic visibility failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update topic visibility failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// PATCH /api/v1/messages/{id} — Move or rename an entire topic.
+    pub async fn move_topic(&self, request: &MoveTopicRequest) -> Result<(), String> {
+        let new_topic = request.new_topic.trim();
+        if new_topic.is_empty() {
+            return Err("New topic name cannot be empty".to_string());
+        }
+
+        let mut params = vec![
+            ("topic".to_string(), new_topic.to_string()),
+            ("propagate_mode".to_string(), "change_all".to_string()),
+        ];
+
+        if let Some(new_stream_id) = request.new_stream_id {
+            params.push(("stream_id".to_string(), new_stream_id.to_string()));
+        }
+        if let Some(send_old) = request.send_notification_to_old_thread {
+            params.push((
+                "send_notification_to_old_thread".to_string(),
+                send_old.to_string(),
+            ));
+        }
+        if let Some(send_new) = request.send_notification_to_new_thread {
+            params.push((
+                "send_notification_to_new_thread".to_string(),
+                send_new.to_string(),
+            ));
+        }
+
+        let resp = self
+            .patch(&format!("/api/v1/messages/{}", request.anchor_message_id))
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Move topic failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Move topic failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// PATCH /api/v1/messages/{id} — Resolve or unresolve an entire topic.
+    pub async fn set_topic_resolved(&self, request: &ResolveTopicRequest) -> Result<(), String> {
+        let next_topic = if request.resolved {
+            resolve_topic_name(&request.topic_name)
+        } else {
+            unresolve_topic_name(&request.topic_name)
+        };
+
+        self.move_topic(&MoveTopicRequest {
+            anchor_message_id: request.anchor_message_id,
+            new_topic: next_topic,
+            new_stream_id: None,
+            send_notification_to_old_thread: request.send_notification_to_old_thread,
+            send_notification_to_new_thread: request.send_notification_to_new_thread,
+        })
+        .await
+    }
+
     /// POST /api/v1/presence — Update own presence
     pub async fn update_presence(&self, status: &str) -> Result<(), String> {
         let resp = self
@@ -400,6 +767,24 @@ impl ZulipClient {
         }
 
         Ok(())
+    }
+
+    /// GET /api/v1/realm/presence — Fetch presence information for all users.
+    pub async fn get_realm_presence(&self) -> Result<RealmPresenceResponse, String> {
+        let resp = self
+            .get("/api/v1/realm/presence")
+            .send()
+            .await
+            .map_err(|e| format!("Get presence failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get presence failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse presence response: {}", e))
     }
 
     /// POST /api/v1/typing — Send typing notification
@@ -445,7 +830,7 @@ impl ZulipClient {
 
         let params: Vec<(String, String)> = settings
             .into_iter()
-            .map(|(k, v)| (k, v.to_string().trim_matches('"').to_string()))
+            .map(|(k, v)| (k, json_value_to_form_value(v)))
             .collect();
 
         let resp = self
@@ -505,5 +890,709 @@ impl ZulipClient {
         resp.json()
             .await
             .map_err(|e| format!("Failed to parse upload result: {}", e))
+    }
+
+    /// POST /api/v1/users/{user_id}/reactivate
+    pub async fn reactivate_user(&self, user_id: u64) -> Result<(), String> {
+        let resp = self
+            .post(&format!("/api/v1/users/{}/reactivate", user_id))
+            .send()
+            .await
+            .map_err(|e| format!("Reactivate user failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Reactivate user failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/v1/invites
+    pub async fn get_invites(&self) -> Result<Vec<Invite>, String> {
+        let resp = self
+            .get("/api/v1/invites")
+            .send()
+            .await
+            .map_err(|e| format!("Get invites failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get invites failed: {}", body));
+        }
+
+        let invites: InvitesResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse invites response: {}", e))?;
+
+        Ok(invites.invites)
+    }
+
+    /// POST /api/v1/invites
+    pub async fn send_invites(
+        &self,
+        invitee_emails: &str,
+        invite_expires_in_minutes: Option<u32>,
+        invite_as: Option<u32>,
+        stream_ids: &[u64],
+    ) -> Result<SendInvitesResponse, String> {
+        let stream_ids_json =
+            serde_json::to_string(stream_ids).map_err(|e| format!("Serialize error: {}", e))?;
+
+        let mut params = vec![
+            ("invitee_emails".to_string(), invitee_emails.to_string()),
+            ("stream_ids".to_string(), stream_ids_json),
+        ];
+
+        if let Some(minutes) = invite_expires_in_minutes {
+            params.push(("invite_expires_in_minutes".to_string(), minutes.to_string()));
+        }
+
+        if let Some(role) = invite_as {
+            params.push(("invite_as".to_string(), role.to_string()));
+        }
+
+        let resp = self
+            .post("/api/v1/invites")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Send invites failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Send invites failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse invite response: {}", e))
+    }
+
+    /// DELETE /api/v1/invites/{invite_id}
+    pub async fn revoke_invite(&self, invite_id: u64) -> Result<(), String> {
+        let resp = self
+            .delete(&format!("/api/v1/invites/{}", invite_id))
+            .send()
+            .await
+            .map_err(|e| format!("Revoke invite failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Revoke invite failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/invites/{invite_id}/resend
+    pub async fn resend_invite(&self, invite_id: u64) -> Result<(), String> {
+        let resp = self
+            .post(&format!("/api/v1/invites/{}/resend", invite_id))
+            .send()
+            .await
+            .map_err(|e| format!("Resend invite failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Resend invite failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/v1/user_groups
+    pub async fn get_user_groups(
+        &self,
+        include_deactivated_groups: bool,
+    ) -> Result<Vec<UserGroup>, String> {
+        let resp = self
+            .get("/api/v1/user_groups")
+            .query(&[(
+                "include_deactivated_groups",
+                include_deactivated_groups.to_string(),
+            )])
+            .send()
+            .await
+            .map_err(|e| format!("Get user groups failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get user groups failed: {}", body));
+        }
+
+        let user_groups: UserGroupsResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse user groups response: {}", e))?;
+
+        Ok(user_groups.user_groups)
+    }
+
+    /// POST /api/v1/user_groups/create
+    pub async fn create_user_group(
+        &self,
+        name: &str,
+        description: &str,
+        members: &[u64],
+    ) -> Result<CreateUserGroupResponse, String> {
+        let members_json =
+            serde_json::to_string(members).map_err(|e| format!("Serialize error: {}", e))?;
+
+        let resp = self
+            .post("/api/v1/user_groups/create")
+            .form(&[
+                ("name", name.to_string()),
+                ("description", description.to_string()),
+                ("members", members_json),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Create user group failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Create user group failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse create user group response: {}", e))
+    }
+
+    /// PATCH /api/v1/user_groups/{user_group_id}
+    pub async fn update_user_group(
+        &self,
+        user_group_id: u64,
+        name: Option<&str>,
+        description: Option<&str>,
+    ) -> Result<(), String> {
+        let mut params = Vec::new();
+        if let Some(name) = name {
+            params.push(("name", name.to_string()));
+        }
+        if let Some(description) = description {
+            params.push(("description", description.to_string()));
+        }
+
+        let resp = self
+            .patch(&format!("/api/v1/user_groups/{}", user_group_id))
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Update user group failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update user group failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/user_groups/{user_group_id}/deactivate
+    pub async fn deactivate_user_group(&self, user_group_id: u64) -> Result<(), String> {
+        let resp = self
+            .post(&format!("/api/v1/user_groups/{}/deactivate", user_group_id))
+            .send()
+            .await
+            .map_err(|e| format!("Deactivate user group failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Deactivate user group failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/v1/realm/linkifiers
+    pub async fn get_linkifiers(&self) -> Result<Vec<Linkifier>, String> {
+        let resp = self
+            .get("/api/v1/realm/linkifiers")
+            .send()
+            .await
+            .map_err(|e| format!("Get linkifiers failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get linkifiers failed: {}", body));
+        }
+
+        let linkifiers: LinkifiersResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse linkifiers response: {}", e))?;
+
+        Ok(linkifiers.linkifiers)
+    }
+
+    /// PATCH /api/v1/realm/linkifiers
+    pub async fn reorder_linkifiers(&self, ordered_linkifier_ids: &[u64]) -> Result<(), String> {
+        let ids_json = serde_json::to_string(ordered_linkifier_ids)
+            .map_err(|e| format!("Serialize error: {}", e))?;
+
+        let resp = self
+            .patch("/api/v1/realm/linkifiers")
+            .form(&[("ordered_linkifier_ids", ids_json)])
+            .send()
+            .await
+            .map_err(|e| format!("Reorder linkifiers failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Reorder linkifiers failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/realm/filters
+    pub async fn create_linkifier(
+        &self,
+        pattern: &str,
+        url_template: &str,
+    ) -> Result<LinkifierCreateResponse, String> {
+        let resp = self
+            .post("/api/v1/realm/filters")
+            .form(&[
+                ("pattern", pattern.to_string()),
+                ("url_template", url_template.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Create linkifier failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Create linkifier failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse create linkifier response: {}", e))
+    }
+
+    /// PATCH /api/v1/realm/filters/{filter_id}
+    pub async fn update_linkifier(
+        &self,
+        filter_id: u64,
+        pattern: &str,
+        url_template: &str,
+    ) -> Result<(), String> {
+        let resp = self
+            .patch(&format!("/api/v1/realm/filters/{}", filter_id))
+            .form(&[
+                ("pattern", pattern.to_string()),
+                ("url_template", url_template.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(|e| format!("Update linkifier failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Update linkifier failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /api/v1/realm/filters/{filter_id}
+    pub async fn delete_linkifier(&self, filter_id: u64) -> Result<(), String> {
+        let resp = self
+            .delete(&format!("/api/v1/realm/filters/{}", filter_id))
+            .send()
+            .await
+            .map_err(|e| format!("Delete linkifier failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete linkifier failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/v1/realm/emoji
+    pub async fn get_realm_emoji(&self) -> Result<Vec<RealmEmoji>, String> {
+        let resp = self
+            .get("/api/v1/realm/emoji")
+            .send()
+            .await
+            .map_err(|e| format!("Get custom emoji failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get custom emoji failed: {}", body));
+        }
+
+        let emoji: RealmEmojiResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse custom emoji response: {}", e))?;
+
+        Ok(emoji.emoji.into_values().collect())
+    }
+
+    /// POST /api/v1/realm/emoji/{emoji_name}
+    pub async fn upload_custom_emoji(
+        &self,
+        emoji_name: &str,
+        file_bytes: Vec<u8>,
+        file_name: &str,
+    ) -> Result<(), String> {
+        let part = reqwest::multipart::Part::bytes(file_bytes).file_name(file_name.to_string());
+        let form = reqwest::multipart::Form::new().part("filename", part);
+
+        let resp = self
+            .post(&format!(
+                "/api/v1/realm/emoji/{}",
+                urlencoding::encode(emoji_name)
+            ))
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("Upload custom emoji failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Upload custom emoji failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /api/v1/realm/emoji/{emoji_name}
+    pub async fn delete_custom_emoji(&self, emoji_name: &str) -> Result<(), String> {
+        let resp = self
+            .delete(&format!(
+                "/api/v1/realm/emoji/{}",
+                urlencoding::encode(emoji_name)
+            ))
+            .send()
+            .await
+            .map_err(|e| format!("Delete custom emoji failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete custom emoji failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/realm/icon
+    pub async fn upload_realm_icon(
+        &self,
+        file_bytes: Vec<u8>,
+        file_name: &str,
+    ) -> Result<(), String> {
+        let part = reqwest::multipart::Part::bytes(file_bytes).file_name(file_name.to_string());
+        let form = reqwest::multipart::Form::new().part("file", part);
+
+        let resp = self
+            .post("/api/v1/realm/icon")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("Upload organization icon failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Upload organization icon failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /api/v1/realm/icon
+    pub async fn delete_realm_icon(&self) -> Result<(), String> {
+        let resp = self
+            .delete("/api/v1/realm/icon")
+            .send()
+            .await
+            .map_err(|e| format!("Delete organization icon failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete organization icon failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// POST /api/v1/realm/logo
+    pub async fn upload_realm_logo(
+        &self,
+        file_bytes: Vec<u8>,
+        file_name: &str,
+        night: bool,
+    ) -> Result<(), String> {
+        let part = reqwest::multipart::Part::bytes(file_bytes).file_name(file_name.to_string());
+        let form = reqwest::multipart::Form::new()
+            .text("night", night.to_string())
+            .part("file", part);
+
+        let resp = self
+            .post("/api/v1/realm/logo")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("Upload organization logo failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Upload organization logo failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// DELETE /api/v1/realm/logo
+    pub async fn delete_realm_logo(&self, night: bool) -> Result<(), String> {
+        let resp = self
+            .delete("/api/v1/realm/logo")
+            .form(&[("night", night.to_string())])
+            .send()
+            .await
+            .map_err(|e| format!("Delete organization logo failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete organization logo failed: {}", body));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/v1/bots
+    pub async fn get_bots(&self) -> Result<Vec<Bot>, String> {
+        let resp = self
+            .get("/api/v1/bots")
+            .send()
+            .await
+            .map_err(|e| format!("Get bots failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get bots failed: {}", body));
+        }
+
+        let bots: BotsResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse bots response: {}", e))?;
+
+        Ok(bots.bots)
+    }
+
+    /// POST /api/v1/bots
+    pub async fn create_bot(
+        &self,
+        full_name: &str,
+        short_name: &str,
+        bot_type: u32,
+        service_name: Option<&str>,
+        payload_url: Option<&str>,
+    ) -> Result<CreateBotResponse, String> {
+        let mut params = vec![
+            ("full_name".to_string(), full_name.to_string()),
+            ("short_name".to_string(), short_name.to_string()),
+            ("bot_type".to_string(), bot_type.to_string()),
+        ];
+
+        if let Some(service_name) = service_name {
+            params.push(("service_name".to_string(), service_name.to_string()));
+        }
+
+        if let Some(payload_url) = payload_url {
+            params.push(("payload_url".to_string(), payload_url.to_string()));
+        }
+
+        let resp = self
+            .post("/api/v1/bots")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Create bot failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Create bot failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse create bot response: {}", e))
+    }
+
+    /// GET /api/v1/bots/{bot_id}/api_key
+    pub async fn get_bot_api_key(&self, bot_id: u64) -> Result<BotApiKeyResponse, String> {
+        let resp = self
+            .get(&format!("/api/v1/bots/{}/api_key", bot_id))
+            .send()
+            .await
+            .map_err(|e| format!("Get bot API key failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get bot API key failed: {}", body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse bot API key response: {}", e))
+    }
+}
+
+fn subscription_property_name(property: SubscriptionProperty) -> &'static str {
+    match property {
+        SubscriptionProperty::InHomeView => "in_home_view",
+        SubscriptionProperty::IsMuted => "is_muted",
+        SubscriptionProperty::Color => "color",
+        SubscriptionProperty::DesktopNotifications => "desktop_notifications",
+        SubscriptionProperty::AudibleNotifications => "audible_notifications",
+        SubscriptionProperty::PushNotifications => "push_notifications",
+        SubscriptionProperty::EmailNotifications => "email_notifications",
+        SubscriptionProperty::PinToTop => "pin_to_top",
+        SubscriptionProperty::WildcardMentionsNotify => "wildcard_mentions_notify",
+    }
+}
+
+fn subscription_property_change_to_wire(
+    change: &SubscriptionPropertyChange,
+) -> Result<serde_json::Value, String> {
+    let value = match (&change.property, &change.value) {
+        (SubscriptionProperty::Color, SubscriptionPropertyValue::String(value)) => {
+            serde_json::Value::String(value.clone())
+        }
+        (SubscriptionProperty::Color, _) => {
+            return Err("Subscription property 'color' requires a string value".to_string());
+        }
+        (_, SubscriptionPropertyValue::Bool(value)) => serde_json::Value::Bool(*value),
+        (_, SubscriptionPropertyValue::String(_)) => {
+            return Err(format!(
+                "Subscription property '{}' requires a boolean value",
+                subscription_property_name(change.property)
+            ));
+        }
+    };
+
+    Ok(serde_json::json!({
+        "stream_id": change.stream_id,
+        "property": subscription_property_name(change.property),
+        "value": value,
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_topic_name_is_idempotent() {
+        assert_eq!(resolve_topic_name("topic"), "✔ topic");
+        assert_eq!(resolve_topic_name("✔ topic"), "✔ topic");
+    }
+
+    #[test]
+    fn unresolve_topic_name_handles_canonical_prefix() {
+        assert_eq!(unresolve_topic_name("topic"), "topic");
+        assert_eq!(unresolve_topic_name("✔ topic"), "topic");
+    }
+
+    #[test]
+    fn unresolve_topic_name_handles_overresolved_prefixes() {
+        assert_eq!(unresolve_topic_name("✔ ✔✔ topic"), "topic");
+    }
+
+    #[test]
+    fn preserves_json_shapes_when_building_form_values() {
+        assert_eq!(
+            json_value_to_form_value(serde_json::json!("plain text")),
+            "plain text"
+        );
+        assert_eq!(json_value_to_form_value(serde_json::json!(true)), "true");
+        assert_eq!(json_value_to_form_value(serde_json::json!(42)), "42");
+        assert_eq!(
+            json_value_to_form_value(serde_json::json!({"new": 5, "old": 2})),
+            r#"{"new":5,"old":2}"#
+        );
+        assert_eq!(json_value_to_form_value(serde_json::Value::Null), "null");
+    }
+
+    #[test]
+    fn serializes_subscription_property_changes_to_zulip_wire_shape() {
+        let color_change = SubscriptionPropertyChange {
+            stream_id: 7,
+            property: SubscriptionProperty::Color,
+            value: SubscriptionPropertyValue::String("#ffffff".to_string()),
+        };
+        let mute_change = SubscriptionPropertyChange {
+            stream_id: 9,
+            property: SubscriptionProperty::IsMuted,
+            value: SubscriptionPropertyValue::Bool(true),
+        };
+
+        assert_eq!(
+            subscription_property_change_to_wire(&color_change).unwrap(),
+            serde_json::json!({
+                "stream_id": 7,
+                "property": "color",
+                "value": "#ffffff",
+            })
+        );
+        assert_eq!(
+            subscription_property_change_to_wire(&mute_change).unwrap(),
+            serde_json::json!({
+                "stream_id": 9,
+                "property": "is_muted",
+                "value": true,
+            })
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_subscription_property_value_shapes() {
+        let bad_color = SubscriptionPropertyChange {
+            stream_id: 1,
+            property: SubscriptionProperty::Color,
+            value: SubscriptionPropertyValue::Bool(true),
+        };
+        let bad_boolean = SubscriptionPropertyChange {
+            stream_id: 1,
+            property: SubscriptionProperty::PinToTop,
+            value: SubscriptionPropertyValue::String("true".to_string()),
+        };
+
+        assert_eq!(
+            subscription_property_change_to_wire(&bad_color).unwrap_err(),
+            "Subscription property 'color' requires a string value"
+        );
+        assert_eq!(
+            subscription_property_change_to_wire(&bad_boolean).unwrap_err(),
+            "Subscription property 'pin_to_top' requires a boolean value"
+        );
+    }
+
+    #[test]
+    fn user_topic_visibility_policy_round_trips_server_and_request_values() {
+        let followed: UserTopicVisibilityPolicy = serde_json::from_value(serde_json::json!(3))
+            .expect("server integer should deserialize");
+        assert!(matches!(followed, UserTopicVisibilityPolicy::Followed));
+        assert_eq!(followed.as_api_value(), 3);
+        assert_eq!(
+            serde_json::to_value(followed).unwrap(),
+            serde_json::json!("Followed")
+        );
+        let followed_from_frontend: UserTopicVisibilityPolicy =
+            serde_json::from_value(serde_json::json!("Followed"))
+                .expect("frontend string should deserialize");
+        assert!(matches!(
+            followed_from_frontend,
+            UserTopicVisibilityPolicy::Followed
+        ));
     }
 }

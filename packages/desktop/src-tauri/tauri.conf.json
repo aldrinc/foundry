@@ -42,7 +42,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["foundry"]
+        "schemes": ["foundry", "zulip"]
       }
     }
   }

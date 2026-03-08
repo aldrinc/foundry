@@ -29,6 +29,17 @@ async login(url: string, email: string, apiKey: string) : Promise<Result<LoginRe
 }
 },
 /**
+ * Exchange a password for an API key using Zulip's fetch_api_key endpoint
+ */
+async fetchApiKey(url: string, username: string, password: string) : Promise<Result<FetchApiKeyResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fetch_api_key", { url, username, password }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Disconnect from a Zulip server
  */
 async logout(orgId: string) : Promise<Result<null, string>> {
@@ -207,6 +218,50 @@ async unsubscribeStream(orgId: string, streamNames: string[]) : Promise<Result<n
 }
 },
 /**
+ * Update one or more subscription properties for channels the user is subscribed to.
+ */
+async updateSubscriptionProperties(orgId: string, subscriptionData: SubscriptionPropertyChange[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_subscription_properties", { orgId, subscriptionData }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update the current user's topic visibility policy within a channel.
+ */
+async updateTopicVisibilityPolicy(orgId: string, streamId: number, topic: string, visibilityPolicy: UserTopicVisibilityPolicy) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_topic_visibility_policy", { orgId, streamId, topic, visibilityPolicy }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Move or rename all messages in a topic.
+ */
+async moveTopic(orgId: string, request: MoveTopicRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("move_topic", { orgId, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Resolve or unresolve all messages in a topic.
+ */
+async setTopicResolved(orgId: string, request: ResolveTopicRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_topic_resolved", { orgId, request }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Update Zulip user settings (syncs to server)
  * `settings_json` is a JSON string with Zulip API key names, e.g. `{"enter_sends": true}`
  */
@@ -230,11 +285,364 @@ async getZulipSettings(orgId: string) : Promise<Result<string, string>> {
 }
 },
 /**
+ * Fetch the current set of users from the Zulip server.
+ */
+async getUsers(orgId: string) : Promise<Result<User[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_users", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reactivate a deactivated user.
+ */
+async reactivateUser(orgId: string, userId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reactivate_user", { orgId, userId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch presence data for the current organization.
+ */
+async getRealmPresence(orgId: string) : Promise<Result<RealmPresenceResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_realm_presence", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch a typed snapshot of organization settings and configured email domains.
+ */
+async getRealmSettings(orgId: string) : Promise<Result<RealmSettingsSnapshot, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_realm_settings", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update organization-level settings using Zulip API key names.
+ * `settings_json` is a JSON string such as `{"name":"Acme","invite_required":true}`.
+ */
+async updateRealmSettings(orgId: string, settingsJson: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_realm_settings", { orgId, settingsJson }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Add a new organization email domain restriction.
+ */
+async createRealmDomain(orgId: string, domain: string, allowSubdomains: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_realm_domain", { orgId, domain, allowSubdomains }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update the subdomain policy for an organization email domain.
+ */
+async updateRealmDomain(orgId: string, domain: string, allowSubdomains: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_realm_domain", { orgId, domain, allowSubdomains }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Remove an organization email domain restriction.
+ */
+async deleteRealmDomain(orgId: string, domain: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_realm_domain", { orgId, domain }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch all manageable invitations.
+ */
+async getInvites(orgId: string) : Promise<Result<Invite[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_invites", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Send email invitations.
+ */
+async sendInvites(orgId: string, inviteeEmails: string, inviteExpiresInMinutes: number | null, inviteAs: number | null, streamIds: number[]) : Promise<Result<SendInvitesResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("send_invites", { orgId, inviteeEmails, inviteExpiresInMinutes, inviteAs, streamIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Revoke an email invitation.
+ */
+async revokeInvite(orgId: string, inviteId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("revoke_invite", { orgId, inviteId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Resend an email invitation.
+ */
+async resendInvite(orgId: string, inviteId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("resend_invite", { orgId, inviteId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch user groups for the current organization.
+ */
+async getUserGroups(orgId: string, includeDeactivatedGroups: boolean) : Promise<Result<UserGroup[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_user_groups", { orgId, includeDeactivatedGroups }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a user group.
+ */
+async createUserGroup(orgId: string, name: string, description: string, members: number[]) : Promise<Result<CreateUserGroupResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_user_group", { orgId, name, description, members }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update the metadata for a user group.
+ */
+async updateUserGroup(orgId: string, userGroupId: number, name: string | null, description: string | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_user_group", { orgId, userGroupId, name, description }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Deactivate a user group.
+ */
+async deactivateUserGroup(orgId: string, userGroupId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("deactivate_user_group", { orgId, userGroupId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch all realm linkifiers.
+ */
+async getLinkifiers(orgId: string) : Promise<Result<Linkifier[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_linkifiers", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Change linkifier evaluation order.
+ */
+async reorderLinkifiers(orgId: string, orderedLinkifierIds: number[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reorder_linkifiers", { orgId, orderedLinkifierIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a linkifier.
+ */
+async createLinkifier(orgId: string, pattern: string, urlTemplate: string) : Promise<Result<LinkifierCreateResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_linkifier", { orgId, pattern, urlTemplate }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update a linkifier.
+ */
+async updateLinkifier(orgId: string, filterId: number, pattern: string, urlTemplate: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_linkifier", { orgId, filterId, pattern, urlTemplate }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete a linkifier.
+ */
+async deleteLinkifier(orgId: string, filterId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_linkifier", { orgId, filterId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch custom emoji for the organization.
+ */
+async getRealmEmoji(orgId: string) : Promise<Result<RealmEmoji[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_realm_emoji", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Upload a custom emoji asset.
+ */
+async uploadCustomEmoji(orgId: string, emojiName: string, filePath: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upload_custom_emoji", { orgId, emojiName, filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Deactivate a custom emoji.
+ */
+async deleteCustomEmoji(orgId: string, emojiName: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_custom_emoji", { orgId, emojiName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Upload an organization icon asset.
+ */
+async uploadRealmIcon(orgId: string, filePath: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upload_realm_icon", { orgId, filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reset the organization icon to the default source.
+ */
+async deleteRealmIcon(orgId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_realm_icon", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Upload a light or dark organization logo asset.
+ */
+async uploadRealmLogo(orgId: string, filePath: string, night: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upload_realm_logo", { orgId, filePath, night }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reset the light or dark organization logo to the default source.
+ */
+async deleteRealmLogo(orgId: string, night: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_realm_logo", { orgId, night }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch bots the current user can administer.
+ */
+async getBots(orgId: string) : Promise<Result<Bot[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_bots", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a bot or integration user.
+ */
+async createBot(orgId: string, fullName: string, shortName: string, botType: number, serviceName: string | null, payloadUrl: string | null) : Promise<Result<CreateBotResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_bot", { orgId, fullName, shortName, botType, serviceName, payloadUrl }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch the API key for a bot.
+ */
+async getBotApiKey(orgId: string, botId: number) : Promise<Result<BotApiKeyResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_bot_api_key", { orgId, botId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Get all saved servers
  */
 async getServers() : Promise<Result<SavedServer[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_servers") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Get saved servers along with whether they are currently connected in this app session.
+ */
+async getSavedServerStatuses() : Promise<Result<SavedServerStatus[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_saved_server_statuses") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -257,6 +665,45 @@ async addServer(server: SavedServer) : Promise<Result<null, string>> {
 async removeServer(serverId: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("remove_server", { serverId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Return the native desktop settings contract as a typed object.
+ */
+async getDesktopSettings() : Promise<Result<DesktopSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_desktop_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Persist the native desktop settings contract.
+ */
+async setDesktopSettings(settings: DesktopSettings) : Promise<Result<DesktopSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_desktop_settings", { settings }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Report native/backend feature support for frontend planning and gating.
+ */
+async getDesktopCapabilities() : Promise<DesktopCapabilities> {
+    return await TAURI_INVOKE("get_desktop_capabilities");
+},
+/**
+ * Update the platform unread badge count on the main window.
+ */
+async setUnreadBadgeCount(count: number | null) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_unread_badge_count", { count }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -397,7 +844,35 @@ async stopSupervisorStream(orgId: string) : Promise<Result<null, string>> {
 
 /** user-defined types **/
 
-export type AuthMethods = { password?: boolean; google?: boolean; github?: boolean; ldap?: boolean; dev?: boolean }
+/**
+ * Anonymous group-setting value used by Zulip permission settings.
+ */
+export type AnonymousGroupSetting = { direct_subgroups?: number[]; direct_members?: number[] }
+export type AuthMethods = { password?: boolean; email?: boolean; google?: boolean; github?: boolean; ldap?: boolean; dev?: boolean; remoteuser?: boolean; gitlab?: boolean; azuread?: boolean; apple?: boolean; saml?: boolean; "openid connect"?: boolean }
+/**
+ * Bot info returned by GET /api/v1/bots.
+ */
+export type Bot = { username: string; full_name: string; api_key: string; avatar_url?: string | null; default_sending_stream?: string | null; default_events_register_stream?: string | null; default_all_public_streams?: boolean | null }
+/**
+ * Response from GET /api/v1/bots/{bot_id}/api_key.
+ */
+export type BotApiKeyResponse = { api_key: string }
+/**
+ * Response from POST /api/v1/bots.
+ */
+export type CreateBotResponse = { user_id: number; api_key: string; avatar_url?: string | null; default_sending_stream?: string | null; default_events_register_stream?: string | null; default_all_public_streams?: boolean | null }
+/**
+ * Response from POST /api/v1/user_groups/create.
+ */
+export type CreateUserGroupResponse = { group_id: number }
+/**
+ * Native/backend feature support advertised to the frontend.
+ */
+export type DesktopCapabilities = { multi_org: boolean; saved_server_status: boolean; uploads: boolean; typing_notifications: boolean; presence_updates: boolean; realm_presence: boolean; invites: boolean; user_groups: boolean; linkifiers: boolean; custom_emoji: boolean; bots: boolean; bot_api_key: boolean; spellcheck_settings: boolean; tray: boolean; badge_count: boolean; start_at_login: boolean; updater: boolean; proxy_settings: boolean; custom_certificates: boolean; inline_notification_reply: boolean; directory_picker: boolean }
+/**
+ * Desktop-shell settings that the frontend can treat as a stable native contract.
+ */
+export type DesktopSettings = { start_at_login: boolean; start_minimized: boolean; show_tray: boolean; quit_on_close: boolean; auto_update: boolean; beta_updates: boolean; spellcheck: boolean; custom_css: string; download_location: string; use_system_proxy: boolean; manual_proxy: boolean; pac_url: string; proxy_rules: string; bypass_rules: string; trusted_certificates?: string[] }
 /**
  * Display recipient — either a stream name (string) or list of users (DMs)
  */
@@ -406,6 +881,11 @@ export type DisplayRecipient = string | DisplayRecipientUser[]
  * User in a DM display_recipient
  */
 export type DisplayRecipientUser = { id: number; email: string; full_name: string }
+export type ExternalAuthenticationMethod = { name: string; display_name: string; display_icon: string | null; login_url: string; signup_url: string }
+/**
+ * Result of POST /api/v1/fetch_api_key
+ */
+export type FetchApiKeyResult = { api_key: string; email: string; user_id?: number | null }
 /**
  * Provider authentication entry
  */
@@ -414,7 +894,27 @@ export type FoundryProviderAuth = { provider: string; display_name?: string; aut
  * Response from GET /json/foundry/providers/auth
  */
 export type FoundryProvidersResponse = { providers?: FoundryProviderAuth[] }
+/**
+ * Configuration metadata for a Zulip group permission setting.
+ */
+export type GroupPermissionSetting = { require_system_group?: boolean; allow_internet_group?: boolean; allow_nobody_group?: boolean; allow_everyone_group?: boolean; default_group_name?: string; default_for_system_groups?: string | null; allowed_system_groups?: string[] }
+/**
+ * Group-setting value returned by Zulip for organization permissions.
+ */
+export type GroupSettingValue = number | AnonymousGroupSetting
+/**
+ * Invitation returned by GET /api/v1/invites.
+ */
+export type Invite = { id: number; email?: string | null; expiry_date?: number | null; invited?: number | null; invited_as?: number | null; invited_by_user_id?: number | null; notify_referrer_on_join?: boolean | null; is_multiuse?: boolean | null; link_url?: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+/**
+ * Linkifier entry returned by GET /api/v1/realm/linkifiers.
+ */
+export type Linkifier = { id: number; pattern: string; url_template: string }
+/**
+ * Response from POST /api/v1/realm/filters.
+ */
+export type LinkifierCreateResponse = { id: number }
 /**
  * Result of login flow
  */
@@ -422,7 +922,7 @@ export type LoginResult = { org_id: string; realm_name: string; realm_icon: stri
 /**
  * The logged-in user's ID (from Zulip register response)
  */
-user_id: number | null; subscriptions: Subscription[]; users: User[] }
+user_id: number | null; subscriptions: Subscription[]; users: User[]; user_topics: UserTopic[] }
 /**
  * A Zulip message
  */
@@ -431,6 +931,13 @@ export type Message = { id: number; sender_id: number; sender_full_name: string;
  * GET /api/v1/messages response
  */
 export type MessageResponse = { messages: Message[]; found_newest: boolean; found_oldest: boolean; found_anchor: boolean }
+/**
+ * Request to move or rename all messages in a topic.
+ * 
+ * `anchor_message_id` can be any message in the topic; callers typically use
+ * the topic's `max_id` from `GET /users/me/{stream_id}/topics`.
+ */
+export type MoveTopicRequest = { anchor_message_id: number; new_topic: string; new_stream_id?: number | null; send_notification_to_old_thread?: boolean | null; send_notification_to_new_thread?: boolean | null }
 /**
  * Narrow filter for message queries
  */
@@ -444,9 +951,42 @@ export type NarrowOperand = string | number[]
  */
 export type Reaction = { emoji_name: string; emoji_code: string; reaction_type: string; user_id: number }
 /**
+ * Organization email-domain restriction entry.
+ */
+export type RealmDomain = { domain: string; allow_subdomains: boolean }
+/**
+ * Realm custom emoji entry.
+ */
+export type RealmEmoji = { id: string; name: string; source_url: string; deactivated?: boolean; author_id?: number | null }
+/**
+ * GET /api/v1/realm/presence response.
+ */
+export type RealmPresenceResponse = { server_timestamp: number; presences: Partial<{ [key in string]: JsonValue }> }
+/**
+ * Snapshot of organization settings needed by the admin/settings UI.
+ */
+export type RealmSettingsSnapshot = { realm_name?: string; realm_description?: string; realm_icon_url?: string; realm_icon_source?: string; realm_logo_url?: string; realm_logo_source?: string; realm_night_logo_url?: string; realm_night_logo_source?: string; max_icon_file_size_mib?: number; max_logo_file_size_mib?: number; zulip_plan_is_not_limited?: boolean; realm_invite_required?: boolean; realm_emails_restricted_to_domains?: boolean; realm_waiting_period_threshold?: number; realm_allow_message_editing?: boolean; realm_message_content_edit_limit_seconds?: number | null; realm_message_content_delete_limit_seconds?: number | null; realm_topics_policy?: RealmTopicsPolicy; realm_create_multiuse_invite_group?: GroupSettingValue | null; realm_can_invite_users_group?: GroupSettingValue | null; realm_can_create_web_public_channel_group?: GroupSettingValue | null; realm_can_create_public_channel_group?: GroupSettingValue | null; realm_can_create_private_channel_group?: GroupSettingValue | null; realm_can_add_subscribers_group?: GroupSettingValue | null; realm_can_mention_many_users_group?: GroupSettingValue | null; realm_can_manage_all_groups?: GroupSettingValue | null; realm_can_create_groups?: GroupSettingValue | null; realm_direct_message_permission_group?: GroupSettingValue | null; realm_direct_message_initiator_group?: GroupSettingValue | null; realm_can_move_messages_between_channels_group?: GroupSettingValue | null; realm_can_move_messages_between_topics_group?: GroupSettingValue | null; realm_can_resolve_topics_group?: GroupSettingValue | null; realm_can_delete_any_message_group?: GroupSettingValue | null; realm_can_delete_own_message_group?: GroupSettingValue | null; realm_can_set_delete_message_policy_group?: GroupSettingValue | null; realm_can_set_topics_policy_group?: GroupSettingValue | null; realm_can_access_all_users_group?: GroupSettingValue | null; realm_can_manage_billing_group?: GroupSettingValue | null; realm_can_summarize_topics_group?: GroupSettingValue | null; realm_can_create_write_only_bots_group?: GroupSettingValue | null; realm_can_create_bots_group?: GroupSettingValue | null; realm_can_add_custom_emoji_group?: GroupSettingValue | null; server_supported_permission_settings?: ServerSupportedPermissionSettings; realm_domains?: RealmDomain[] }
+/**
+ * Organization-level topic policy.
+ */
+export type RealmTopicsPolicy = "allow_empty_topic" | "disable_empty_topic"
+/**
+ * Request to resolve or unresolve a topic by renaming it with Zulip's
+ * canonical resolved-topic prefix.
+ */
+export type ResolveTopicRequest = { anchor_message_id: number; topic_name: string; resolved: boolean; send_notification_to_old_thread?: boolean | null; send_notification_to_new_thread?: boolean | null }
+/**
  * Saved server configuration
  */
 export type SavedServer = { id: string; url: string; email: string; api_key: string; realm_name: string; realm_icon: string }
+/**
+ * Saved server plus current connection state.
+ */
+export type SavedServerStatus = { id: string; url: string; email: string; realm_name: string; realm_icon: string; connected: boolean; org_id: string | null }
+/**
+ * Minimal typed response for POST /api/v1/invites.
+ */
+export type SendInvitesResponse = { invited_emails?: string[]; already_invited?: Partial<{ [key in string]: string[] }>; skipped?: Partial<{ [key in string]: string[] }> }
 /**
  * Send message result
  */
@@ -454,11 +994,27 @@ export type SendResult = { id: number }
 /**
  * Server settings returned by GET /api/v1/server_settings (unauthenticated)
  */
-export type ServerSettings = { zulip_version: string; zulip_feature_level: number; push_notifications_enabled: boolean; realm_name: string; realm_icon: string; realm_description: string; authentication_methods?: AuthMethods }
+export type ServerSettings = { zulip_version: string; zulip_feature_level: number; push_notifications_enabled: boolean; realm_name?: string; realm_icon?: string; realm_description?: string; realm_url?: string; email_auth_enabled?: boolean; require_email_format_usernames?: boolean; authentication_methods?: AuthMethods; external_authentication_methods?: ExternalAuthenticationMethod[] }
+/**
+ * Server-advertised permission-setting support for realm, stream, and group scopes.
+ */
+export type ServerSupportedPermissionSettings = { realm?: Partial<{ [key in string]: GroupPermissionSetting }>; stream?: Partial<{ [key in string]: GroupPermissionSetting }>; group?: Partial<{ [key in string]: GroupPermissionSetting }> }
 /**
  * Stream/channel subscription
  */
-export type Subscription = { stream_id: number; name: string; description?: string; color?: string; invite_only?: boolean; is_muted?: boolean; pin_to_top?: boolean }
+export type Subscription = { stream_id: number; name: string; description?: string; color?: string; invite_only?: boolean; is_muted?: boolean; pin_to_top?: boolean; desktop_notifications?: boolean | null; audible_notifications?: boolean | null; push_notifications?: boolean | null; email_notifications?: boolean | null; wildcard_mentions_notify?: boolean | null; in_home_view?: boolean | null }
+/**
+ * Subscription property names accepted by Zulip's bulk subscription settings API.
+ */
+export type SubscriptionProperty = "in_home_view" | "is_muted" | "color" | "desktop_notifications" | "audible_notifications" | "push_notifications" | "email_notifications" | "pin_to_top" | "wildcard_mentions_notify"
+/**
+ * Single bulk subscription property update request.
+ */
+export type SubscriptionPropertyChange = { stream_id: number; property: SubscriptionProperty; value: SubscriptionPropertyValue }
+/**
+ * Property value union accepted by Zulip's subscription settings API.
+ */
+export type SubscriptionPropertyValue = boolean | string
 /**
  * A single event in the supervisor timeline
  */
@@ -520,6 +1076,18 @@ export type UploadResult = { url: string; uri?: string | null }
  * User profile
  */
 export type User = { user_id: number; email: string; full_name: string; is_active?: boolean; is_bot?: boolean; is_admin?: boolean; avatar_url?: string | null; timezone?: string; role: number | null }
+/**
+ * User group returned by GET /api/v1/user_groups.
+ */
+export type UserGroup = { id: number; name: string; description?: string; creator_id?: number | null; date_created?: number | null; members?: number[]; direct_subgroup_ids?: number[]; is_system_group?: boolean; deactivated?: boolean; can_add_members_group?: GroupSettingValue | null; can_join_group?: GroupSettingValue | null; can_leave_group?: GroupSettingValue | null; can_manage_group?: GroupSettingValue | null; can_mention_group?: GroupSettingValue | null; can_remove_members_group?: GroupSettingValue | null }
+/**
+ * Per-topic user visibility state returned by Zulip.
+ */
+export type UserTopic = { stream_id: number; topic_name: string; last_updated: number; visibility_policy: UserTopicVisibilityPolicy }
+/**
+ * Stream topic visibility policy in Zulip.
+ */
+export type UserTopicVisibilityPolicy = "Inherit" | "Muted" | "Unmuted" | "Followed"
 
 /** tauri-specta globals **/
 

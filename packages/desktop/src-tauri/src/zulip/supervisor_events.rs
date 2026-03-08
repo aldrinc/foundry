@@ -20,11 +20,13 @@ pub async fn start_supervisor_stream(
 
     // Create an HTTP client without a global timeout for SSE streaming.
     // The connection is long-lived; the server sends keepalives every ~15s.
-    let sse_client = reqwest::Client::builder()
-        .connect_timeout(Duration::from_secs(10))
-        .pool_max_idle_per_host(1)
-        .build()
-        .expect("Failed to create SSE client");
+    let Ok(sse_client) = client.build_sse_client() else {
+        let _ = app.emit(
+            &format!("supervisor:{}:disconnected", sanitize_event_id(&org_id)),
+            serde_json::json!({"error": "failed to build SSE client", "cursor": cursor}),
+        );
+        return;
+    };
 
     let event_id = sanitize_event_id(&org_id);
 

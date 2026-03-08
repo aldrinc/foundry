@@ -14,25 +14,21 @@ export function SettingsGeneral() {
           value={store.theme}
           onChange={(e) => setSetting("theme", e.currentTarget.value)}
         >
+          <option value="foundry">Foundry</option>
           <option value="system">System</option>
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
       </SettingRow>
 
-      {/* Language */}
-      <SettingRow label="Language" description="Interface language">
+      {/* Language — not yet implemented (no i18n system) */}
+      <SettingRow label="Language" description="Interface language — coming soon">
         <select
-          class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
-          value={store.language}
-          onChange={(e) => setSetting("language", e.currentTarget.value)}
+          class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px] opacity-50 cursor-not-allowed"
+          value="en"
+          disabled
         >
           <option value="en">English</option>
-          <option value="es">Espa&#241;ol</option>
-          <option value="fr">Fran&#231;ais</option>
-          <option value="de">Deutsch</option>
-          <option value="ja">&#26085;&#26412;&#35486;</option>
-          <option value="zh">&#20013;&#25991;</option>
         </select>
       </SettingRow>
 
@@ -82,16 +78,14 @@ export function SettingsGeneral() {
         </select>
       </SettingRow>
 
-      {/* Animate images */}
-      <SettingRow label="Animate image previews" description="Control animated GIF behavior">
+      {/* Animate images — not yet implemented */}
+      <SettingRow label="Animate image previews" description="Control animated GIF behavior — coming soon">
         <select
-          class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
-          value={store.animateImages}
-          onChange={(e) => setSetting("animateImages", e.currentTarget.value)}
+          class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px] opacity-50 cursor-not-allowed"
+          value="always"
+          disabled
         >
           <option value="always">Always</option>
-          <option value="hover">On hover</option>
-          <option value="never">Never</option>
         </select>
       </SettingRow>
     </div>
@@ -112,9 +106,9 @@ export function SettingRow(props: { label: string; description: string; children
   )
 }
 
-export function SettingToggle(props: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function SettingToggle(props: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <div class="flex items-center justify-between gap-4">
+    <div class={`flex items-center justify-between gap-4 ${props.disabled ? "opacity-50 pointer-events-none" : ""}`}>
       <div class="min-w-0">
         <div class="text-xs font-medium text-[var(--text-primary)]">{props.label}</div>
         <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">{props.description}</div>
@@ -123,6 +117,7 @@ export function SettingToggle(props: { label: string; description: string; check
         class={`relative w-8 h-[18px] rounded-full shrink-0 transition-colors ${
           props.checked ? "bg-[var(--interactive-primary)]" : "bg-[var(--border-default)]"
         }`}
+        disabled={props.disabled}
         onClick={() => props.onChange(!props.checked)}
       >
         <span

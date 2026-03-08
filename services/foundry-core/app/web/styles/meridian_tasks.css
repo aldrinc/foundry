@@ -1,0 +1,2065 @@
+#message_feed_container {
+    min-height: 0;
+    position: relative;
+}
+
+#meridian-task-main-view {
+    display: none;
+    min-height: 0;
+    height: 100%;
+    margin: 0;
+    padding: 10px 12px 12px;
+    box-sizing: border-box;
+    background: var(--color-background, #f4f6fb);
+    overflow: hidden;
+}
+
+#meridian-task-main-view.notdisplayed {
+    display: none;
+}
+
+body.meridian-task-main-view-open #message_feed_container {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+body.meridian-task-main-view-open #message_feed_container #main_div {
+    display: none;
+}
+
+body.meridian-task-main-view-open
+    #message_feed_container
+    #meridian-task-main-view {
+    display: flex;
+    flex: 1 1 auto;
+}
+
+body.meridian-task-main-view-open #compose {
+    display: none;
+}
+
+body.meridian-task-main-view-open #message_feed_container {
+    border-radius: 12px;
+    border: 1px solid var(--teamchat-window-border, #d8dadd);
+    background: var(--teamchat-window, #fff);
+    box-shadow: var(--teamchat-shadow, 0 12px 30px rgb(15 23 42 / 14%));
+    overflow: hidden;
+}
+
+body.meridian-task-main-view-open
+    #message_feed_container
+    #meridian-task-main-view {
+    padding: 12px;
+    background: var(--teamchat-window, #fff);
+}
+
+#meridian-task-main-view .meridian-task-session-shell {
+    max-width: none;
+    margin: 0;
+    padding-top: 0;
+}
+
+#meridian-task-main-view .meridian-task-session-header {
+    border-radius: 10px;
+}
+
+#meridian-task-main-view .meridian-task-view-log {
+    border-radius: 10px;
+    border: 1px solid #1f2937;
+    background: #0b1220;
+    box-shadow: none;
+}
+
+#meridian-task-main-view .meridian-task-view-log-header {
+    border: 0;
+    border-bottom: 1px solid #1f2937;
+    border-radius: 10px 10px 0 0;
+    background: #0f172a;
+    color: #dbe7ff;
+}
+
+#meridian-task-main-view .meridian-task-log-title,
+#meridian-task-main-view .meridian-task-log-count {
+    color: #dbe7ff;
+}
+
+#meridian-task-main-view .meridian-task-thread-log {
+    background: #0b1220;
+    color: #e6edf8;
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+}
+
+#meridian-task-main-view .meridian-thread-row {
+    border: 1px solid #273449;
+    background: #0f172a;
+    border-radius: 8px;
+}
+
+#meridian-task-main-view .meridian-thread-meta,
+#meridian-task-main-view .meridian-thread-message,
+#meridian-task-main-view .meridian-thread-event-type {
+    color: #e6edf8;
+}
+
+#meridian-task-main-view .meridian-thread-time,
+#meridian-task-main-view .meridian-thread-label {
+    color: #a9bedf;
+}
+
+.meridian-action-button {
+    border: 1px solid var(--border-sidebar-list-item, #cfd4df);
+    background: var(--color-background, #fff);
+    color: var(--color-text-default, #273146);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.meridian-action-button:hover {
+    background: var(--color-background-primary-subtle, #edf2ff);
+    text-decoration: none;
+}
+
+.meridian-task-id {
+    font-size: 0.72rem;
+    color: var(--color-text-default, #5b6273);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+}
+
+.meridian-status-pill {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.meridian-status-pill.meridian-status-running {
+    background: #e5f6e8;
+    border-color: #6ac27d;
+    color: #1f6a35;
+}
+
+.meridian-status-pill.meridian-status-queued {
+    background: #f1f3f8;
+    border-color: #c6cede;
+    color: #394056;
+}
+
+.meridian-status-pill.meridian-status-done {
+    background: #ebf4ff;
+    border-color: #9cbcf8;
+    color: #1f4aa5;
+}
+
+.meridian-status-pill.meridian-status-failed {
+    background: #fdeaea;
+    border-color: #eb9a9a;
+    color: #8a1e1e;
+}
+
+.meridian-status-pill.meridian-status-canceled {
+    background: #f5f0ec;
+    border-color: #d6bfa9;
+    color: #6f4f3a;
+}
+
+.meridian-status-pill.meridian-status-paused {
+    background: #fff8e7;
+    border-color: #f5c96d;
+    color: #8a5a00;
+}
+
+.meridian-status-pill.meridian-status-stalled {
+    background: #fff4e8;
+    border-color: #f8b176;
+    color: #8c3f0b;
+}
+
+.meridian-status-pill.meridian-status-blocked_approval {
+    background: #fef4f7;
+    border-color: #f39ab8;
+    color: #8a1f4a;
+}
+
+.meridian-status-pill.meridian-status-blocked_dependency {
+    background: #fff5f0;
+    border-color: #f9b391;
+    color: #8f3e10;
+}
+
+.meridian-status-pill.meridian-status-blocked_information {
+    background: #edf8ff;
+    border-color: #8ac8ff;
+    color: #145488;
+}
+
+.meridian-status-pill.meridian-status-at_risk {
+    background: #fff4d8;
+    border-color: #f3b734;
+    color: #7f4f00;
+}
+
+.meridian-topic-task-sublist {
+    list-style: none;
+    margin: 2px 0 4px;
+    padding: 0 2px 0 14px;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.meridian-topic-task-item {
+    list-style: none;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+.meridian-topic-task-link {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    min-height: 20px;
+    width: 100%;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: var(--color-text-default, #4e5a73);
+    text-decoration: none;
+    text-align: left;
+    border-radius: 4px;
+    padding: 1px 6px;
+    cursor: pointer;
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.meridian-topic-task-link:hover {
+    background: var(--color-background-primary-subtle, #edf2ff);
+}
+
+.meridian-topic-task-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    padding-left: 0;
+}
+
+.meridian-topic-task-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #9aa5bd;
+    flex: 0 0 auto;
+}
+
+.meridian-topic-task-title {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.77rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--color-text-default, #4e5a73);
+}
+
+.meridian-topic-task-mini-status {
+    flex: 0 0 auto;
+    font-size: 0.56rem;
+    font-weight: 700;
+    color: var(--color-text-default, #7f8a9f);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-left: 4px;
+    white-space: nowrap;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.meridian-topic-task-item.meridian-task-selected .meridian-topic-task-link {
+    color: var(--color-text-link, #2f5bea);
+    background: var(--color-background-primary-subtle, #edf2ff);
+}
+
+.meridian-topic-task-item.meridian-task-status-running
+    .meridian-topic-task-dot {
+    background: #3c9f58;
+}
+
+.meridian-topic-task-item.meridian-task-status-queued .meridian-topic-task-dot {
+    background: #8a96af;
+}
+
+.meridian-topic-task-item.meridian-task-status-done .meridian-topic-task-dot {
+    background: #2f5bea;
+}
+
+.meridian-topic-task-item.meridian-task-status-failed .meridian-topic-task-dot {
+    background: #cb3c3c;
+}
+
+.meridian-topic-task-item.meridian-task-status-canceled
+    .meridian-topic-task-dot {
+    background: #a36a36;
+}
+
+.meridian-topic-task-item.meridian-task-status-paused .meridian-topic-task-dot {
+    background: #dca62b;
+}
+
+.meridian-topic-task-item.meridian-task-status-stalled .meridian-topic-task-dot {
+    background: #d97a2b;
+}
+
+.meridian-topic-task-item.meridian-task-status-blocked_approval
+    .meridian-topic-task-dot {
+    background: #d04f86;
+}
+
+.meridian-topic-task-item.meridian-task-status-blocked_dependency
+    .meridian-topic-task-dot {
+    background: #e28545;
+}
+
+.meridian-topic-task-item.meridian-task-status-blocked_information
+    .meridian-topic-task-dot {
+    background: #3190e0;
+}
+
+.meridian-topic-task-item.meridian-task-status-at_risk .meridian-topic-task-dot {
+    background: #d19a12;
+}
+
+.meridian-task-create-modal-form {
+    display: grid;
+    gap: 8px;
+}
+
+.meridian-task-create-modal-topic {
+    font-size: 0.78rem;
+    color: var(--color-text-default, #5b6273);
+}
+
+.meridian-task-create-label {
+    font-size: 0.74rem;
+    color: var(--color-text-default, #4e5668);
+}
+
+.meridian-task-checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.meridian-task-two-col-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.meridian-task-create-textarea {
+    min-height: 140px;
+    resize: vertical;
+}
+
+.meridian-task-session-shell {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 2px 0 0;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.meridian-task-loading-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.meridian-supervisor-shell {
+    grid-template-rows: auto minmax(0, 1fr);
+    max-width: 1120px;
+}
+
+.meridian-supervisor-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 0;
+    overflow: auto;
+    padding: 2px 0 0;
+}
+
+.meridian-supervisor-card {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe7);
+    border-radius: 12px;
+    background: var(--color-background, #ffffff);
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px hsl(222deg 17% 20% / 6%);
+}
+
+.meridian-supervisor-card h3 {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    font-weight: 650;
+}
+
+.meridian-supervisor-card h4 {
+    margin: 10px 0 6px;
+    font-size: 0.8rem;
+    font-weight: 650;
+    color: var(--color-text-default, #3a4356);
+}
+
+.meridian-supervisor-card-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.meridian-supervisor-plan-meta {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.meridian-supervisor-chip {
+    font-size: 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    color: var(--color-text-default, #5f6980);
+    padding: 2px 7px;
+    background: #f7f9ff;
+}
+
+.meridian-supervisor-plan-subgrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.meridian-supervisor-empty {
+    font-size: 0.78rem;
+    color: var(--color-text-default, #6b7280);
+    padding: 6px 0;
+}
+
+.meridian-supervisor-bullet-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.78rem;
+    color: var(--color-text-default, #334155);
+}
+
+.meridian-supervisor-step-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.meridian-supervisor-step {
+    border: 1px solid #1f2937;
+    background: #0f172a;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #e6edf8;
+    overflow: hidden;
+}
+
+.meridian-supervisor-step-title {
+    font-size: 0.85rem;
+    font-weight: 650;
+    margin-bottom: 4px;
+}
+
+.meridian-supervisor-step-meta {
+    font-size: 0.72rem;
+    color: #a9bedf;
+    margin-bottom: 8px;
+}
+
+.meridian-supervisor-step-instruction {
+    margin: 0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+    color: #e6edf8;
+}
+
+.meridian-supervisor-seam-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.meridian-supervisor-seam-title {
+    font-size: 0.8rem;
+    font-weight: 650;
+}
+
+.meridian-supervisor-seam-meta {
+    font-size: 0.72rem;
+    color: var(--color-text-default, #64748b);
+}
+
+.meridian-supervisor-dispatch-button {
+    margin-top: 8px;
+}
+
+.meridian-supervisor-context summary {
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.meridian-supervisor-context-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.meridian-supervisor-context-pre {
+    margin: 0;
+    font-size: 0.72rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe7);
+    border-radius: 10px;
+    padding: 10px;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.meridian-task-session-header {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe7);
+    border-radius: 12px;
+    background: var(--color-background, #ffffff);
+    padding: 10px 11px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    box-shadow: 0 1px 2px hsl(222deg 17% 20% / 6%);
+    position: sticky;
+    top: 0;
+    z-index: 4;
+}
+
+.meridian-task-session-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.meridian-task-live-indicator {
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: #1f6a35;
+    background: #e5f6e8;
+    border: 1px solid #6ac27d;
+}
+
+.meridian-task-session-title-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 2px;
+}
+
+.meridian-task-session-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.meridian-task-session-subtitle {
+    font-size: 0.72rem;
+    line-height: 1.3;
+    color: var(--color-text-default, #67718b);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.meridian-task-phase-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.meridian-task-phase-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-text-default, #667089);
+}
+
+.meridian-task-phase-value {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-default, #273146);
+    margin-right: 4px;
+}
+
+.meridian-task-event-chip {
+    font-size: 0.7rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    color: var(--color-text-default, #5f6980);
+    padding: 2px 7px;
+    background: #f7f9ff;
+}
+
+.meridian-task-session-meta-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px 10px;
+    font-size: 0.78rem;
+}
+
+.meridian-task-meta-item {
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+}
+
+.meridian-task-meta-label {
+    color: var(--color-text-default, #5d6780);
+    white-space: nowrap;
+}
+
+.meridian-task-meta-value {
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.meridian-task-banner {
+    font-size: 0.76rem;
+    border-radius: 8px;
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
+}
+
+.meridian-task-banner-slot.notdisplayed {
+    display: none;
+}
+
+.meridian-task-banner-error {
+    border: 1px solid #f1b5b5;
+    background: #fff2f2;
+    color: #8a1e1e;
+}
+
+.meridian-task-banner-summary {
+    border: 1px solid #cfd6e6;
+    background: #f7f9ff;
+    color: #273146;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 180px;
+    overflow: auto;
+}
+
+.meridian-task-summary-details {
+    margin: 0;
+}
+
+.meridian-task-summary-details summary {
+    cursor: pointer;
+    font-size: 0.74rem;
+    color: var(--color-text-default, #5b6273);
+}
+
+.meridian-task-summary-details[open] summary {
+    margin-bottom: 6px;
+}
+
+.meridian-task-action-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+.meridian-task-banner-warning {
+    border: 1px solid #f3c485;
+    background: #fff8ec;
+    color: #7a4a08;
+}
+
+.meridian-task-clarification-list {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 4px;
+    font-size: 0.77rem;
+    color: var(--color-text-default, #334155);
+}
+
+.meridian-task-session-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    overflow: hidden;
+}
+
+@media (max-width: 1200px) {
+    .meridian-task-session-body {
+        gap: 8px;
+    }
+}
+
+.meridian-task-inspector {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-radius: 12px;
+    background: var(--color-background, #ffffff);
+    overflow: hidden;
+}
+
+.meridian-task-inspector summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-text-default, #24324b);
+    background: rgb(255 255 255 / 92%);
+}
+
+.meridian-task-inspector summary::-webkit-details-marker {
+    display: none;
+}
+
+.meridian-task-inspector[open] summary {
+    border-bottom: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+}
+
+.meridian-task-inspector-chips {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.meridian-task-inspector-chip {
+    border: 1px solid #d4dce9;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: #f8fbff;
+    color: #2e4568;
+    font-weight: 500;
+}
+
+.meridian-task-inspector-grid {
+    padding: 10px 11px 12px;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(260px, 1fr);
+    gap: 8px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+}
+
+.meridian-task-review-panel {
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    gap: 8px;
+}
+
+.meridian-task-artifact-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.meridian-task-artifact-link,
+.meridian-task-artifact-chip {
+    border: 1px solid #cfe0ff;
+    border-radius: 999px;
+    padding: 2px 9px;
+    font-size: 0.7rem;
+    color: #1f3d63;
+    background: #eef6ff;
+    text-decoration: none;
+}
+
+.meridian-task-artifact-link:hover {
+    text-decoration: none;
+    background: #e1efff;
+}
+
+.meridian-task-review-card {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-radius: 12px;
+    background: rgb(255 255 255 / 95%);
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.meridian-task-review-card h4,
+.meridian-task-review-card h5 {
+    margin: 0;
+    font-size: 0.73rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-text-default, #52607a);
+}
+
+.meridian-task-review-grid {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 5px 8px;
+    font-size: 0.75rem;
+}
+
+.meridian-task-review-grid > span:nth-child(odd) {
+    color: var(--color-text-default, #62708a);
+}
+
+.meridian-task-review-grid > span:nth-child(even) {
+    color: var(--color-text-default, #273146);
+    overflow-wrap: anywhere;
+}
+
+.meridian-task-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.meridian-task-chip-list code,
+.meridian-task-dependency-chip {
+    border: 1px solid #d4dce9;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    background: #f8fbff;
+    color: #2e4568;
+}
+
+.meridian-task-review-empty {
+    font-size: 0.74rem;
+    color: var(--color-text-default, #7f8ba0);
+}
+
+.meridian-task-path-text {
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+    font-size: 0.7rem;
+}
+
+.meridian-task-preview-button {
+    margin-right: 2px;
+}
+
+.meridian-task-view-preview-pending {
+    font-size: 0.76rem;
+    color: var(--color-text-default, #5b6273);
+}
+
+.meridian-task-thread-panel {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.meridian-task-view-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 11px;
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-bottom: 0;
+    border-radius: 12px 12px 0 0;
+    background: var(--color-background, #ffffff);
+}
+
+.meridian-task-log-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.meridian-task-log-count {
+    font-size: 0.74rem;
+    color: var(--color-text-default, #6b758e);
+}
+
+.meridian-task-follow-button {
+    border: 1px solid var(--border-sidebar-list-item, #c9d3e7);
+    background: var(--color-background-primary-subtle, #edf2ff);
+    color: var(--color-text-link, #2f5bea);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.meridian-task-follow-button.notdisplayed {
+    display: none;
+}
+
+.meridian-task-stream-modes {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.meridian-task-stream-detail-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.meridian-task-inline-detail-control {
+    border: 1px solid #c9d3e8;
+    border-radius: 999px;
+    background: #f8fbff;
+    color: #445775;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    padding: 1px 7px;
+    cursor: pointer;
+}
+
+.meridian-task-inline-detail-control:hover {
+    background: #edf4ff;
+}
+
+.meridian-task-stream-mode {
+    border: 1px solid var(--border-sidebar-list-item, #d1d7e5);
+    background: #fff;
+    color: var(--color-text-default, #51607a);
+    border-radius: 999px;
+    font-size: 0.69rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+.meridian-task-stream-mode.active {
+    background: var(--color-background-primary-subtle, #edf2ff);
+    color: var(--color-text-link, #2f5bea);
+    border-color: #9eb9f6;
+}
+
+.meridian-task-view-log {
+    flex: 1;
+    min-height: 0;
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-top: 0;
+    border-radius: 0 0 12px 12px;
+    background: var(--color-background, #ffffff);
+    box-shadow: 0 1px 2px hsl(222deg 17% 20% / 6%);
+}
+
+.meridian-task-thread-log {
+    padding: 10px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: var(--color-background, #ffffff);
+}
+
+.meridian-task-empty-events {
+    padding: 14px;
+    font-size: 0.82rem;
+    color: var(--color-text-default, #5b6273);
+}
+
+.meridian-task-loading-state {
+    display: grid;
+    gap: 8px;
+}
+
+.meridian-task-skeleton-line {
+    height: 10px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #e4ebfa 0, #f1f5ff 50%, #e4ebfa 100%);
+    background-size: 180% 100%;
+    animation: meridian-skeleton 1.2s ease-in-out infinite;
+}
+
+.meridian-task-skeleton-line-short {
+    width: 62%;
+}
+
+.meridian-task-skeleton-label {
+    font-size: 0.74rem;
+    color: var(--color-text-default, #6d7891);
+}
+
+@keyframes meridian-skeleton {
+    0% {
+        background-position: 120% 0;
+    }
+    100% {
+        background-position: -20% 0;
+    }
+}
+
+.meridian-thread-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: 1px solid var(--border-sidebar-list-item, #d8dfec);
+    border-radius: 10px;
+    padding: 9px 10px;
+    background: #ffffff;
+}
+
+.meridian-thread-user {
+    border-color: #bad2ff;
+    background: #eef5ff;
+    align-self: flex-end;
+    width: min(100%, 90%);
+}
+
+.meridian-thread-assistant {
+    border-color: #d7e1ef;
+    background: #f7faff;
+    width: min(100%, 93%);
+}
+
+.meridian-thread-system {
+    border-color: #e2e7f0;
+    background: #f7f9fc;
+}
+
+.meridian-thread-live-indicator-row {
+    opacity: 0.85;
+    border-style: dashed;
+}
+
+.meridian-thread-error {
+    border-color: #efc7c7;
+    background: #fff6f6;
+}
+
+.meridian-thread-command {
+    border-color: #ccd8ee;
+    background: #ecf3ff;
+}
+
+.meridian-thread-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.7rem;
+    color: var(--color-text-default, #657089);
+    flex-wrap: wrap;
+}
+
+.meridian-thread-meta-main {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.meridian-thread-actions {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.meridian-thread-badge {
+    border: 1px solid #c9d3e7;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    color: #53627c;
+    background: #f5f8ff;
+}
+
+.meridian-thread-badge-status {
+    border-color: #98b3ef;
+    color: #264ca9;
+}
+
+.meridian-thread-inline-action {
+    border: 1px solid #c9d3e8;
+    border-radius: 999px;
+    background: #f8fbff;
+    color: #445775;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    padding: 1px 7px;
+    cursor: pointer;
+}
+
+.meridian-thread-inline-action:hover {
+    background: #edf4ff;
+}
+
+.meridian-thread-label {
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+}
+
+.meridian-thread-time {
+    color: var(--color-text-default, #7e889f);
+}
+
+.meridian-thread-message {
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: var(--color-text-default, #24324b);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.meridian-thread-message-rendered {
+    white-space: normal;
+    line-height: 1.45;
+}
+
+.meridian-thread-message-rendered p {
+    margin: 0 0 8px;
+}
+
+.meridian-thread-message-rendered p:last-child {
+    margin-bottom: 0;
+}
+
+.meridian-thread-message-rendered pre {
+    margin: 8px 0;
+}
+
+.meridian-thread-details {
+    border: 1px solid #d5deec;
+    border-radius: 8px;
+    background: #f7faff;
+    padding: 6px 8px;
+}
+
+.meridian-thread-details summary {
+    cursor: pointer;
+    font-size: 0.7rem;
+    color: #53617a;
+}
+
+.meridian-thread-details-body {
+    margin: 6px 0 0;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    font-family: var(--font-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.meridian-task-review-toolbar {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.meridian-task-review-mode {
+    border: 1px solid #c9d3e8;
+    border-radius: 999px;
+    background: #f8fbff;
+    color: #445775;
+    font-size: 0.62rem;
+    line-height: 1.2;
+    padding: 2px 8px;
+    cursor: pointer;
+}
+
+.meridian-task-review-mode.active {
+    background: #edf4ff;
+    border-color: #9eb9f6;
+    color: #2e57bd;
+}
+
+.meridian-task-diff-shell {
+    border: 1px solid #d3ddec;
+    border-radius: 8px;
+    background: #f9fbff;
+    min-height: 60px;
+    max-height: 280px;
+    overflow: auto;
+}
+
+.meridian-diff-unified {
+    margin: 0;
+    padding: 8px;
+    font-size: 0.7rem;
+    line-height: 1.35;
+    font-family: var(--font-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+    white-space: pre;
+    overflow: auto;
+    background: transparent;
+    border: 0;
+}
+
+.meridian-diff-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+    font-family: var(--font-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+}
+
+.meridian-diff-table td {
+    vertical-align: top;
+    padding: 2px 6px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.meridian-diff-row + .meridian-diff-row {
+    border-top: 1px solid #e2e8f4;
+}
+
+.meridian-diff-meta td {
+    background: #eaf0fb;
+    color: #415777;
+    font-weight: 600;
+}
+
+.meridian-diff-context td {
+    background: #f9fbff;
+    color: #22344f;
+}
+
+.meridian-diff-add .meridian-diff-col-right {
+    background: #eaf9ef;
+    color: #14532d;
+}
+
+.meridian-diff-del .meridian-diff-col-left {
+    background: #ffeff0;
+    color: #7f1d1d;
+}
+
+.meridian-thread-row-highlight {
+    animation: meridian-thread-highlight 1.2s ease;
+}
+
+@keyframes meridian-thread-highlight {
+    0% {
+        box-shadow: 0 0 0 0 rgb(125 211 252 / 0%);
+        border-color: #4ca7d4;
+    }
+    30% {
+        box-shadow: 0 0 0 3px rgb(125 211 252 / 45%);
+        border-color: #4ca7d4;
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgb(125 211 252 / 0%);
+    }
+}
+
+.meridian-thread-command-line {
+    margin: 0;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    font-family: var(
+        --font-monospace,
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace
+    );
+    color: #132849;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: transparent;
+    border: 0;
+    padding: 0;
+}
+
+.meridian-thread-event-type {
+    font-size: 0.68rem;
+    color: var(--color-text-default, #7a859d);
+    text-transform: lowercase;
+    letter-spacing: 0.01em;
+}
+
+.meridian-task-reply-composer {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-radius: 12px;
+    padding: 7px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    background: #fff;
+    min-height: 0;
+}
+
+.meridian-task-reply-textarea {
+    min-height: 88px;
+    resize: vertical;
+    max-height: 34vh;
+}
+
+.meridian-task-reply-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 5px;
+}
+
+@media (max-width: 900px) {
+    .meridian-task-session-shell {
+        width: 100%;
+        padding: 8px;
+    }
+
+    .meridian-task-session-body {
+        grid-template-columns: 1fr;
+    }
+
+    .meridian-task-session-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .meridian-task-session-header {
+        position: static;
+    }
+
+    .meridian-task-view-log-header {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .meridian-task-log-count {
+        margin-left: auto;
+    }
+
+    .meridian-task-provider-accounts {
+        max-height: 220px;
+    }
+
+    .meridian-task-two-col-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.meridian-task-create-oauth-hint {
+    font-size: 0.72rem;
+    color: var(--color-text-default, #5b6273);
+    line-height: 1.35;
+}
+
+.meridian-task-provider-auth-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.meridian-task-provider-accounts {
+    border: 1px solid var(--border-sidebar-list-item, #d5dbe8);
+    border-radius: 10px;
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+    max-height: 280px;
+    overflow: auto;
+    background: #fcfdff;
+}
+
+.meridian-task-provider-accounts-empty,
+.meridian-task-provider-accounts-error {
+    font-size: 0.74rem;
+    color: var(--color-text-default, #5d6880);
+}
+
+.meridian-task-provider-accounts-error {
+    color: #9f2a2a;
+}
+
+.meridian-provider-account {
+    border: 1px solid #d8e0ee;
+    border-radius: 10px;
+    background: #fff;
+    padding: 7px;
+    display: grid;
+    gap: 6px;
+}
+
+.meridian-provider-account.meridian-provider-connected {
+    border-color: #9fc6f5;
+    background: #f3f8ff;
+}
+
+.meridian-provider-account-main {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.meridian-provider-account-title {
+    font-size: 0.77rem;
+    font-weight: 600;
+    color: #24324b;
+}
+
+.meridian-provider-account-status {
+    font-size: 0.69rem;
+    color: #5c6d89;
+}
+
+.meridian-provider-account-caps {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.meridian-provider-capability {
+    border: 1px solid #cdd8ec;
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-size: 0.64rem;
+    color: #566885;
+    background: #f7faff;
+}
+
+.meridian-provider-account-actions {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+}
+
+/* OpenCode-inspired light workspace layer for TeamChat task sessions. */
+body.meridian-task-main-view-open #message_feed_container {
+    border: 1px solid #d8d8d6;
+    border-radius: 12px;
+    box-shadow: none;
+    background: #f1f1ef;
+}
+
+body.meridian-task-main-view-open
+    #message_feed_container
+    #meridian-task-main-view {
+    background: #f1f1ef;
+}
+
+#meridian-task-main-view {
+    background: #f1f1ef;
+    font-family:
+        "SF Pro Text",
+        "Inter",
+        "Neue Haas Grotesk Text Pro",
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+}
+
+#meridian-task-main-view .meridian-task-session-shell {
+    max-width: 1400px;
+    gap: 10px;
+}
+
+#meridian-task-main-view .meridian-task-session-header {
+    border: 1px solid #d7d7d5;
+    background: #f8f8f7;
+    border-radius: 12px;
+    box-shadow: none;
+    padding: 11px;
+    gap: 8px;
+}
+
+#meridian-task-main-view .meridian-task-session-title {
+    letter-spacing: -0.01em;
+    font-size: 1rem;
+}
+
+#meridian-task-main-view .meridian-task-session-subtitle {
+    color: #595a5d;
+}
+
+#meridian-task-main-view .meridian-task-phase-label {
+    color: #6a6b70;
+}
+
+#meridian-task-main-view .meridian-task-phase-value {
+    color: #17171a;
+}
+
+#meridian-task-main-view .meridian-status-pill {
+    font-size: 0.67rem;
+    border-color: #cfd1d6;
+    background: #f3f4f7;
+    color: #4b4f57;
+}
+
+#meridian-task-main-view .meridian-task-live-indicator {
+    color: #136542;
+    background: #def7e8;
+    border-color: #8dd7a9;
+}
+
+#meridian-task-main-view .meridian-task-event-chip {
+    border-color: #d2d4d8;
+    background: #f3f4f6;
+    color: #4b4f57;
+}
+
+#meridian-task-main-view .meridian-task-action-button,
+#meridian-task-main-view .meridian-action-button {
+    border-color: #cfcfd4;
+    background: #f8f8f7;
+    color: #282a2f;
+}
+
+#meridian-task-main-view .meridian-task-action-button:hover,
+#meridian-task-main-view .meridian-action-button:hover {
+    background: #ececeb;
+}
+
+#meridian-task-main-view .meridian-task-session-body {
+    gap: 10px;
+}
+
+#meridian-task-main-view .meridian-task-view-log-header {
+    border-color: #d7d7d5;
+    background: #f7f7f6;
+    color: #232428;
+    box-shadow: none;
+}
+
+#meridian-task-main-view .meridian-task-log-title,
+#meridian-task-main-view .meridian-task-log-count {
+    color: #2a2a2d;
+}
+
+#meridian-task-main-view .meridian-task-follow-button,
+#meridian-task-main-view .meridian-task-stream-mode,
+#meridian-task-main-view .meridian-task-inline-detail-control,
+#meridian-task-main-view .meridian-task-review-mode {
+    border-color: #cbccd1;
+    background: #f4f4f5;
+    color: #3a3d45;
+}
+
+#meridian-task-main-view .meridian-task-follow-button:hover,
+#meridian-task-main-view .meridian-task-stream-mode:hover,
+#meridian-task-main-view .meridian-task-inline-detail-control:hover,
+#meridian-task-main-view .meridian-task-review-mode:hover {
+    background: #e9e9eb;
+}
+
+#meridian-task-main-view .meridian-task-stream-mode.active,
+#meridian-task-main-view .meridian-task-review-mode.active {
+    border-color: #b8bcc5;
+    background: #e5e7eb;
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-task-view-log {
+    border-color: #d7d7d5;
+    box-shadow: none;
+    background: #f7f7f6;
+}
+
+#meridian-task-main-view .meridian-task-thread-log {
+    background: #f7f7f6;
+    color: #1f2937;
+    gap: 7px;
+    font-family:
+        "SF Pro Text",
+        "Inter",
+        "Neue Haas Grotesk Text Pro",
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+}
+
+#meridian-task-main-view .meridian-thread-row {
+    border: 1px solid #dfdfde;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: none;
+}
+
+#meridian-task-main-view .meridian-thread-assistant {
+    border-color: #dfdfde;
+    background: #ffffff;
+}
+
+#meridian-task-main-view .meridian-thread-user {
+    border-color: #d7dee9;
+    background: #f4f7fb;
+}
+
+#meridian-task-main-view .meridian-thread-system {
+    border-color: #e4e4e3;
+    background: #f2f2f1;
+}
+
+#meridian-task-main-view .meridian-thread-meta,
+#meridian-task-main-view .meridian-thread-message,
+#meridian-task-main-view .meridian-thread-event-type {
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-thread-time,
+#meridian-task-main-view .meridian-thread-label {
+    color: #5e6472;
+}
+
+#meridian-task-main-view .meridian-thread-message-rendered {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+#meridian-task-main-view .meridian-thread-command-line {
+    color: #1f2937;
+    font-family:
+        "SF Mono",
+        "JetBrains Mono",
+        "IBM Plex Mono",
+        "SFMono-Regular",
+        Menlo,
+        Consolas,
+        monospace;
+}
+
+#meridian-task-main-view .meridian-thread-badge,
+#meridian-task-main-view .meridian-thread-inline-action {
+    border-color: #d0d2d8;
+    background: #f2f3f6;
+    color: #454a57;
+}
+
+#meridian-task-main-view .meridian-thread-inline-action:hover {
+    background: #e9ebef;
+}
+
+#meridian-task-main-view .meridian-thread-details {
+    border-color: #d8dade;
+    background: #f6f7f9;
+}
+
+#meridian-task-main-view .meridian-thread-details summary,
+#meridian-task-main-view .meridian-thread-details-body {
+    color: #3d4452;
+}
+
+#meridian-task-main-view .meridian-task-inspector {
+    border: 1px solid #d7d7d5;
+    border-radius: 12px;
+    background: #f7f7f6;
+}
+
+#meridian-task-main-view .meridian-task-inspector summary {
+    border-color: #d7d7d5;
+    background: #f7f7f6;
+    color: #2a2a2d;
+}
+
+#meridian-task-main-view .meridian-task-inspector[open] summary {
+    border-bottom-color: #d7d7d5;
+}
+
+#meridian-task-main-view .meridian-task-inspector-chip {
+    border-color: #d0d2d8;
+    background: #f1f2f5;
+    color: #3d4350;
+}
+
+#meridian-task-main-view .meridian-task-inspector-grid {
+    background: #f7f7f6;
+}
+
+#meridian-task-main-view .meridian-task-review-card {
+    border-color: #dfdfde;
+    background: #fcfcfb;
+    box-shadow: none;
+}
+
+#meridian-task-main-view .meridian-task-review-card h4,
+#meridian-task-main-view .meridian-task-review-card h5 {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.78rem;
+    color: #333741;
+}
+
+#meridian-task-main-view .meridian-task-review-grid > span:nth-child(odd) {
+    color: #686d79;
+}
+
+#meridian-task-main-view .meridian-task-review-grid > span:nth-child(even) {
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-task-chip-list code,
+#meridian-task-main-view .meridian-task-dependency-chip,
+#meridian-task-main-view .meridian-task-artifact-link,
+#meridian-task-main-view .meridian-task-artifact-chip {
+    border-color: #d0d2d8;
+    background: #f1f2f5;
+    color: #3d4350;
+}
+
+#meridian-task-main-view .meridian-task-artifact-link:hover {
+    background: #e7e9ee;
+}
+
+#meridian-task-main-view .meridian-task-reply-composer {
+    border-color: #d7d7d5;
+    border-radius: 12px;
+    background: #f7f7f6;
+    box-shadow: none;
+    padding: 9px;
+}
+
+#meridian-task-main-view .meridian-task-reply-textarea {
+    border: 1px solid #cfd1d6;
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: none;
+    color: #22242a;
+}
+
+#meridian-task-main-view .meridian-task-reply-textarea::placeholder {
+    color: #7a7f89;
+}
+
+#meridian-task-main-view .meridian-task-diff-shell {
+    border-color: #d8dade;
+    background: #f5f6f8;
+}
+
+#meridian-task-main-view .meridian-diff-unified,
+#meridian-task-main-view .meridian-diff-table {
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-diff-row + .meridian-diff-row {
+    border-top-color: #dfe2e8;
+}
+
+#meridian-task-main-view .meridian-diff-meta td {
+    background: #eaedf3;
+    color: #445069;
+}
+
+#meridian-task-main-view .meridian-diff-context td {
+    background: #f6f7f9;
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-diff-add .meridian-diff-col-right {
+    background: #e9f8ee;
+    color: #166534;
+}
+
+#meridian-task-main-view .meridian-diff-del .meridian-diff-col-left {
+    background: #fdecec;
+    color: #991b1b;
+}
+
+/* OpenCode-style message rendering parity */
+#meridian-task-main-view .meridian-task-thread-log {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding: 14px;
+    overflow: auto;
+    background: #f7f7f6;
+}
+
+#meridian-task-main-view .meridian-chat-turn {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+}
+
+#meridian-task-main-view .meridian-chat-user {
+    display: flex;
+    justify-content: flex-end;
+}
+
+#meridian-task-main-view .meridian-chat-user-bubble {
+    width: fit-content;
+    max-width: min(82%, 64ch);
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid #d9dbde;
+    background: #ffffff;
+    color: #1f2937;
+    box-shadow: 0 1px 0 rgb(15 23 42 / 3%);
+}
+
+#meridian-task-main-view .meridian-chat-assistant {
+    border: 1px solid #d7d8db;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 10px 12px 12px;
+}
+
+#meridian-task-main-view .meridian-chat-assistant-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin-bottom: 8px;
+}
+
+#meridian-task-main-view .meridian-chat-assistant-label {
+    color: #2f3747;
+    font-weight: 600;
+    font-size: 0.74rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+#meridian-task-main-view .meridian-chat-assistant-time {
+    color: #6c7280;
+    font-size: 0.76rem;
+}
+
+#meridian-task-main-view .meridian-chat-assistant-actions {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#meridian-task-main-view .meridian-thread-message {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+#meridian-task-main-view .meridian-thread-message-rendered {
+    color: #1f2937;
+}
+
+#meridian-task-main-view .meridian-thread-message-rendered p {
+    margin: 0 0 0.8rem;
+}
+
+#meridian-task-main-view
+    .meridian-thread-message-rendered
+    p:last-child {
+    margin-bottom: 0;
+}
+
+#meridian-task-main-view .meridian-thread-message-rendered pre {
+    margin: 1rem 0;
+    border: 1px solid #d6d8dd;
+    border-radius: 8px;
+    background: #f6f7fb;
+    padding: 10px 12px;
+    overflow: auto;
+}
+
+#meridian-task-main-view .meridian-markdown-code {
+    position: relative;
+}
+
+#meridian-task-main-view .meridian-markdown-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    border: 1px solid #cfd3dc;
+    background: #ffffff;
+    color: #394150;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+#meridian-task-main-view .meridian-markdown-code:hover .meridian-markdown-copy,
+#meridian-task-main-view .meridian-markdown-copy:focus {
+    opacity: 1;
+}
+
+#meridian-task-main-view .meridian-chat-tool-card {
+    border: 1px solid #dadcdf;
+    border-radius: 8px;
+    background: #fbfbfa;
+    padding: 9px 10px;
+}
+
+#meridian-task-main-view .meridian-chat-tool-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+#meridian-task-main-view .meridian-chat-tool-title {
+    color: #2d3444;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+#meridian-task-main-view .meridian-chat-tool-subtitle {
+    color: #6b7280;
+    font-size: 0.74rem;
+}
+
+#meridian-task-main-view .meridian-chat-tool-command {
+    margin: 9px 0 0;
+    padding: 8px 10px;
+    border: 1px solid #e0e2e6;
+    border-radius: 7px;
+    background: #ffffff;
+    color: #1f2937;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    max-height: 190px;
+    overflow: auto;
+    white-space: pre-wrap;
+}
+
+#meridian-task-main-view .meridian-chat-tool-details {
+    margin-top: 8px;
+}
+
+#meridian-task-main-view .meridian-chat-tool-details summary {
+    color: #566074;
+    font-size: 0.72rem;
+    cursor: pointer;
+}
+
+#meridian-task-main-view .meridian-chat-tool-details-body {
+    margin-top: 6px;
+    padding: 8px 10px;
+    border: 1px solid #e0e2e6;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #2a3242;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    max-height: 220px;
+    overflow: auto;
+}
+
+#meridian-task-main-view .meridian-chat-system {
+    border: 1px dashed #d4d6db;
+    border-radius: 8px;
+    background: #fbfcfe;
+    color: #4b5563;
+    padding: 8px 10px;
+    font-size: 0.76rem;
+}
+
+#meridian-task-main-view .meridian-chat-error {
+    border: 1px solid #f0b3b3;
+    border-radius: 8px;
+    background: #fff6f6;
+    padding: 9px 10px;
+}
+
+#meridian-task-main-view .meridian-chat-error-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #8a1e1e;
+    font-weight: 600;
+    font-size: 0.76rem;
+}
+
+#meridian-task-main-view .meridian-chat-error-head .meridian-thread-inline-action {
+    margin-left: auto;
+}
+
+#meridian-task-main-view .meridian-chat-error-body {
+    margin: 7px 0 0;
+    color: #641b1b;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

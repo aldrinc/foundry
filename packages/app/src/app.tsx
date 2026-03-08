@@ -1,10 +1,11 @@
-import { type JSX, createSignal, createEffect, Show, onMount } from "solid-js"
+import { type JSX, createSignal, createEffect, Show, onMount, onCleanup } from "solid-js"
 import { ZulipSyncProvider, useZulipSync } from "./context/zulip-sync"
 import { OrgProvider } from "./context/org"
 import { NavigationProvider, useNavigation } from "./context/navigation"
 import { AgentsProvider } from "./context/agents"
 import { SupervisorProvider } from "./context/supervisor"
 import { SettingsProvider, useSettings } from "./context/settings"
+import { PresenceProvider } from "./context/presence"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
 import { SettingsView } from "./views/settings"
@@ -19,8 +20,14 @@ import { RightSidebar } from "./components/right-sidebar"
 import { KeyboardShortcutsModal } from "./components/keyboard-shortcuts-modal"
 import { GearMenu } from "./components/gear-menu"
 import { HelpMenu } from "./components/help-menu"
+import { LeftBar } from "./components/left-bar"
+import {
+  clearManualLogout,
+  markManualLogout,
+  shouldSkipAutoLogin,
+} from "./manual-logout"
 import { commands } from "@zulip/desktop/bindings"
-import type { LoginResult, Subscription, User, Message } from "@zulip/desktop/bindings"
+import type { LoginResult, Subscription, User, Message, SavedServerStatus } from "@zulip/desktop/bindings"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
@@ -33,6 +40,7 @@ function createDemoLoginResult(): LoginResult {
     realm_icon: "",
     queue_id: "demo-queue",
     user_id: 100,
+    user_topics: [],
     subscriptions: [
       { stream_id: 1, name: "general", color: "#76ce90", pin_to_top: true },
       { stream_id: 2, name: "engineering", color: "#fae589" },
@@ -84,6 +92,10 @@ export function App(props: {
     }
 
     try {
+      if (shouldSkipAutoLogin(window.localStorage)) {
+        return
+      }
+
       const result = await commands.getServers()
       if (result.status === "ok" && result.data.length > 0) {
         const server = result.data[0]
@@ -101,8 +113,41 @@ export function App(props: {
   })
 
   const handleLogin = (result: LoginResult, email?: string) => {
+    clearManualLogout(window.localStorage)
     setLoginResult(result)
     if (email) setLoginEmail(email)
+  }
+
+  const handleManualLogout = () => {
+    markManualLogout(window.localStorage)
+    commands.setUnreadBadgeCount(null).catch(() => {})
+    window.location.reload()
+  }
+
+  const handleSwitchOrg = async (server: SavedServerStatus) => {
+    // Logout current org
+    const current = loginResult()
+    if (current) {
+      try { await commands.logout(current.org_id) } catch { /* non-critical */ }
+    }
+    // Login to new org
+    try {
+      const servers = await commands.getServers()
+      if (servers.status === "ok") {
+        const saved = servers.data.find(s => s.id === server.id)
+        if (saved) {
+          setLoginResult(null) // Force re-render of provider tree
+          const res = await commands.login(saved.url, saved.email, saved.api_key)
+          if (res.status === "ok") {
+            clearManualLogout(window.localStorage)
+            setLoginEmail(saved.email)
+            setLoginResult(res.data)
+            return
+          }
+        }
+      }
+    } catch { /* fallback to reload */ }
+    window.location.reload()
   }
 
   return (
@@ -123,15 +168,22 @@ export function App(props: {
               realmIcon: result().realm_icon,
             }}>
               <SettingsProvider orgId={result().org_id}>
-                <AgentsProvider orgId={result().org_id}>
-                  <ZulipSyncProvider orgId={result().org_id}>
-                    <NavigationProvider>
-                      <SupervisorProvider orgId={result().org_id}>
-                        <AppShell loginResult={result()} loginEmail={loginEmail()} />
-                      </SupervisorProvider>
-                    </NavigationProvider>
-                  </ZulipSyncProvider>
-                </AgentsProvider>
+                <PresenceProvider orgId={result().org_id}>
+                  <AgentsProvider orgId={result().org_id}>
+                    <ZulipSyncProvider orgId={result().org_id}>
+                      <NavigationProvider>
+                        <SupervisorProvider orgId={result().org_id}>
+                          <AppShell
+                            loginResult={result()}
+                            loginEmail={loginEmail()}
+                            onLogout={handleManualLogout}
+                            onSwitchOrg={handleSwitchOrg}
+                          />
+                        </SupervisorProvider>
+                      </NavigationProvider>
+                    </ZulipSyncProvider>
+                  </AgentsProvider>
+                </PresenceProvider>
               </SettingsProvider>
             </OrgProvider>
           )}
@@ -155,13 +207,28 @@ function LoadingSplash() {
  * Main app shell with sidebar + content area.
  * Shown after successful login.
  */
-function AppShell(props: { loginResult: LoginResult; loginEmail: string }) {
+function AppShell(props: {
+  loginResult: LoginResult
+  loginEmail: string
+  onLogout: () => void
+  onSwitchOrg?: (server: SavedServerStatus) => void
+}) {
   const sync = useZulipSync()
   const nav = useNavigation()
   const { store: settingsStore } = useSettings()
   const [showSettings, setShowSettings] = createSignal(false)
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
+
+  const handleLogout = async () => {
+    try {
+      await commands.logout(props.loginResult.org_id)
+    } catch {
+      // Non-critical, still return to the login screen.
+    }
+
+    props.onLogout()
+  }
 
   // Seed the store with initial data from login
   onMount(() => {
@@ -172,7 +239,21 @@ function AppShell(props: { loginResult: LoginResult; loginEmail: string }) {
       props.loginResult.users,
       props.loginEmail,
       props.loginResult.user_id,
+      props.loginResult.user_topics,
     )
+
+    // Apply homeView setting to set the initial navigation narrow
+    if (!IS_DEMO) {
+      const homeMap: Record<string, string | null> = {
+        inbox: null,
+        recent: "recent-topics",
+        all: "all-messages",
+      }
+      const initialNarrow = homeMap[settingsStore.homeView]
+      if (initialNarrow !== undefined) {
+        nav.setActiveNarrow(initialNarrow)
+      }
+    }
 
     // In demo mode, seed mock messages and navigate to a topic
     if (IS_DEMO) {
@@ -187,19 +268,35 @@ function AppShell(props: { loginResult: LoginResult; loginEmail: string }) {
     }
   })
 
+  // ── Unread badge count ──
+  createEffect(() => {
+    const counts = sync.store.unreadCounts
+    const total = Object.values(counts).reduce((sum, c) => sum + c, 0)
+    commands.setUnreadBadgeCount(total > 0 ? total : null).catch(() => {})
+  })
+
   // ── Settings-driven behavior effects ──
 
   // Theme: apply data-theme attribute to root element
   createEffect(() => {
     const theme = settingsStore.theme
     const root = document.documentElement
-    if (theme === "light" || theme === "dark") {
+    if (theme === "light" || theme === "dark" || theme === "foundry") {
       root.setAttribute("data-theme", theme)
     } else {
       // "system" — remove attribute, let CSS handle via prefers-color-scheme
       root.removeAttribute("data-theme")
     }
   })
+
+  // Whether the outer frame (top bar, left bar) has a dark background
+  const outerFrameIsDark = () => {
+    const theme = settingsStore.theme
+    if (theme === "foundry" || theme === "dark") return true
+    if (theme === "light") return false
+    // "system" — check OS preference
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+  }
 
   // Font size: set CSS variable on root
   createEffect(() => {
@@ -223,6 +320,50 @@ function AppShell(props: { loginResult: LoginResult; loginEmail: string }) {
     } else if (styleEl) {
       styleEl.remove()
     }
+  })
+
+  // ── Global keyboard shortcuts ──
+  onMount(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip when typing in inputs/textareas
+      const target = e.target as HTMLElement
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return
+
+      if (e.key === "Escape") {
+        setShowSettings(false)
+        setShowShortcuts(false)
+        setShowRightSidebar(false)
+        return
+      }
+
+      if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
+        // Focus compose box
+        const composeEl = document.querySelector<HTMLTextAreaElement>('[data-component="compose-box"] textarea')
+        if (composeEl) {
+          e.preventDefault()
+          composeEl.focus()
+        }
+        return
+      }
+
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
+        // Focus search
+        const searchEl = document.querySelector<HTMLInputElement>('[data-component="stream-search"] input')
+        if (searchEl) {
+          e.preventDefault()
+          searchEl.focus()
+        }
+        return
+      }
+
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+        setShowShortcuts(s => !s)
+        return
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown))
   })
 
   // Render the main content based on the active narrow
@@ -259,48 +400,65 @@ function AppShell(props: { loginResult: LoginResult; loginEmail: string }) {
   }
 
   return (
-    <div class="flex flex-col h-full" data-component="app-layout">
-      {/* macOS title bar drag region — provides space for traffic light buttons */}
-      <div
-        data-tauri-drag-region
-        class="flex items-center justify-end"
-        style={{ height: "52px", "flex-shrink": "0", background: "var(--surface-sidebar)", "padding-right": "12px" }}
-      >
-        {/* Help & Settings icons — positioned above the message header */}
-        <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
-          <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} />
-          <GearMenu onOpenSettings={() => setShowSettings(true)} />
+    <div class="flex h-full" data-component="app-layout" style={{ background: "var(--surface-outer-bg)" }}>
+      {/* Left bar — full height, outside the inset container */}
+      <LeftBar darkBackground={outerFrameIsDark()} />
+
+      {/* Right column: top bar + inset content */}
+      <div class="flex-1 flex flex-col min-w-0">
+        {/* Top bar — blends with outer bg, OUTSIDE the inset container */}
+        <div
+          data-tauri-drag-region
+          class="flex items-center justify-end"
+          style={{ height: "36px", "flex-shrink": "0", background: "var(--surface-outer-bg)", "padding-right": "12px" }}
+        >
+          <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
+            <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} darkBackground={outerFrameIsDark()} />
+            <GearMenu onOpenSettings={() => setShowSettings(true)} darkBackground={outerFrameIsDark()} />
+          </div>
         </div>
-      </div>
 
-      {/* Main row: sidebar + content */}
-      <div class="flex flex-1 min-h-0">
-        {/* Stream sidebar */}
-        <StreamSidebar onOpenSettings={() => setShowSettings(true)} onLogout={() => window.location.reload()} />
+        {/* Inset container — rounded, with margin on right/bottom */}
+        <div
+          class="flex-1 flex min-h-0"
+          style={{
+            margin: "0 var(--layout-inset) var(--layout-inset) 0",
+            "border-radius": "var(--radius-container)",
+            overflow: "hidden",
+            background: "var(--background-base)",
+            border: "var(--inset-border)",
+          }}
+        >
+          {/* Stream sidebar */}
+          <StreamSidebar
+            onOpenSettings={() => setShowSettings(true)}
+            onLogout={handleLogout}
+            onSwitchOrg={(server) => props.onSwitchOrg?.(server)}
+          />
 
-        {/* Main content */}
-        <main class="flex-1 flex flex-col min-w-0" data-component="main-content">
-          {renderMainContent(nav)}
-        </main>
+          {/* Main content */}
+          <main class="flex-1 flex flex-col min-w-0" data-component="main-content">
+            {renderMainContent(nav)}
+          </main>
 
-        {/* Right sidebar (user list) */}
-        <RightSidebar
-          show={showRightSidebar()}
-          onClose={() => setShowRightSidebar(false)}
-        />
+          {/* Right sidebar (user list) */}
+          <RightSidebar
+            show={showRightSidebar()}
+            onClose={() => setShowRightSidebar(false)}
+          />
 
-        {/* Supervisor panel (conditionally rendered) */}
-        <SupervisorPanel />
+          {/* Supervisor panel (conditionally rendered) */}
+          <SupervisorPanel />
+        </div>
       </div>
 
       {/* Settings modal overlay */}
       <Show when={showSettings()}>
         <SettingsView
           onClose={() => setShowSettings(false)}
-          onLogout={() => {
+          onLogout={async () => {
             setShowSettings(false)
-            // Force re-render by going back to login
-            window.location.reload()
+            await handleLogout()
           }}
         />
       </Show>

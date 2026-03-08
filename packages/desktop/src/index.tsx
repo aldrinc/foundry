@@ -1,18 +1,39 @@
 // @refresh reload
 
 import { render } from "solid-js/web"
-import { type Platform, PlatformProvider } from "@zulip/app/context/platform"
-import { App } from "@zulip/app/app"
+import { App, type AsyncStorageWithFlush, type Platform, PlatformProvider } from "@zulip/app"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
 import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
 import { getCurrentWindow } from "@tauri-apps/api/window"
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { Store } from "@tauri-apps/plugin-store"
-import type { AsyncStorageWithFlush } from "@zulip/app/context/platform"
+import { publishDeepLinks } from "@zulip/app/zulip-auth"
 import { createMenu } from "./menu"
 import "./styles.css"
 
 const root = document.getElementById("root")
+type PickerDialogOptions = {
+  title?: string
+  multiple?: boolean
+}
+
+async function initializeDeepLinkHandling() {
+  try {
+    const current = await getCurrent()
+    if (current && current.length > 0) {
+      publishDeepLinks(current)
+    }
+
+    await onOpenUrl((urls) => {
+      publishDeepLinks(urls)
+    })
+  } catch (error) {
+    console.warn("Deep link listener unavailable", error)
+  }
+}
+
+void initializeDeepLinkHandling()
 
 // Create the Platform abstraction (matching Open Code's pattern)
 const createPlatform = (): Platform => {
@@ -43,6 +64,34 @@ const createPlatform = (): Platform => {
     async restart() {
       const { relaunch } = await import("@tauri-apps/plugin-process")
       await relaunch()
+    },
+
+    async checkUpdate() {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater")
+        const update = await check()
+        if (!update) return { updateAvailable: false }
+        return {
+          updateAvailable: true,
+          version: update.version,
+        }
+      } catch (error) {
+        console.warn("Updater check unavailable", error)
+        return { updateAvailable: false }
+      }
+    },
+
+    async update() {
+      try {
+        const { check } = await import("@tauri-apps/plugin-updater")
+        const { relaunch } = await import("@tauri-apps/plugin-process")
+        const update = await check()
+        if (!update) return
+        await update.downloadAndInstall()
+        await relaunch()
+      } catch (error) {
+        console.warn("Updater install unavailable", error)
+      }
     },
 
     // Debounced persistent storage (250ms batching, matching Open Code)
@@ -135,7 +184,24 @@ const createPlatform = (): Platform => {
     })(),
 
     // File picker dialog
-    async openFilePickerDialog(opts) {
+    async openDirectoryPickerDialog(opts?: PickerDialogOptions) {
+      const { open } = await import("@tauri-apps/plugin-dialog")
+      const result = await open({
+        title: opts?.title ?? "Choose folder",
+        multiple: opts?.multiple ?? false,
+        directory: true,
+      })
+      if (!result) return null
+      if (typeof result === "string") return result
+      if (Array.isArray(result)) {
+        const files = result as Array<string | { path?: string }>
+        return files.map((file) => typeof file === "string" ? file : file.path || "").filter(Boolean)
+      }
+      return (result as { path?: string }).path ?? null
+    },
+
+    // File picker dialog
+    async openFilePickerDialog(opts?: PickerDialogOptions) {
       const { open } = await import("@tauri-apps/plugin-dialog")
       const result = await open({
         title: opts?.title ?? "Open file",
@@ -151,7 +217,7 @@ const createPlatform = (): Platform => {
     },
 
     // Notifications
-    async notify(title, description) {
+    async notify(title: string, description?: string, href?: string) {
       const granted = await isPermissionGranted().catch(() => false)
       const permission = granted ? "granted" : await requestPermission().catch(() => "denied" as const)
       if (permission !== "granted") return
@@ -167,6 +233,9 @@ const createPlatform = (): Platform => {
       })
 
       notification.addEventListener("click", () => {
+        if (href) {
+          void shellOpen(href).catch(() => undefined)
+        }
         void win.show().catch(() => undefined)
         void win.unminimize().catch(() => undefined)
         void win.setFocus().catch(() => undefined)
@@ -177,7 +246,7 @@ const createPlatform = (): Platform => {
 
 // Menu trigger bridge (connects native menu to SolidJS commands)
 let menuTrigger = null as null | ((id: string) => void)
-createMenu((id) => {
+createMenu((id: string) => {
   menuTrigger?.(id)
 })
 
@@ -188,7 +257,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <App
-        onCommandReady={(trigger) => {
+        onCommandReady={(trigger: (id: string) => void) => {
           menuTrigger = trigger
         }}
       />

@@ -3,7 +3,7 @@ import { useOrg } from "../context/org"
 import { useSettings } from "../context/settings"
 import { SettingToggle, SettingRow } from "./settings-general"
 
-export function SettingsAccount(props: { onLogout: () => void }) {
+export function SettingsAccount(props: { onLogout: () => void | Promise<void> }) {
   const sync = useZulipSync()
   const org = useOrg()
   const { store, setSetting } = useSettings()

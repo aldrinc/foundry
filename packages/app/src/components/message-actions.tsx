@@ -19,6 +19,16 @@ export function MessageActions(props: {
 
   const isOwnMessage = () => props.currentUserId && props.message.sender_id === props.currentUserId
   const isStarred = () => (props.message.flags || []).includes("starred")
+  const isRead = () => (props.message.flags || []).includes("read")
+
+  const handleToggleRead = async () => {
+    try {
+      const op = isRead() ? "remove" : "add"
+      await commands.updateMessageFlags(org.orgId, [props.message.id], op, "read")
+    } catch (e) {
+      console.error("Failed to toggle read:", e)
+    }
+  }
 
   const handleDelete = async () => {
     if (!confirming()) {
@@ -115,6 +125,20 @@ export function MessageActions(props: {
           <path d="M7 1.5l1.5 3 3.3.5-2.4 2.3.6 3.2L7 8.9 3.9 10.5l.6-3.2-2.4-2.3 3.4-.5L7 1.5z"
             stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"
           />
+        </svg>
+      </ActionButton>
+
+      {/* Mark read/unread */}
+      <ActionButton
+        title={isRead() ? "Mark as unread" : "Mark as read"}
+        onClick={handleToggleRead}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <Show when={isRead()} fallback={
+            <path d="M1 7l4 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+          }>
+            <circle cx="7" cy="7" r="3" fill="currentColor" />
+          </Show>
         </svg>
       </ActionButton>
 

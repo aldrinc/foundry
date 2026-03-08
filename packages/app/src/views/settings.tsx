@@ -1,6 +1,4 @@
 import { createSignal, Show, For, type JSX } from "solid-js"
-import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsNotifications } from "./settings-notifications"
 import { SettingsAccount } from "./settings-account"
@@ -77,20 +75,14 @@ const NAV: NavCategory[] = [
   },
 ]
 
-export function SettingsView(props: { onClose: () => void; onLogout: () => void }) {
-  const org = useOrg()
+export function SettingsView(props: { onClose: () => void; onLogout: () => void | Promise<void> }) {
   const [activeSection, setActiveSection] = createSignal<SettingsSection>("general")
-
-  const handleLogout = async () => {
-    await commands.logout(org.orgId)
-    props.onLogout()
-  }
 
   const renderContent = () => {
     switch (activeSection()) {
       case "general": return <SettingsGeneral />
       case "notifications": return <SettingsNotifications />
-      case "account": return <SettingsAccount onLogout={handleLogout} />
+      case "account": return <SettingsAccount onLogout={props.onLogout} />
       case "muted-users": return <SettingsMutedUsers />
       case "alert-words": return <SettingsAlertWords />
       case "channels": return <SettingsChannels />

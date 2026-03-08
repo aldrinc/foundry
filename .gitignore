@@ -28,3 +28,11 @@ packages/desktop/src-tauri/gen/schemas/
 *.db
 *.sqlite
 *.sqlite3
+
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+*.pyc
+*.pyo
+*.pyd

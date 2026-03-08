@@ -1,0 +1,127 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Mapping
+
+from .decisions import LAUNCH_DECISIONS
+
+
+class DeploymentEnvironment(StrEnum):
+    LOCAL = "local"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+
+class AuthProvider(StrEnum):
+    OIDC = "oidc"
+
+
+class WorkspaceTopology(StrEnum):
+    ORGANIZATION_POOLED = "organization_pooled"
+
+
+def _env_bool(env: Mapping[str, str], key: str, default: bool) -> bool:
+    raw = env.get(key)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on", "y"}
+
+
+def _env_int(env: Mapping[str, str], key: str, default: int) -> int:
+    raw = env.get(key)
+    if raw is None or not raw.strip():
+        return default
+    return int(raw)
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    environment: DeploymentEnvironment
+    host: str
+    port: int
+    public_base_url: str
+    api_base_url: str
+    support_email: str
+    self_host_mode: bool
+    auth_provider: AuthProvider
+    oidc_issuer_url: str
+    oidc_audience: str
+    oidc_client_id: str
+    github_app_name: str
+    github_app_id: str
+    github_client_id: str
+    github_webhook_secret_present: bool
+    stripe_secret_key_present: bool
+    stripe_webhook_secret_present: bool
+    workspace_topology: WorkspaceTopology
+    organization_workspace_pool_size: int
+    organization_workspace_max_concurrency: int
+
+    def public_summary(self) -> dict[str, object]:
+        return {
+            "environment": self.environment.value,
+            "host": self.host,
+            "port": self.port,
+            "public_base_url": self.public_base_url,
+            "api_base_url": self.api_base_url,
+            "support_email": self.support_email,
+            "self_host_mode": self.self_host_mode,
+            "auth_provider": self.auth_provider.value,
+            "oidc_configured": bool(
+                self.oidc_issuer_url and self.oidc_audience and self.oidc_client_id
+            ),
+            "github_app_name": self.github_app_name,
+            "github_app_configured": bool(self.github_app_id and self.github_client_id),
+            "github_webhook_secret_present": self.github_webhook_secret_present,
+            "stripe_configured": self.stripe_secret_key_present,
+            "stripe_webhook_secret_present": self.stripe_webhook_secret_present,
+            "workspace_topology": self.workspace_topology.value,
+            "organization_workspace_pool_size": self.organization_workspace_pool_size,
+            "organization_workspace_max_concurrency": self.organization_workspace_max_concurrency,
+        }
+
+
+def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
+    source = env or {}
+    return AppConfig(
+        environment=DeploymentEnvironment(
+            source.get("FOUNDRY_ENVIRONMENT", DeploymentEnvironment.LOCAL.value)
+        ),
+        host=source.get("FOUNDRY_HOST", "127.0.0.1"),
+        port=_env_int(source, "FOUNDRY_PORT", 8090),
+        public_base_url=source.get("FOUNDRY_PUBLIC_BASE_URL", "http://127.0.0.1:8090"),
+        api_base_url=source.get("FOUNDRY_API_BASE_URL", "http://127.0.0.1:8090"),
+        support_email=source.get("FOUNDRY_SUPPORT_EMAIL", "support@example.com"),
+        self_host_mode=_env_bool(source, "FOUNDRY_SELF_HOST_MODE", False),
+        auth_provider=AuthProvider(
+            source.get("FOUNDRY_AUTH_PROVIDER", AuthProvider.OIDC.value)
+        ),
+        oidc_issuer_url=source.get("FOUNDRY_OIDC_ISSUER_URL", ""),
+        oidc_audience=source.get("FOUNDRY_OIDC_AUDIENCE", ""),
+        oidc_client_id=source.get("FOUNDRY_OIDC_CLIENT_ID", ""),
+        github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
+        github_app_id=source.get("FOUNDRY_GITHUB_APP_ID", ""),
+        github_client_id=source.get("FOUNDRY_GITHUB_CLIENT_ID", ""),
+        github_webhook_secret_present=bool(
+            source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", "").strip()
+        ),
+        stripe_secret_key_present=bool(
+            source.get("FOUNDRY_STRIPE_SECRET_KEY", "").strip()
+        ),
+        stripe_webhook_secret_present=bool(
+            source.get("FOUNDRY_STRIPE_WEBHOOK_SECRET", "").strip()
+        ),
+        workspace_topology=WorkspaceTopology(
+            source.get(
+                "FOUNDRY_WORKSPACE_TOPOLOGY",
+                LAUNCH_DECISIONS.workspace_topology,
+            )
+        ),
+        organization_workspace_pool_size=_env_int(
+            source, "FOUNDRY_ORG_WORKSPACE_POOL_SIZE", 4
+        ),
+        organization_workspace_max_concurrency=_env_int(
+            source, "FOUNDRY_ORG_WORKSPACE_MAX_CONCURRENCY", 20
+        ),
+    )

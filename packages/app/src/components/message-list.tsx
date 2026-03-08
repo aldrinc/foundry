@@ -180,6 +180,27 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
           {headerText()}
         </h1>
         <div class="flex items-center gap-1 shrink-0">
+          {/* Mark all as read */}
+          <Show when={nav.parseNarrow(props.narrow)?.type === "stream" || nav.parseNarrow(props.narrow)?.type === "topic"}>
+            <button
+              class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+              onClick={async () => {
+                const p = nav.parseNarrow(props.narrow)
+                if (!p?.streamId) return
+                if (p.type === "topic" && p.topic) {
+                  await commands.markTopicAsRead(org.orgId, p.streamId, p.topic)
+                } else {
+                  await commands.markStreamAsRead(org.orgId, p.streamId)
+                }
+              }}
+              title="Mark all as read"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M1 7l4 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </Show>
+
           {/* Supervisor toggle — visible in stream and topic narrows */}
           <Show when={nav.parseNarrow(props.narrow)?.type === "topic" || nav.parseNarrow(props.narrow)?.type === "stream"}>
             {(() => {

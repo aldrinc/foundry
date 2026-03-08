@@ -1,6 +1,8 @@
 import { For, Show, createMemo } from "solid-js"
 import { useZulipSync, type UnreadItem } from "../context/zulip-sync"
 import { useNavigation } from "../context/navigation"
+import { useOrg } from "../context/org"
+import { commands } from "@zulip/desktop/bindings"
 
 /**
  * Inbox view — shows unread conversations grouped by stream/topic.
@@ -8,6 +10,7 @@ import { useNavigation } from "../context/navigation"
 export function InboxView() {
   const sync = useZulipSync()
   const nav = useNavigation()
+  const org = useOrg()
 
   // Group unread items by stream
   const groupedUnreads = createMemo(() => {
@@ -106,13 +109,25 @@ export function InboxView() {
                   <span class="text-xs text-[var(--text-tertiary)]">
                     {group.totalCount}
                   </span>
+                  <button
+                    class="p-1 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      commands.markStreamAsRead(org.orgId, group.streamId).catch(() => {})
+                    }}
+                    title="Mark all as read"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                      <path d="M1 7l4 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
                 </button>
 
                 {/* Topics */}
                 <For each={group.topics.sort((a, b) => b.last_message_id - a.last_message_id)}>
                   {(item) => (
-                    <button
-                      class="w-full flex items-center gap-2 px-4 pl-9 py-1.5 hover:bg-[var(--background-surface)] transition-colors text-left"
+                    <div
+                      class="group flex items-center gap-2 px-4 pl-9 py-1.5 hover:bg-[var(--background-surface)] transition-colors cursor-pointer"
                       onClick={() => handleTopicClick(item.stream_id, item.topic)}
                       data-component="inbox-topic-item"
                     >
@@ -122,7 +137,19 @@ export function InboxView() {
                       <span class="text-xs font-medium text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10 px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                         {item.count}
                       </span>
-                    </button>
+                      <button
+                        class="p-0.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          commands.markTopicAsRead(org.orgId, item.stream_id, item.topic).catch(() => {})
+                        }}
+                        title="Mark as read"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+                          <path d="M1 7l4 4 8-8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
                 </For>
               </div>

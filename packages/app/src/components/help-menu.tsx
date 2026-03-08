@@ -1,6 +1,6 @@
 import { createSignal, Show, onCleanup } from "solid-js"
 
-export function HelpMenu(props: { onShowShortcuts: () => void }) {
+export function HelpMenu(props: { onShowShortcuts: () => void; darkBackground?: boolean }) {
   const [open, setOpen] = createSignal(false)
   let menuRef!: HTMLDivElement
 
@@ -31,7 +31,10 @@ export function HelpMenu(props: { onShowShortcuts: () => void }) {
   return (
     <div class="relative" ref={menuRef!}>
       <button
-        class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+        class={props.darkBackground
+          ? "p-1.5 rounded-[var(--radius-sm)] text-white/60 hover:text-white/90 hover:bg-white/10 transition-colors"
+          : "p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+        }
         onClick={toggle}
         title="Help"
       >

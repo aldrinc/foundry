@@ -43,11 +43,18 @@
 
     --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+
+    /* Layout shell — left bar, top bar, outer frame */
+    --surface-left-bar: #f7f8fa;
+    --surface-outer-bg: #f7f8fa;
+    --radius-container: 8px;
+    --layout-inset: 3px;
+    --inset-border: 1px solid rgba(0, 0, 0, 0.08);
   }
 
-  /* Dark mode */
+  /* Dark mode — system preference (used when data-theme is absent, i.e. "system" setting) */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme]) {
       --background-base: #0f1117;
       --background-surface: #1a1d27;
       --background-elevated: #242736;
@@ -69,7 +76,131 @@
 
       --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
       --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+
+      --surface-left-bar: #0a0c12;
+      --surface-outer-bg: #0a0c12;
+      --inset-border: none;
     }
+  }
+
+  /* Explicit light theme */
+  :root[data-theme="light"] {
+    --background-base: #ffffff;
+    --background-surface: #f9fafb;
+    --background-elevated: #f3f4f6;
+
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --text-tertiary: #9ca3af;
+
+    --border-default: #e5e7eb;
+    --border-strong: #d1d5db;
+
+    --interactive-primary: #6493f9;
+    --interactive-primary-hover: #4f7de8;
+    --interactive-primary-text: #ffffff;
+
+    --status-success: #22c55e;
+    --status-warning: #f59e0b;
+    --status-error: #ef4444;
+    --status-info: #3b82f6;
+
+    --surface-sidebar: #f9fafb;
+    --surface-message: #ffffff;
+    --surface-input: #ffffff;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+
+    --surface-left-bar: #f7f8fa;
+    --surface-outer-bg: #f7f8fa;
+    --inset-border: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  /* Explicit dark theme */
+  :root[data-theme="dark"] {
+    --background-base: #0f1117;
+    --background-surface: #1a1d27;
+    --background-elevated: #242736;
+
+    --text-primary: #f9fafb;
+    --text-secondary: #9ca3af;
+    --text-tertiary: #6b7280;
+
+    --border-default: #2d3140;
+    --border-strong: #3d4255;
+
+    --interactive-primary: #6493f9;
+    --interactive-primary-hover: #7da5fa;
+    --interactive-primary-text: #ffffff;
+
+    --status-success: #22c55e;
+    --status-warning: #f59e0b;
+    --status-error: #ef4444;
+    --status-info: #3b82f6;
+
+    --surface-sidebar: #141620;
+    --surface-message: #1a1d27;
+    --surface-input: #242736;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+
+    --surface-left-bar: #0a0c12;
+    --surface-outer-bg: #0a0c12;
+    --inset-border: none;
+  }
+
+  /* Foundry theme — branded dark teal frame with dark sidebar, light content */
+  :root[data-theme="foundry"] {
+    --background-base: #ffffff;
+    --background-surface: #f9fafb;
+    --background-elevated: #f3f4f6;
+
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --text-tertiary: #9ca3af;
+
+    --border-default: #e5e7eb;
+    --border-strong: #d1d5db;
+
+    --interactive-primary: #6493f9;
+    --interactive-primary-hover: #4f7de8;
+    --interactive-primary-text: #ffffff;
+
+    --status-success: #22c55e;
+    --status-warning: #f59e0b;
+    --status-error: #ef4444;
+    --status-info: #3b82f6;
+
+    --surface-sidebar: #1a3a3f;
+    --surface-message: #ffffff;
+    --surface-input: #ffffff;
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+
+    --surface-left-bar: #132F33;
+    --surface-outer-bg: #132F33;
+    --inset-border: none;
+  }
+
+  /* Foundry theme: dark sidebar color context — scoped variable overrides */
+  :root[data-theme="foundry"] [data-component="stream-sidebar"],
+  :root[data-theme="foundry"] [data-component="right-sidebar"] {
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-tertiary: #64748b;
+
+    --border-default: #2d4a4f;
+    --border-strong: #3d5a5f;
+
+    --background-surface: #244448;
+    --background-elevated: #1e3e43;
+    --background-base: #163338;
+
+    --surface-input: #163338;
+    --surface-sidebar: #1a3a3f;
   }
 }
 
@@ -84,8 +215,9 @@
 
   html {
     font-family: var(--font-sans);
+    font-size: var(--font-size-base, 14px);
     color: var(--text-primary);
-    background-color: var(--background-base);
+    background-color: var(--surface-outer-bg);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
