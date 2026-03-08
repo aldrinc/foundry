@@ -23,6 +23,7 @@ pub async fn get_supervisor_session(
 /// Send a message to the supervisor
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub async fn post_supervisor_message(
     state: State<'_, AppState>,
     org_id: String,
@@ -134,7 +135,10 @@ pub async fn start_supervisor_stream(
 
     // Stop any existing supervisor stream for this org
     {
-        let mut orgs = state.orgs.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut orgs = state
+            .orgs
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
         if let Some(org) = orgs.get_mut(&org_id) {
             if let Some(task) = org.supervisor_task.take() {
                 task.abort();
@@ -157,7 +161,10 @@ pub async fn start_supervisor_stream(
 
     // Store the task handle so we can abort it later
     {
-        let mut orgs = state.orgs.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut orgs = state
+            .orgs
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
         if let Some(org) = orgs.get_mut(&org_id) {
             org.supervisor_task = Some(task);
         }
@@ -173,7 +180,10 @@ pub async fn stop_supervisor_stream(
     state: State<'_, AppState>,
     org_id: String,
 ) -> Result<(), String> {
-    let mut orgs = state.orgs.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let mut orgs = state
+        .orgs
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     if let Some(org) = orgs.get_mut(&org_id) {
         if let Some(task) = org.supervisor_task.take() {
             task.abort();

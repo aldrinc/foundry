@@ -10,6 +10,7 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
+    "check:rust": "cd packages/desktop/src-tauri && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",
     "test:e2e": "turbo test:e2e"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
-use std::sync::Mutex;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use tauri::Manager;
 
@@ -83,61 +83,43 @@ pub fn run() {
 
 /// Create the specta builder with all commands registered
 fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
-    tauri_specta::Builder::<tauri::Wry>::new()
-        .commands(tauri_specta::collect_commands![
-            commands::get_server_settings,
-            commands::login,
-            commands::logout,
-            commands::get_messages,
-            commands::send_message,
-            commands::edit_message,
-            commands::delete_message,
-            commands::add_reaction,
-            commands::remove_reaction,
-            commands::update_presence,
-            commands::send_typing,
-            commands::upload_file,
-            commands::update_message_flags,
-            commands::mark_stream_as_read,
-            commands::mark_topic_as_read,
-            commands::get_stream_topics,
-            commands::subscribe_stream,
-            commands::unsubscribe_stream,
-            commands::update_zulip_settings,
-            commands::get_zulip_settings,
-            server::get_servers,
-            server::add_server,
-            server::remove_server,
-            server::get_config,
-            server::set_config,
-            // Meridian supervisor commands
-            supervisor_commands::get_supervisor_session,
-            supervisor_commands::post_supervisor_message,
-            supervisor_commands::get_supervisor_sidebar,
-            supervisor_commands::control_supervisor_task,
-            supervisor_commands::reply_to_task_clarification,
-            supervisor_commands::get_meridian_providers,
-            supervisor_commands::get_task_events,
-            supervisor_commands::start_supervisor_stream,
-            supervisor_commands::stop_supervisor_stream,
-        ])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn export_bindings() {
-        let builder = create_specta_builder();
-        builder
-            .export(
-                specta_typescript::Typescript::default()
-                    .bigint(specta_typescript::BigIntExportBehavior::Number),
-                "../src/bindings.ts",
-            )
-            .expect("Failed to export TypeScript bindings");
-    }
+    tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
+        commands::get_server_settings,
+        commands::login,
+        commands::logout,
+        commands::get_messages,
+        commands::send_message,
+        commands::edit_message,
+        commands::delete_message,
+        commands::add_reaction,
+        commands::remove_reaction,
+        commands::update_presence,
+        commands::send_typing,
+        commands::upload_file,
+        commands::update_message_flags,
+        commands::mark_stream_as_read,
+        commands::mark_topic_as_read,
+        commands::get_stream_topics,
+        commands::subscribe_stream,
+        commands::unsubscribe_stream,
+        commands::update_zulip_settings,
+        commands::get_zulip_settings,
+        server::get_servers,
+        server::add_server,
+        server::remove_server,
+        server::get_config,
+        server::set_config,
+        // Meridian supervisor commands
+        supervisor_commands::get_supervisor_session,
+        supervisor_commands::post_supervisor_message,
+        supervisor_commands::get_supervisor_sidebar,
+        supervisor_commands::control_supervisor_task,
+        supervisor_commands::reply_to_task_clarification,
+        supervisor_commands::get_meridian_providers,
+        supervisor_commands::get_task_events,
+        supervisor_commands::start_supervisor_stream,
+        supervisor_commands::stop_supervisor_stream,
+    ])
 }
 
 async fn initialize(app: tauri::AppHandle) {
@@ -148,16 +130,13 @@ async fn initialize(app: tauri::AppHandle) {
     tracing::info!(count = servers.len(), "Loaded saved servers");
 
     // Create main window
-    let window = tauri::WebviewWindowBuilder::new(
-        &app,
-        "main",
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title("")
-    .inner_size(1200.0, 800.0)
-    .min_inner_size(800.0, 600.0)
-    .visible(false)
-    .build();
+    let window =
+        tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::App("index.html".into()))
+            .title("")
+            .inner_size(1200.0, 800.0)
+            .min_inner_size(800.0, 600.0)
+            .visible(false)
+            .build();
 
     match window {
         Ok(win) => {
@@ -174,5 +153,22 @@ async fn initialize(app: tauri::AppHandle) {
         Err(e) => {
             tracing::error!(?e, "Failed to create main window");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn export_bindings() {
+        let builder = create_specta_builder();
+        builder
+            .export(
+                specta_typescript::Typescript::default()
+                    .bigint(specta_typescript::BigIntExportBehavior::Number),
+                "../src/bindings.ts",
+            )
+            .expect("Failed to export TypeScript bindings");
     }
 }
