@@ -1,7 +1,7 @@
-import { useSettings } from "../context/settings";
+import { useSettings } from "../context/settings"
 
 export function SettingsGeneral() {
-  const { store, setSetting } = useSettings();
+  const { store, setSetting } = useSettings()
 
   return (
     <div class="space-y-6">
@@ -70,10 +70,7 @@ export function SettingsGeneral() {
       </SettingRow>
 
       {/* Home view */}
-      <SettingRow
-        label="Home view"
-        description="Default view when the app opens"
-      >
+      <SettingRow label="Home view" description="Default view when the app opens">
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={store.homeView}
@@ -86,10 +83,7 @@ export function SettingsGeneral() {
       </SettingRow>
 
       {/* Animate images */}
-      <SettingRow
-        label="Animate image previews"
-        description="Control animated GIF behavior"
-      >
+      <SettingRow label="Animate image previews" description="Control animated GIF behavior">
         <select
           class="text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] min-w-[140px]"
           value={store.animateImages}
@@ -101,52 +95,33 @@ export function SettingsGeneral() {
         </select>
       </SettingRow>
     </div>
-  );
+  )
 }
 
 /* Shared setting components */
 
-export function SettingRow(props: {
-  label: string;
-  description: string;
-  children: any;
-}) {
+export function SettingRow(props: { label: string; description: string; children: any }) {
   return (
     <div class="flex items-center justify-between gap-4">
       <div class="min-w-0">
-        <div class="text-xs font-medium text-[var(--text-primary)]">
-          {props.label}
-        </div>
-        <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-          {props.description}
-        </div>
+        <div class="text-xs font-medium text-[var(--text-primary)]">{props.label}</div>
+        <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">{props.description}</div>
       </div>
       <div class="shrink-0">{props.children}</div>
     </div>
-  );
+  )
 }
 
-export function SettingToggle(props: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+export function SettingToggle(props: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <div class="flex items-center justify-between gap-4">
       <div class="min-w-0">
-        <div class="text-xs font-medium text-[var(--text-primary)]">
-          {props.label}
-        </div>
-        <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-          {props.description}
-        </div>
+        <div class="text-xs font-medium text-[var(--text-primary)]">{props.label}</div>
+        <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">{props.description}</div>
       </div>
       <button
         class={`relative w-8 h-[18px] rounded-full shrink-0 transition-colors ${
-          props.checked
-            ? "bg-[var(--interactive-primary)]"
-            : "bg-[var(--border-default)]"
+          props.checked ? "bg-[var(--interactive-primary)]" : "bg-[var(--border-default)]"
         }`}
         onClick={() => props.onChange(!props.checked)}
       >
@@ -157,5 +132,5 @@ export function SettingToggle(props: {
         />
       </button>
     </div>
-  );
+  )
 }

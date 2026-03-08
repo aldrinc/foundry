@@ -1,0 +1,452 @@
+import { createContext, useContext, onMount, onCleanup } from "solid-js";
+import { createStore, produce } from "solid-js/store";
+import { listen } from "@tauri-apps/api/event";
+import { commands } from "@zulip/desktop/bindings";
+import { sanitizeEventId } from "../tauri-event-utils";
+import { usePlatform } from "./platform";
+import { useSettings } from "./settings";
+import { buildNotificationBody, buildNotificationTitle, shouldNotifyMessage, } from "./notification-policy";
+import { STARRED_NARROW, cacheKeysForMessage, hasStarredFlag, mergeMessagesById, } from "./message-cache";
+const initialStore = {
+    connected: false,
+    orgId: null,
+    queueId: null,
+    currentUserId: null,
+    currentUserEmail: null,
+    subscriptions: [],
+    users: [],
+    messages: {},
+    messageLoadState: {},
+    messageHydrated: {},
+    unreadCounts: {},
+    typingUsers: {},
+    drafts: {},
+    unreadItems: [],
+};
+const ZulipSyncContext = createContext();
+export function ZulipSyncProvider(props) {
+    const [store, setStore] = createStore({ ...initialStore });
+    const inFlightFetches = new Map();
+    const platform = usePlatform();
+    const { store: settings } = useSettings();
+    const maybeNotifyForMessage = (message) => {
+        const shouldNotify = shouldNotifyMessage(message, {
+            desktopNotifs: settings.desktopNotifs,
+            dmNotifs: settings.dmNotifs,
+            mentionNotifs: settings.mentionNotifs,
+            channelNotifs: settings.channelNotifs,
+            followedTopics: settings.followedTopics,
+            wildcardMentions: settings.wildcardMentions,
+        }, {
+            currentUserId: store.currentUserId,
+            currentUserEmail: store.currentUserEmail,
+            isFollowedTopic: false,
+        });
+        if (!shouldNotify) {
+            return;
+        }
+        const streamName = message.stream_id
+            ? store.subscriptions.find(subscription => subscription.stream_id === message.stream_id)?.name
+            : undefined;
+        void platform.notify(buildNotificationTitle(message, streamName), buildNotificationBody(message.content));
+    };
+    const sync = {
+        get store() { return store; },
+        setConnected(orgId, queueId, subscriptions, users, loginEmail, userId) {
+            // Resolve the current user ID:
+            // 1. Use the user_id directly from the Zulip register API response (most reliable)
+            // 2. Fall back to case-insensitive email matching
+            let resolvedUserId = userId ?? null;
+            let resolvedEmail = loginEmail ?? null;
+            if (resolvedUserId) {
+                const user = users.find(u => u.user_id === resolvedUserId);
+                console.log(`[ZulipSync] Current user from API: ${user?.full_name ?? "unknown"} (ID: ${resolvedUserId})`);
+                if (user) {
+                    resolvedEmail = user.email;
+                }
+            }
+            else if (loginEmail) {
+                // Fallback: match by email (case-insensitive)
+                const emailLower = loginEmail.toLowerCase();
+                const currentUser = users.find(u => u.email.toLowerCase() === emailLower);
+                if (currentUser) {
+                    resolvedUserId = currentUser.user_id;
+                    console.log(`[ZulipSync] Resolved current user via email: ${currentUser.full_name} (ID: ${resolvedUserId})`);
+                }
+                else {
+                    console.warn(`[ZulipSync] Could not resolve currentUserId: login email "${loginEmail}" not found in users list (${users.length} users). ` +
+                        `Available emails: ${users.slice(0, 5).map(u => u.email).join(", ")}...`);
+                }
+            }
+            setStore(produce(s => {
+                s.connected = true;
+                s.orgId = orgId;
+                s.queueId = queueId;
+                s.subscriptions = subscriptions;
+                s.users = users;
+                s.currentUserId = resolvedUserId;
+                s.currentUserEmail = resolvedEmail;
+            }));
+        },
+        setDisconnected() {
+            setStore(produce(s => {
+                s.connected = false;
+                s.queueId = null;
+            }));
+        },
+        addMessages(narrow, messages) {
+            setStore(produce(s => {
+                s.messages[narrow] = mergeMessagesById(s.messages[narrow] || [], messages);
+            }));
+        },
+        setMessageLoadState(narrow, state) {
+            setStore("messageLoadState", narrow, state);
+        },
+        isNarrowHydrated(narrow) {
+            return !!store.messageHydrated[narrow];
+        },
+        markNarrowHydrated(narrow, hydrated) {
+            setStore("messageHydrated", narrow, hydrated);
+        },
+        async ensureMessages(narrow, filters, options) {
+            const force = options?.force ?? false;
+            const limit = options?.limit ?? 50;
+            const markRead = options?.markRead ?? false;
+            if (!force && sync.isNarrowHydrated(narrow)) {
+                return { status: "ok", fromCache: true };
+            }
+            const requestKey = `${narrow}::${limit}::${markRead ? "read" : "noread"}`;
+            const existingRequest = inFlightFetches.get(requestKey);
+            if (existingRequest) {
+                return existingRequest;
+            }
+            sync.setMessageLoadState(narrow, "loading");
+            const request = (async () => {
+                try {
+                    const result = await commands.getMessages(props.orgId, filters, "newest", limit, 0);
+                    if (result.status === "error") {
+                        sync.setMessageLoadState(narrow, "idle");
+                        return { status: "error", fromCache: false, error: result.error };
+                    }
+                    sync.addMessages(narrow, result.data.messages);
+                    sync.markNarrowHydrated(narrow, true);
+                    sync.setMessageLoadState(narrow, result.data.found_oldest ? "loaded-all" : "idle");
+                    if (markRead) {
+                        const unreadIds = result.data.messages
+                            .filter(message => !(message.flags || []).includes("read"))
+                            .map(message => message.id);
+                        if (unreadIds.length > 0) {
+                            await commands.updateMessageFlags(props.orgId, unreadIds, "add", "read");
+                        }
+                    }
+                    return { status: "ok", fromCache: false };
+                }
+                catch (error) {
+                    sync.setMessageLoadState(narrow, "idle");
+                    return {
+                        status: "error",
+                        fromCache: false,
+                        error: error?.toString() || "Failed to load messages",
+                    };
+                }
+                finally {
+                    inFlightFetches.delete(requestKey);
+                }
+            })();
+            inFlightFetches.set(requestKey, request);
+            return request;
+        },
+        updateUnreadCount(streamId, count) {
+            setStore("unreadCounts", streamId, count);
+        },
+        setTypingUsers(narrow, userIds) {
+            setStore("typingUsers", narrow, userIds);
+        },
+        saveDraft(narrow, text) {
+            setStore("drafts", narrow, text);
+        },
+        clearDraft(narrow) {
+            setStore(produce(s => {
+                delete s.drafts[narrow];
+            }));
+        },
+        // Event: new message
+        handleMessageEvent(data) {
+            if (!data?.message)
+                return;
+            const msg = data.message;
+            for (const narrow of cacheKeysForMessage(msg)) {
+                sync.addMessages(narrow, [msg]);
+            }
+            // Update unread counts
+            if (msg.stream_id && !(msg.flags || []).includes("read")) {
+                const currentCount = store.unreadCounts[msg.stream_id] || 0;
+                sync.updateUnreadCount(msg.stream_id, currentCount + 1);
+            }
+            maybeNotifyForMessage(msg);
+        },
+        // Event: typing indicator (DM + stream/topic)
+        handleTypingEvent(data) {
+            if (!data)
+                return;
+            const op = data.op;
+            const senderId = data.sender?.user_id;
+            // Build narrow key — two different payload shapes:
+            // DM:     { sender, recipients: [{user_id}] }     → narrow = "dm:id1,id2"
+            // Stream: { sender, stream_id, topic }             → narrow = "stream:<id>/topic:<topic>"
+            let narrow = "";
+            if (data.message_type === "stream" && data.stream_id && data.topic) {
+                narrow = `stream:${data.stream_id}/topic:${data.topic}`;
+            }
+            else if (data.recipients) {
+                const ids = data.recipients
+                    .map(u => u.user_id)
+                    .sort()
+                    .join(",");
+                narrow = `dm:${ids}`;
+            }
+            if (!narrow)
+                return;
+            if (op === "start") {
+                const current = store.typingUsers[narrow] || [];
+                if (!current.includes(senderId)) {
+                    sync.setTypingUsers(narrow, [...current, senderId]);
+                }
+                // Auto-clear after 15 seconds (in case "stop" event is missed)
+                setTimeout(() => {
+                    const current = store.typingUsers[narrow] || [];
+                    if (current.includes(senderId)) {
+                        sync.setTypingUsers(narrow, current.filter(id => id !== senderId));
+                    }
+                }, 15000);
+            }
+            else if (op === "stop") {
+                const current = store.typingUsers[narrow] || [];
+                sync.setTypingUsers(narrow, current.filter(id => id !== senderId));
+            }
+        },
+        // Event: reaction added/removed
+        handleReactionEvent(data) {
+            if (!data)
+                return;
+            const messageId = data.message_id;
+            const op = data.op;
+            const reaction = {
+                emoji_name: data.emoji_name,
+                emoji_code: data.emoji_code,
+                reaction_type: data.reaction_type,
+                user_id: data.user_id,
+            };
+            setStore(produce(s => {
+                for (const narrow of Object.keys(s.messages)) {
+                    const msgs = s.messages[narrow];
+                    const idx = msgs.findIndex(m => m.id === messageId);
+                    if (idx >= 0) {
+                        if (op === "add") {
+                            msgs[idx].reactions = [...(msgs[idx].reactions || []), reaction];
+                        }
+                        else if (op === "remove") {
+                            msgs[idx].reactions = (msgs[idx].reactions || []).filter(r => !(r.emoji_code === reaction.emoji_code && r.user_id === reaction.user_id));
+                        }
+                        break;
+                    }
+                }
+            }));
+        },
+        // Event: subscription added/removed
+        handleSubscriptionEvent(data) {
+            if (!data)
+                return;
+            const op = data.op;
+            if (op === "add" && data.subscriptions) {
+                setStore(produce(s => {
+                    for (const sub of data.subscriptions) {
+                        if (!s.subscriptions.find(ss => ss.stream_id === sub.stream_id)) {
+                            s.subscriptions.push(sub);
+                        }
+                    }
+                }));
+            }
+            else if (op === "remove" && data.subscriptions) {
+                setStore(produce(s => {
+                    const removeIds = new Set(data.subscriptions.map((ss) => ss.stream_id));
+                    s.subscriptions = s.subscriptions.filter(ss => !removeIds.has(ss.stream_id));
+                }));
+            }
+            else if (op === "update" && data.stream_id) {
+                setStore(produce(s => {
+                    const sub = s.subscriptions.find(ss => ss.stream_id === data.stream_id);
+                    if (sub) {
+                        Object.assign(sub, data);
+                    }
+                }));
+            }
+        },
+        // Event: message edited
+        handleUpdateMessageEvent(data) {
+            if (!data?.message_id)
+                return;
+            const messageId = data.message_id;
+            setStore(produce(s => {
+                for (const narrow of Object.keys(s.messages)) {
+                    const msgs = s.messages[narrow];
+                    const idx = msgs.findIndex(m => m.id === messageId);
+                    if (idx >= 0) {
+                        if (data.content)
+                            msgs[idx].content = data.content;
+                        if (data.subject)
+                            msgs[idx].subject = data.subject;
+                        break;
+                    }
+                }
+            }));
+        },
+        // Event: message deleted
+        handleDeleteMessageEvent(data) {
+            if (!data?.message_id && !data?.message_ids)
+                return;
+            const deleteIds = data.message_ids
+                ? data.message_ids
+                : [data.message_id];
+            const deleteSet = new Set(deleteIds);
+            setStore(produce(s => {
+                for (const narrow of Object.keys(s.messages)) {
+                    s.messages[narrow] = s.messages[narrow].filter(m => !deleteSet.has(m.id));
+                }
+            }));
+        },
+        // Event: message flags updated (read, starred)
+        handleFlagEvent(data) {
+            if (!data)
+                return;
+            const op = data.operation || data.op;
+            const flag = data.flag;
+            const messageIds = data.messages;
+            if (!messageIds?.length || !flag)
+                return;
+            const idSet = new Set(messageIds);
+            setStore(produce(s => {
+                for (const narrow of Object.keys(s.messages)) {
+                    for (const msg of s.messages[narrow]) {
+                        if (idSet.has(msg.id)) {
+                            const flags = msg.flags || [];
+                            if (op === "add" && !flags.includes(flag)) {
+                                msg.flags = [...flags, flag];
+                            }
+                            else if (op === "remove") {
+                                msg.flags = flags.filter(f => f !== flag);
+                            }
+                        }
+                    }
+                }
+                if (flag === "starred") {
+                    if (op === "remove") {
+                        s.messages[STARRED_NARROW] = (s.messages[STARRED_NARROW] || []).filter(msg => !idSet.has(msg.id));
+                    }
+                    else if (op === "add") {
+                        const starredMessages = [];
+                        for (const narrow of Object.keys(s.messages)) {
+                            if (narrow === STARRED_NARROW)
+                                continue;
+                            for (const msg of s.messages[narrow]) {
+                                if (idSet.has(msg.id) && hasStarredFlag(msg)) {
+                                    starredMessages.push(msg);
+                                }
+                            }
+                        }
+                        s.messages[STARRED_NARROW] = mergeMessagesById(s.messages[STARRED_NARROW] || [], starredMessages);
+                    }
+                }
+            }));
+        },
+        // Event: resync (queue was re-registered)
+        handleResync(data) {
+            if (!data)
+                return;
+            setStore(produce(s => {
+                if (data.subscriptions)
+                    s.subscriptions = data.subscriptions;
+                if (data.users)
+                    s.users = data.users;
+                // Clear messages to force refetch
+                s.messages = {};
+                s.messageLoadState = {};
+                s.messageHydrated = {};
+            }));
+        },
+    };
+    // Set up Tauri event listeners
+    onMount(async () => {
+        const listeners = [];
+        const eventTypes = [
+            "message",
+            "typing",
+            "reaction",
+            "subscription",
+            "update_message",
+            "delete_message",
+            "update_message_flags",
+            "resync",
+            "disconnected",
+            "connection_error",
+        ];
+        // Sanitize org_id for Tauri event names — dots are not allowed
+        const eventId = sanitizeEventId(props.orgId);
+        // Listen for all Zulip events
+        for (const eventType of eventTypes) {
+            const eventName = `zulip:${eventId}:${eventType}`;
+            const unlisten = await listen(eventName, (event) => {
+                handleZulipEvent(eventType, event.payload);
+            });
+            listeners.push(unlisten);
+        }
+        onCleanup(() => {
+            for (const unlisten of listeners) {
+                unlisten();
+            }
+        });
+    });
+    function handleZulipEvent(eventType, data) {
+        switch (eventType) {
+            case "message":
+                sync.handleMessageEvent(data);
+                break;
+            case "typing":
+                sync.handleTypingEvent(data);
+                break;
+            case "reaction":
+                sync.handleReactionEvent(data);
+                break;
+            case "subscription":
+                sync.handleSubscriptionEvent(data);
+                break;
+            case "update_message":
+                sync.handleUpdateMessageEvent(data);
+                break;
+            case "delete_message":
+                sync.handleDeleteMessageEvent(data);
+                break;
+            case "update_message_flags":
+                sync.handleFlagEvent(data);
+                break;
+            case "resync":
+                sync.handleResync(data);
+                break;
+            case "disconnected":
+                sync.setDisconnected();
+                break;
+            case "connection_error":
+                // Could show a UI notification here
+                break;
+        }
+    }
+    return (<ZulipSyncContext.Provider value={sync}>
+      {props.children}
+    </ZulipSyncContext.Provider>);
+}
+export function useZulipSync() {
+    const ctx = useContext(ZulipSyncContext);
+    if (!ctx)
+        throw new Error("useZulipSync must be used within ZulipSyncProvider");
+    return ctx;
+}

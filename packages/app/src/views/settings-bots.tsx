@@ -1,22 +1,20 @@
-import { createSignal, For, Show } from "solid-js";
+import { createSignal, For, Show } from "solid-js"
 
 interface Bot {
-  id: number;
-  name: string;
-  email: string;
-  type: "incoming" | "outgoing" | "embedded";
-  owner: string;
-  isActive: boolean;
+  id: number
+  name: string
+  email: string
+  type: "incoming" | "outgoing" | "embedded"
+  owner: string
+  isActive: boolean
 }
 
 export function SettingsBots() {
-  const [bots, setBots] = createSignal<Bot[]>([]);
-  const [tab, setTab] = createSignal<"all" | "yours">("yours");
-  const [showCreate, setShowCreate] = createSignal(false);
-  const [newName, setNewName] = createSignal("");
-  const [newType, setNewType] = createSignal<"incoming" | "outgoing">(
-    "incoming",
-  );
+  const [bots, setBots] = createSignal<Bot[]>([])
+  const [tab, setTab] = createSignal<"all" | "yours">("yours")
+  const [showCreate, setShowCreate] = createSignal(false)
+  const [newName, setNewName] = createSignal("")
+  const [newType, setNewType] = createSignal<"incoming" | "outgoing">("incoming")
 
   return (
     <div class="space-y-6">
@@ -24,7 +22,7 @@ export function SettingsBots() {
         <h3 class="text-sm font-semibold text-[var(--text-primary)]">Bots</h3>
         <button
           class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity"
-          onClick={() => setShowCreate((s) => !s)}
+          onClick={() => setShowCreate(s => !s)}
         >
           {showCreate() ? "Cancel" : "Create bot"}
         </button>
@@ -58,9 +56,7 @@ export function SettingsBots() {
       <Show when={showCreate()}>
         <div class="p-3 bg-[var(--background-base)] rounded-[var(--radius-md)] border border-[var(--border-default)] space-y-3">
           <div>
-            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
-              Bot name
-            </label>
+            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Bot name</label>
             <input
               type="text"
               class="w-full text-xs bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)]"
@@ -70,9 +66,7 @@ export function SettingsBots() {
             />
           </div>
           <div>
-            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
-              Type
-            </label>
+            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Type</label>
             <select
               class="w-full text-xs bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)]"
               value={newType()}
@@ -110,32 +104,15 @@ export function SettingsBots() {
                 <div class="flex items-center gap-2 min-w-0">
                   <div class="w-7 h-7 rounded-full bg-[var(--text-tertiary)] flex items-center justify-center text-[10px] font-medium text-white shrink-0">
                     <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                      <rect
-                        x="3"
-                        y="2"
-                        width="8"
-                        height="6"
-                        rx="1"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                      />
+                      <rect x="3" y="2" width="8" height="6" rx="1" stroke="currentColor" stroke-width="1.2" />
                       <circle cx="5.5" cy="5" r="0.8" fill="currentColor" />
                       <circle cx="8.5" cy="5" r="0.8" fill="currentColor" />
-                      <path
-                        d="M4 8v2M10 8v2M6 8v3h2V8"
-                        stroke="currentColor"
-                        stroke-width="1.2"
-                        stroke-linecap="round"
-                      />
+                      <path d="M4 8v2M10 8v2M6 8v3h2V8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                     </svg>
                   </div>
                   <div class="min-w-0">
-                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">
-                      {bot.name}
-                    </div>
-                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">
-                      {bot.email}
-                    </div>
+                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">{bot.name}</div>
+                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">{bot.email}</div>
                   </div>
                 </div>
                 <span class="text-[9px] text-[var(--text-tertiary)] bg-[var(--background-base)] px-1.5 py-0.5 rounded">
@@ -147,5 +124,5 @@ export function SettingsBots() {
         </div>
       </Show>
     </div>
-  );
+  )
 }

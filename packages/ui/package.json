@@ -5,8 +5,8 @@
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "bun -e \"console.log('Use bun run dev from the repo root or packages/desktop.')\"",
-    "build": "bun -e \"console.log('Built through packages/desktop.')\"",
+    "dev": "vite build --watch",
+    "build": "vite build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

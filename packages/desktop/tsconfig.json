@@ -14,10 +14,13 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "@zulip/desktop/*": ["./src/*"],
       "@zulip/ui/*": ["../ui/src/*"],
       "@zulip/app/*": ["../app/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "references": [
+    { "path": "../ui" },
+    { "path": "../app" }
+  ]
 }

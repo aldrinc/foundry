@@ -13,40 +13,40 @@
  * Run with: bun test packages/app/src/context/supervisor.test.ts
  */
 
-import { describe, expect, test } from "bun:test";
-import { sanitizeEventId } from "../tauri-event-utils";
+import { describe, test, expect } from "bun:test"
+import { sanitizeEventId } from "../tauri-event-utils"
 
 /** Tauri event name validation: only alphanumeric, `-`, `/`, `:`, `_` */
 function isValidTauriEventName(name: string): boolean {
-  return /^[a-zA-Z0-9\-/:_]+$/.test(name);
+  return /^[a-zA-Z0-9\-/:_]+$/.test(name)
 }
 
 describe("sanitizeEventId", () => {
   test("replaces dots with underscores", () => {
-    expect(sanitizeEventId("chat.zulip.org")).toBe("chat_zulip_org");
-  });
+    expect(sanitizeEventId("chat.zulip.org")).toBe("chat_zulip_org")
+  })
 
   test("handles IP-based org_ids (sslip.io style)", () => {
     expect(sanitizeEventId("zulip-dev-live.5.161.60.86.sslip.io")).toBe(
-      "zulip-dev-live_5_161_60_86_sslip_io",
-    );
-  });
+      "zulip-dev-live_5_161_60_86_sslip_io"
+    )
+  })
 
   test("preserves already-valid characters", () => {
-    expect(sanitizeEventId("my-org_123")).toBe("my-org_123");
-  });
+    expect(sanitizeEventId("my-org_123")).toBe("my-org_123")
+  })
 
   test("handles no dots", () => {
-    expect(sanitizeEventId("localhost")).toBe("localhost");
-  });
+    expect(sanitizeEventId("localhost")).toBe("localhost")
+  })
 
   test("handles consecutive dots", () => {
-    expect(sanitizeEventId("a..b...c")).toBe("a__b___c");
-  });
+    expect(sanitizeEventId("a..b...c")).toBe("a__b___c")
+  })
 
   test("handles empty string", () => {
-    expect(sanitizeEventId("")).toBe("");
-  });
+    expect(sanitizeEventId("")).toBe("")
+  })
 
   test("output never contains dots", () => {
     const inputs = [
@@ -58,13 +58,13 @@ describe("sanitizeEventId", () => {
       "single.",
       ".leading",
       "...",
-    ];
+    ]
     for (const input of inputs) {
-      const result = sanitizeEventId(input);
-      expect(result).not.toContain(".");
+      const result = sanitizeEventId(input)
+      expect(result).not.toContain(".")
     }
-  });
-});
+  })
+})
 
 describe("supervisor event name format", () => {
   const orgIds = [
@@ -72,58 +72,46 @@ describe("supervisor event name format", () => {
     "zulip-dev-live.5.161.60.86.sslip.io",
     "localhost",
     "my-company.zulipchat.com",
-  ];
+  ]
 
-  const supervisorEventSuffixes = [
-    "events",
-    "session",
-    "connected",
-    "disconnected",
-  ];
+  const supervisorEventSuffixes = ["events", "session", "connected", "disconnected"]
   const zulipEventSuffixes = [
-    "message",
-    "typing",
-    "reaction",
-    "subscription",
-    "update_message",
-    "delete_message",
-    "update_message_flags",
-    "resync",
-    "disconnected",
-    "connection_error",
-  ];
+    "message", "typing", "reaction", "subscription",
+    "update_message", "delete_message", "update_message_flags",
+    "resync", "disconnected", "connection_error",
+  ]
 
   for (const orgId of orgIds) {
     test(`supervisor events for "${orgId}" are valid Tauri event names`, () => {
-      const eventId = sanitizeEventId(orgId);
+      const eventId = sanitizeEventId(orgId)
       for (const suffix of supervisorEventSuffixes) {
-        const eventName = `supervisor:${eventId}:${suffix}`;
-        expect(isValidTauriEventName(eventName)).toBe(true);
+        const eventName = `supervisor:${eventId}:${suffix}`
+        expect(isValidTauriEventName(eventName)).toBe(true)
       }
-    });
+    })
 
     test(`zulip events for "${orgId}" are valid Tauri event names`, () => {
-      const eventId = sanitizeEventId(orgId);
+      const eventId = sanitizeEventId(orgId)
       for (const suffix of zulipEventSuffixes) {
-        const eventName = `zulip:${eventId}:${suffix}`;
-        expect(isValidTauriEventName(eventName)).toBe(true);
+        const eventName = `zulip:${eventId}:${suffix}`
+        expect(isValidTauriEventName(eventName)).toBe(true)
       }
-    });
+    })
   }
-});
+})
 
 describe("unsanitized org_ids with dots produce invalid Tauri event names", () => {
   test("demonstrates the bug that was fixed", () => {
     // This test documents the exact failure mode:
     // When org_id contains dots, the event name is invalid for Tauri
-    const orgId = "zulip-dev-live.5.161.60.86.sslip.io";
-    const unsanitizedEventName = `supervisor:${orgId}:connected`;
+    const orgId = "zulip-dev-live.5.161.60.86.sslip.io"
+    const unsanitizedEventName = `supervisor:${orgId}:connected`
 
     // The unsanitized name is INVALID (contains dots)
-    expect(isValidTauriEventName(unsanitizedEventName)).toBe(false);
+    expect(isValidTauriEventName(unsanitizedEventName)).toBe(false)
 
     // The sanitized name is VALID
-    const sanitizedEventName = `supervisor:${sanitizeEventId(orgId)}:connected`;
-    expect(isValidTauriEventName(sanitizedEventName)).toBe(true);
-  });
-});
+    const sanitizedEventName = `supervisor:${sanitizeEventId(orgId)}:connected`
+    expect(isValidTauriEventName(sanitizedEventName)).toBe(true)
+  })
+})

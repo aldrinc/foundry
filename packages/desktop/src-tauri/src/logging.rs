@@ -9,5 +9,8 @@ pub fn init(_app: &tauri::AppHandle) {
         }
     });
 
-    fmt().with_env_filter(filter).with_target(true).init();
+    fmt()
+        .with_env_filter(filter)
+        .with_target(true)
+        .init();
 }

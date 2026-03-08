@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b",
     "tauri": "tauri"
   },
   "dependencies": {

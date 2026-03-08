@@ -23,10 +23,13 @@ fn save_servers(app: &AppHandle, servers: &[SavedServer]) -> Result<(), String> 
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open store: {}", e))?;
 
-    let value = serde_json::to_value(servers).map_err(|e| format!("Failed to serialize: {}", e))?;
+    let value = serde_json::to_value(servers)
+        .map_err(|e| format!("Failed to serialize: {}", e))?;
 
     store.set(SERVERS_KEY, value);
-    store.save().map_err(|e| format!("Failed to save: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save: {}", e))?;
 
     Ok(())
 }
@@ -79,16 +82,22 @@ pub fn get_config(app: AppHandle, key: String) -> Result<Option<String>, String>
 /// Set app config value from JSON string (caller serializes)
 #[tauri::command]
 #[specta::specta]
-pub fn set_config(app: AppHandle, key: String, value: String) -> Result<(), String> {
+pub fn set_config(
+    app: AppHandle,
+    key: String,
+    value: String,
+) -> Result<(), String> {
     let store = app
         .store(SETTINGS_STORE)
         .map_err(|e| format!("Failed to open store: {}", e))?;
 
-    let parsed: serde_json::Value =
-        serde_json::from_str(&value).map_err(|e| format!("Invalid JSON: {}", e))?;
+    let parsed: serde_json::Value = serde_json::from_str(&value)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
 
     store.set(&key, parsed);
-    store.save().map_err(|e| format!("Failed to save: {}", e))?;
+    store
+        .save()
+        .map_err(|e| format!("Failed to save: {}", e))?;
 
     Ok(())
 }

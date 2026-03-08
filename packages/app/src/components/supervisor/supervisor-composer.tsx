@@ -1,34 +1,34 @@
-import { createSignal } from "solid-js";
-import { useSupervisor } from "../../context/supervisor";
+import { createSignal } from "solid-js"
+import { useSupervisor } from "../../context/supervisor"
 
 export function SupervisorComposer() {
-  const supervisor = useSupervisor();
-  const [text, setText] = createSignal("");
-  let textareaRef!: HTMLTextAreaElement;
+  const supervisor = useSupervisor()
+  const [text, setText] = createSignal("")
+  let textareaRef!: HTMLTextAreaElement
 
   const handleSend = async () => {
-    const msg = text().trim();
-    if (!msg || supervisor.store.sendingMessage) return;
-    setText("");
+    const msg = text().trim()
+    if (!msg || supervisor.store.sendingMessage) return
+    setText("")
     if (textareaRef) {
-      textareaRef.style.height = "auto";
+      textareaRef.style.height = "auto"
     }
-    await supervisor.sendMessage(msg);
-    textareaRef?.focus();
-  };
+    await supervisor.sendMessage(msg)
+    textareaRef?.focus()
+  }
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
+      e.preventDefault()
+      handleSend()
     }
-  };
+  }
 
   const autoResize = () => {
-    if (!textareaRef) return;
-    textareaRef.style.height = "auto";
-    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 120) + "px";
-  };
+    if (!textareaRef) return
+    textareaRef.style.height = "auto"
+    textareaRef.style.height = Math.min(textareaRef.scrollHeight, 120) + "px"
+  }
 
   return (
     <div
@@ -43,8 +43,8 @@ export function SupervisorComposer() {
           placeholder="Message supervisor..."
           value={text()}
           onInput={(e) => {
-            setText(e.currentTarget.value);
-            autoResize();
+            setText(e.currentTarget.value)
+            autoResize()
           }}
           onKeyDown={handleKeyDown}
           disabled={supervisor.store.sendingMessage}
@@ -59,5 +59,5 @@ export function SupervisorComposer() {
         </button>
       </div>
     </div>
-  );
+  )
 }

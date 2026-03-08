@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use super::{sanitize_event_id, ZulipClient};
+use super::{ZulipClient, sanitize_event_id};
 
 /// Start the event queue long-polling loop in a background task.
 /// Events are emitted to the frontend via Tauri's event system.

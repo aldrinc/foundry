@@ -1,96 +1,92 @@
-import type { NarrowFilter } from "@zulip/desktop/bindings";
-import { commands } from "@zulip/desktop/bindings";
-import { createEffect, createSignal, For, on, Show } from "solid-js";
-import { useNavigation } from "../context/navigation";
-import { useOrg } from "../context/org";
-import { useSupervisor } from "../context/supervisor";
-import { useZulipSync } from "../context/zulip-sync";
-import { MessageItem } from "./message-item";
-import { SearchBar } from "./search-bar";
+import { createEffect, createSignal, For, Show, on } from "solid-js"
+import { useZulipSync } from "../context/zulip-sync"
+import { useOrg } from "../context/org"
+import { useNavigation } from "../context/navigation"
+import { useSupervisor } from "../context/supervisor"
+import { commands } from "@zulip/desktop/bindings"
+import type { NarrowFilter } from "@zulip/desktop/bindings"
+import { MessageItem } from "./message-item"
+import { SearchBar } from "./search-bar"
 
-export function MessageList(props: {
-  narrow: string;
-  onToggleUserPanel?: () => void;
-}) {
-  const sync = useZulipSync();
-  const org = useOrg();
-  const nav = useNavigation();
-  const supervisor = useSupervisor();
+export function MessageList(props: { narrow: string; onToggleUserPanel?: () => void }) {
+  const sync = useZulipSync()
+  const org = useOrg()
+  const nav = useNavigation()
+  const supervisor = useSupervisor()
 
-  const [loading, setLoading] = createSignal(false);
-  const [error, setError] = createSignal("");
-  let scrollContainer!: HTMLDivElement;
-  let isAtBottom = true;
+  const [loading, setLoading] = createSignal(false)
+  const [error, setError] = createSignal("")
+  let scrollContainer!: HTMLDivElement
+  let isAtBottom = true
 
-  const messages = () => sync.store.messages[props.narrow] || [];
-  const loadState = () => sync.store.messageLoadState[props.narrow] || "idle";
+  const messages = () => sync.store.messages[props.narrow] || []
+  const loadState = () => sync.store.messageLoadState[props.narrow] || "idle"
 
   const markMessagesRead = async (messageIds: number[]) => {
-    if (messageIds.length === 0) return;
-    await commands.updateMessageFlags(org.orgId, messageIds, "add", "read");
-  };
+    if (messageIds.length === 0) return
+    await commands.updateMessageFlags(org.orgId, messageIds, "add", "read")
+  }
 
   // Build narrow filters for the API
   // The Zulip API interprets string operands for "stream" as stream names,
   // so we must resolve numeric stream IDs to their display names.
   const narrowFilters = (): NarrowFilter[] => {
-    const filters = nav.narrowToFilters(props.narrow) as NarrowFilter[];
-    return filters.map((f) => {
+    const filters = nav.narrowToFilters(props.narrow) as NarrowFilter[]
+    return filters.map(f => {
       if (f.operator === "stream" && typeof f.operand === "string") {
-        const id = parseInt(f.operand as string, 10);
+        const id = parseInt(f.operand as string, 10)
         if (!isNaN(id)) {
-          const stream = sync.store.subscriptions.find(
-            (s) => s.stream_id === id,
-          );
+          const stream = sync.store.subscriptions.find(s => s.stream_id === id)
           if (stream) {
-            return { ...f, operand: stream.name };
+            return { ...f, operand: stream.name }
           }
         }
       }
-      return f;
-    });
-  };
+      return f
+    })
+  }
 
   // Fetch messages when narrow changes
   const fetchMessages = async () => {
     // Guard on local loading signal to prevent concurrent fetches
     // (avoids stale store loadState from interrupted HMR)
-    if (loading()) return;
+    if (loading()) return
 
-    setLoading(true);
-    setError("");
+    setLoading(true)
+    setError("")
 
     try {
-      const result = await sync.ensureMessages(props.narrow, narrowFilters(), {
-        limit: 50,
-        markRead: true,
-      });
+      const result = await sync.ensureMessages(
+        props.narrow,
+        narrowFilters(),
+        { limit: 50, markRead: true },
+      )
 
       if (result.status === "error") {
-        setError(result.error || "Failed to load messages");
-        return;
+        setError(result.error || "Failed to load messages")
+        return
       }
 
       if (result.fromCache) {
         const unreadIds = messages()
-          .filter((m) => !(m.flags || []).includes("read"))
-          .map((m) => m.id);
-        await markMessagesRead(unreadIds);
+          .filter(m => !(m.flags || []).includes("read"))
+          .map(m => m.id)
+        await markMessagesRead(unreadIds)
       }
     } catch (e: any) {
-      setError(e?.toString() || "Failed to load messages");
+      setError(e?.toString() || "Failed to load messages")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   // Load older messages
   const fetchOlderMessages = async () => {
-    if (loadState() !== "idle" || loading()) return;
-    const msgs = messages();
-    if (msgs.length === 0) return;
+    if (loadState() !== "idle" || loading()) return
+    const msgs = messages()
+    if (msgs.length === 0) return
 
-    setLoading(true);
+    setLoading(true)
     try {
       const result = await commands.getMessages(
         org.orgId,
@@ -98,82 +94,75 @@ export function MessageList(props: {
         String(msgs[0].id),
         50,
         0,
-      );
+      )
       if (result.status === "ok") {
-        sync.addMessages(props.narrow, result.data.messages);
+        sync.addMessages(props.narrow, result.data.messages)
         if (result.data.found_oldest) {
-          sync.setMessageLoadState(props.narrow, "loaded-all");
+          sync.setMessageLoadState(props.narrow, "loaded-all")
         }
       }
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   // Track scroll position
   const handleScroll = () => {
-    if (!scrollContainer) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
-    isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+    if (!scrollContainer) return
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainer
+    isAtBottom = scrollHeight - scrollTop - clientHeight < 50
 
     // Load older messages when scrolled to top
     if (scrollTop < 100 && loadState() === "idle" && !loading()) {
-      fetchOlderMessages();
+      fetchOlderMessages()
     }
-  };
+  }
 
   // Auto-scroll to bottom on new messages if already at bottom
   createEffect(() => {
-    const _ = messages().length;
+    const _ = messages().length
     if (isAtBottom && scrollContainer) {
       requestAnimationFrame(() => {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      });
+        scrollContainer.scrollTop = scrollContainer.scrollHeight
+      })
     }
-  });
+  })
 
   // Fetch on mount / narrow change
-  createEffect(
-    on(
-      () => props.narrow,
-      () => {
-        void fetchMessages();
-      },
-    ),
-  );
+  createEffect(on(
+    () => props.narrow,
+    () => {
+      void fetchMessages()
+    },
+  ))
 
   // Get header text
   const headerText = () => {
-    const parsed = nav.parseNarrow(props.narrow);
-    if (!parsed) return props.narrow;
+    const parsed = nav.parseNarrow(props.narrow)
+    if (!parsed) return props.narrow
 
     if (parsed.type === "topic") {
-      const stream = sync.store.subscriptions.find(
-        (s) => s.stream_id === parsed.streamId,
-      );
-      return `${stream?.name || `#${parsed.streamId}`} > ${parsed.topic}`;
+      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
+      return `${stream?.name || `#${parsed.streamId}`} > ${parsed.topic}`
     } else if (parsed.type === "stream") {
-      const stream = sync.store.subscriptions.find(
-        (s) => s.stream_id === parsed.streamId,
-      );
-      return stream?.name || `#${parsed.streamId}`;
+      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
+      return stream?.name || `#${parsed.streamId}`
     } else if (parsed.type === "dm") {
-      const users = parsed
-        .userIds!.map((id) => sync.store.users.find((u) => u.user_id === id))
+      const users = parsed.userIds!
+        .map(id => sync.store.users.find(u => u.user_id === id))
         .filter(Boolean)
-        .map((u) => u!.full_name);
-      return users.join(", ") || "Direct message";
+        .map(u => u!.full_name)
+      return users.join(", ") || "Direct message"
     }
-    return props.narrow;
-  };
+    return props.narrow
+  }
 
   // Get stream color for the header
   const headerColor = () => {
-    const parsed = nav.parseNarrow(props.narrow);
-    if (!parsed?.streamId) return undefined;
-    return sync.store.subscriptions.find((s) => s.stream_id === parsed.streamId)
-      ?.color;
-  };
+    const parsed = nav.parseNarrow(props.narrow)
+    if (!parsed?.streamId) return undefined
+    return sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)?.color
+  }
 
   return (
     <div class="flex-1 flex flex-col min-h-0" data-component="message-list">
@@ -192,15 +181,9 @@ export function MessageList(props: {
         </h1>
         <div class="flex items-center gap-1 shrink-0">
           {/* Supervisor toggle — visible in stream and topic narrows */}
-          <Show
-            when={
-              nav.parseNarrow(props.narrow)?.type === "topic" ||
-              nav.parseNarrow(props.narrow)?.type === "stream"
-            }
-          >
+          <Show when={nav.parseNarrow(props.narrow)?.type === "topic" || nav.parseNarrow(props.narrow)?.type === "stream"}>
             {(() => {
-              const isTopic = () =>
-                nav.parseNarrow(props.narrow)?.type === "topic";
+              const isTopic = () => nav.parseNarrow(props.narrow)?.type === "topic"
               return (
                 <button
                   class={`p-1.5 rounded-[var(--radius-sm)] transition-colors ${
@@ -211,20 +194,14 @@ export function MessageList(props: {
                         : "text-[var(--text-quaternary)] cursor-default"
                   }`}
                   onClick={() => {
-                    if (!isTopic()) return;
+                    if (!isTopic()) return
                     if (supervisor.store.active) {
-                      supervisor.close();
+                      supervisor.close()
                     } else {
-                      const parsed = nav.parseNarrow(props.narrow);
-                      if (!parsed || parsed.type !== "topic") return;
-                      const stream = sync.store.subscriptions.find(
-                        (s) => s.stream_id === parsed.streamId,
-                      );
-                      supervisor.openForTopic(
-                        parsed.streamId!,
-                        stream?.name ?? "",
-                        parsed.topic!,
-                      );
+                      const parsed = nav.parseNarrow(props.narrow)
+                      if (!parsed || parsed.type !== "topic") return
+                      const stream = sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)
+                      supervisor.openForTopic(parsed.streamId!, stream?.name ?? "", parsed.topic!)
                     }
                   }}
                   title={
@@ -236,23 +213,14 @@ export function MessageList(props: {
                   }
                 >
                   <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <path
-                      d="M8 1.5a2.5 2.5 0 0 1 2.5 2.5v1a2.5 2.5 0 0 1-5 0V4A2.5 2.5 0 0 1 8 1.5Z"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                    />
-                    <path
-                      d="M3 8.5h10"
-                      stroke="currentColor"
-                      stroke-width="1.2"
-                      stroke-linecap="round"
-                    />
+                    <path d="M8 1.5a2.5 2.5 0 0 1 2.5 2.5v1a2.5 2.5 0 0 1-5 0V4A2.5 2.5 0 0 1 8 1.5Z" stroke="currentColor" stroke-width="1.2" />
+                    <path d="M3 8.5h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                     <circle cx="5" cy="11.5" r="1" fill="currentColor" />
                     <circle cx="8" cy="11.5" r="1" fill="currentColor" />
                     <circle cx="11" cy="11.5" r="1" fill="currentColor" />
                   </svg>
                 </button>
-              );
+              )
             })()}
           </Show>
 
@@ -263,22 +231,12 @@ export function MessageList(props: {
               title="Toggle user panel"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <circle
-                  cx="7"
-                  cy="4"
-                  r="2.5"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                />
-                <path
-                  d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                  stroke-linecap="round"
-                />
+                <circle cx="7" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2" />
+                <path d="M2 12c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
               </svg>
             </button>
           </Show>
+
         </div>
       </header>
 
@@ -291,17 +249,13 @@ export function MessageList(props: {
         {/* Loading indicator at top */}
         <Show when={loading() && messages().length > 0}>
           <div class="text-center py-2">
-            <span class="text-xs text-[var(--text-tertiary)]">
-              Loading older messages...
-            </span>
+            <span class="text-xs text-[var(--text-tertiary)]">Loading older messages...</span>
           </div>
         </Show>
 
         <Show when={loadState() === "loaded-all" && messages().length > 0}>
           <div class="text-center py-3">
-            <span class="text-xs text-[var(--text-tertiary)]">
-              Beginning of conversation
-            </span>
+            <span class="text-xs text-[var(--text-tertiary)]">Beginning of conversation</span>
           </div>
         </Show>
 
@@ -310,27 +264,23 @@ export function MessageList(props: {
           when={!loading() || messages().length > 0}
           fallback={
             <div class="flex-1 flex items-center justify-center py-12">
-              <span class="text-sm text-[var(--text-tertiary)]">
-                Loading messages...
-              </span>
+              <span class="text-sm text-[var(--text-tertiary)]">Loading messages...</span>
             </div>
           }
         >
           <For each={messages()}>
             {(message, idx) => {
-              const prev = () => (idx() > 0 ? messages()[idx() - 1] : null);
+              const prev = () => idx() > 0 ? messages()[idx() - 1] : null
               const showSender = () => {
-                const p = prev();
-                if (!p) return true;
-                if (p.sender_id !== message.sender_id) return true;
+                const p = prev()
+                if (!p) return true
+                if (p.sender_id !== message.sender_id) return true
                 // Show sender if more than 5 minutes gap
-                if (message.timestamp - p.timestamp > 300) return true;
-                return false;
-              };
+                if (message.timestamp - p.timestamp > 300) return true
+                return false
+              }
 
-              return (
-                <MessageItem message={message} showSender={showSender()} />
-              );
+              return <MessageItem message={message} showSender={showSender()} />
             }}
           </For>
         </Show>
@@ -351,9 +301,7 @@ export function MessageList(props: {
         {/* Empty state */}
         <Show when={!loading() && messages().length === 0 && !error()}>
           <div class="flex-1 flex items-center justify-center py-12">
-            <span class="text-sm text-[var(--text-tertiary)]">
-              No messages yet
-            </span>
+            <span class="text-sm text-[var(--text-tertiary)]">No messages yet</span>
           </div>
         </Show>
 
@@ -363,5 +311,5 @@ export function MessageList(props: {
         </Show>
       </div>
     </div>
-  );
+  )
 }

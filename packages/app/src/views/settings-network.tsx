@@ -1,25 +1,23 @@
-import { Show } from "solid-js";
-import { useSettings } from "../context/settings";
-import { SettingToggle } from "./settings-general";
+import { Show } from "solid-js"
+import { useSettings } from "../context/settings"
+import { SettingToggle } from "./settings-general"
 
 export function SettingsNetwork() {
-  const { store, setSetting } = useSettings();
+  const { store, setSetting } = useSettings()
 
   return (
     <div class="space-y-6">
       <h3 class="text-sm font-semibold text-[var(--text-primary)]">Network</h3>
 
-      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
-        Proxy settings
-      </div>
+      <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Proxy settings</div>
 
       <SettingToggle
         label="Use system proxy settings"
         description="Follow your operating system's proxy configuration (requires restart)"
         checked={store.useSystemProxy}
         onChange={(v) => {
-          setSetting("useSystemProxy", v);
-          if (v) setSetting("manualProxy", false);
+          setSetting("useSystemProxy", v)
+          if (v) setSetting("manualProxy", false)
         }}
       />
 
@@ -28,17 +26,15 @@ export function SettingsNetwork() {
         description="Manually configure proxy server settings"
         checked={store.manualProxy}
         onChange={(v) => {
-          setSetting("manualProxy", v);
-          if (v) setSetting("useSystemProxy", false);
+          setSetting("manualProxy", v)
+          if (v) setSetting("useSystemProxy", false)
         }}
       />
 
       <Show when={store.manualProxy}>
         <div class="space-y-4 pl-4 border-l-2 border-[var(--border-default)]">
           <div>
-            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
-              PAC script URL
-            </label>
+            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">PAC script URL</label>
             <input
               type="text"
               class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
@@ -49,9 +45,7 @@ export function SettingsNetwork() {
           </div>
 
           <div>
-            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
-              Proxy rules
-            </label>
+            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Proxy rules</label>
             <input
               type="text"
               class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
@@ -65,9 +59,7 @@ export function SettingsNetwork() {
           </div>
 
           <div>
-            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">
-              Proxy bypass rules
-            </label>
+            <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Proxy bypass rules</label>
             <input
               type="text"
               class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
@@ -86,10 +78,9 @@ export function SettingsNetwork() {
 
       <div class="p-3 bg-[var(--background-base)] rounded-[var(--radius-md)] border border-[var(--border-default)]">
         <div class="text-xs text-[var(--text-secondary)]">
-          Changes to proxy settings require restarting the application to take
-          effect.
+          Changes to proxy settings require restarting the application to take effect.
         </div>
       </div>
     </div>
-  );
+  )
 }

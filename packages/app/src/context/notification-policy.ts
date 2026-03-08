@@ -1,24 +1,24 @@
-import type { Message } from "./zulip-sync";
+import type { Message } from "./zulip-sync"
 
 export interface NotificationPreferences {
-  desktopNotifs: boolean;
-  dmNotifs: boolean;
-  mentionNotifs: boolean;
-  channelNotifs: boolean;
-  followedTopics: boolean;
-  wildcardMentions: string;
+  desktopNotifs: boolean
+  dmNotifs: boolean
+  mentionNotifs: boolean
+  channelNotifs: boolean
+  followedTopics: boolean
+  wildcardMentions: string
 }
 
 export interface NotificationContext {
-  currentUserId: number | null;
-  currentUserEmail: string | null;
-  isFollowedTopic?: boolean;
+  currentUserId: number | null
+  currentUserEmail: string | null
+  isFollowedTopic?: boolean
 }
 
-const ATTACHMENT_CONTENT = "(attached file)";
+const ATTACHMENT_CONTENT = "(attached file)"
 
 function hasFlag(message: Message, flag: string): boolean {
-  return (message.flags || []).includes(flag);
+  return (message.flags || []).includes(flag)
 }
 
 export function isMessageSentByCurrentUser(
@@ -26,28 +26,22 @@ export function isMessageSentByCurrentUser(
   context: Pick<NotificationContext, "currentUserId" | "currentUserEmail">,
 ): boolean {
   if (context.currentUserId && message.sender_id === context.currentUserId) {
-    return true;
+    return true
   }
 
   if (context.currentUserEmail && message.sender_email) {
-    return (
-      message.sender_email.toLowerCase() ===
-      context.currentUserEmail.toLowerCase()
-    );
+    return message.sender_email.toLowerCase() === context.currentUserEmail.toLowerCase()
   }
 
-  return false;
+  return false
 }
 
 export function isWildcardMention(message: Message): boolean {
-  return (
-    hasFlag(message, "stream_wildcard_mentioned") ||
-    hasFlag(message, "topic_wildcard_mentioned")
-  );
+  return hasFlag(message, "stream_wildcard_mentioned") || hasFlag(message, "topic_wildcard_mentioned")
 }
 
 export function isDirectMention(message: Message): boolean {
-  return hasFlag(message, "mentioned") || hasFlag(message, "has_alert_word");
+  return hasFlag(message, "mentioned") || hasFlag(message, "has_alert_word")
 }
 
 export function shouldNotifyMessage(
@@ -55,29 +49,29 @@ export function shouldNotifyMessage(
   preferences: NotificationPreferences,
   context: NotificationContext,
 ): boolean {
-  if (!preferences.desktopNotifs) return false;
-  if (hasFlag(message, "read")) return false;
-  if (isMessageSentByCurrentUser(message, context)) return false;
+  if (!preferences.desktopNotifs) return false
+  if (hasFlag(message, "read")) return false
+  if (isMessageSentByCurrentUser(message, context)) return false
 
   if (message.type === "private") {
-    return preferences.dmNotifs;
+    return preferences.dmNotifs
   }
 
   if (context.isFollowedTopic && preferences.followedTopics) {
-    return true;
+    return true
   }
 
   if (isWildcardMention(message)) {
-    if (preferences.wildcardMentions === "notify") return true;
-    if (preferences.wildcardMentions === "silent") return false;
-    return preferences.mentionNotifs;
+    if (preferences.wildcardMentions === "notify") return true
+    if (preferences.wildcardMentions === "silent") return false
+    return preferences.mentionNotifs
   }
 
   if (isDirectMention(message)) {
-    return preferences.mentionNotifs;
+    return preferences.mentionNotifs
   }
 
-  return preferences.channelNotifs;
+  return preferences.channelNotifs
 }
 
 export function buildNotificationTitle(
@@ -85,43 +79,38 @@ export function buildNotificationTitle(
   streamName?: string,
 ): string {
   if (message.type === "private") {
-    const recipients = Array.isArray(message.display_recipient)
-      ? message.display_recipient
-      : [];
+    const recipients = Array.isArray(message.display_recipient) ? message.display_recipient : []
     if (recipients.length > 2) {
-      return `${message.sender_full_name} (group DM)`;
+      return `${message.sender_full_name} (group DM)`
     }
-    return `${message.sender_full_name} (to you)`;
+    return `${message.sender_full_name} (to you)`
   }
 
-  const streamLabel = streamName || "channel";
-  return `${message.sender_full_name} (#${streamLabel} > ${message.subject})`;
+  const streamLabel = streamName || "channel"
+  return `${message.sender_full_name} (#${streamLabel} > ${message.subject})`
 }
 
 export function buildNotificationBody(html: string): string {
-  const text = htmlToText(html);
-  if (text) return text;
+  const text = htmlToText(html)
+  if (text) return text
 
-  if (
-    /<(?:img|video|audio)\b/i.test(html) ||
-    /href="[^"]*\/user_uploads\//i.test(html)
-  ) {
-    return ATTACHMENT_CONTENT;
+  if (/<(?:img|video|audio)\b/i.test(html) || /href="[^"]*\/user_uploads\//i.test(html)) {
+    return ATTACHMENT_CONTENT
   }
 
-  return "";
+  return ""
 }
 
 function htmlToText(html: string): string {
   if (typeof document !== "undefined") {
-    const node = document.createElement("div");
-    node.innerHTML = html;
-    return normalizeWhitespace(node.textContent || "");
+    const node = document.createElement("div")
+    node.innerHTML = html
+    return normalizeWhitespace(node.textContent || "")
   }
 
-  return normalizeWhitespace(html.replace(/<[^>]+>/g, " "));
+  return normalizeWhitespace(html.replace(/<[^>]+>/g, " "))
 }
 
 function normalizeWhitespace(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return value.replace(/\s+/g, " ").trim()
 }

@@ -56,10 +56,7 @@ pub async fn login(
 
     // Store the org state
     {
-        let mut orgs = state
-            .orgs
-            .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
+        let mut orgs = state.orgs.lock().map_err(|e| format!("Lock error: {}", e))?;
         orgs.insert(
             org_id.clone(),
             crate::OrgState {
@@ -86,10 +83,7 @@ pub async fn login(
 #[tauri::command]
 #[specta::specta]
 pub async fn logout(state: State<'_, AppState>, org_id: String) -> Result<(), String> {
-    let mut orgs = state
-        .orgs
-        .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
+    let mut orgs = state.orgs.lock().map_err(|e| format!("Lock error: {}", e))?;
     if let Some(org) = orgs.remove(&org_id) {
         if let Some(task) = org.event_task {
             task.abort();

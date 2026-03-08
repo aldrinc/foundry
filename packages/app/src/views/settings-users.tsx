@@ -1,48 +1,42 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
-import { useZulipSync } from "../context/zulip-sync";
+import { createSignal, createMemo, For, Show } from "solid-js"
+import { useZulipSync } from "../context/zulip-sync"
 
 export function SettingsUsers() {
-  const sync = useZulipSync();
-  const [search, setSearch] = createSignal("");
-  const [tab, setTab] = createSignal<"active" | "deactivated" | "invitations">(
-    "active",
-  );
+  const sync = useZulipSync()
+  const [search, setSearch] = createSignal("")
+  const [tab, setTab] = createSignal<"active" | "deactivated" | "invitations">("active")
 
   const activeUsers = createMemo(() =>
     sync.store.users
-      .filter((u) => u.is_active)
-      .filter((u) => {
-        const q = search().toLowerCase();
-        return (
-          !q ||
-          u.full_name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q)
-        );
+      .filter(u => u.is_active)
+      .filter(u => {
+        const q = search().toLowerCase()
+        return !q || u.full_name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
       })
-      .sort((a, b) => a.full_name.localeCompare(b.full_name)),
-  );
+      .sort((a, b) => a.full_name.localeCompare(b.full_name))
+  )
 
   const deactivatedUsers = createMemo(() =>
     sync.store.users
-      .filter((u) => !u.is_active)
-      .sort((a, b) => a.full_name.localeCompare(b.full_name)),
-  );
+      .filter(u => !u.is_active)
+      .sort((a, b) => a.full_name.localeCompare(b.full_name))
+  )
 
   const roleLabel = (role: number | null) => {
-    if (role === 100) return "Owner";
-    if (role === 200) return "Admin";
-    if (role === 300) return "Moderator";
-    if (role === 400) return "Member";
-    if (role === 600) return "Guest";
-    return "Member";
-  };
+    if (role === 100) return "Owner"
+    if (role === 200) return "Admin"
+    if (role === 300) return "Moderator"
+    if (role === 400) return "Member"
+    if (role === 600) return "Guest"
+    return "Member"
+  }
 
   const roleBadgeClass = (role: number | null) => {
-    if (role === 100) return "bg-purple-100 text-purple-700";
-    if (role === 200) return "bg-blue-100 text-blue-700";
-    if (role === 300) return "bg-yellow-100 text-yellow-700";
-    return "bg-[var(--background-base)] text-[var(--text-tertiary)]";
-  };
+    if (role === 100) return "bg-purple-100 text-purple-700"
+    if (role === 200) return "bg-blue-100 text-blue-700"
+    if (role === 300) return "bg-yellow-100 text-yellow-700"
+    return "bg-[var(--background-base)] text-[var(--text-tertiary)]"
+  }
 
   return (
     <div class="space-y-6">
@@ -55,23 +49,9 @@ export function SettingsUsers() {
 
       {/* Tabs */}
       <div class="flex gap-4 border-b border-[var(--border-default)]">
-        <TabBtn
-          label="Active"
-          count={activeUsers().length}
-          active={tab() === "active"}
-          onClick={() => setTab("active")}
-        />
-        <TabBtn
-          label="Deactivated"
-          count={deactivatedUsers().length}
-          active={tab() === "deactivated"}
-          onClick={() => setTab("deactivated")}
-        />
-        <TabBtn
-          label="Invitations"
-          active={tab() === "invitations"}
-          onClick={() => setTab("invitations")}
-        />
+        <TabBtn label="Active" count={activeUsers().length} active={tab() === "active"} onClick={() => setTab("active")} />
+        <TabBtn label="Deactivated" count={deactivatedUsers().length} active={tab() === "deactivated"} onClick={() => setTab("deactivated")} />
+        <TabBtn label="Invitations" active={tab() === "invitations"} onClick={() => setTab("invitations")} />
       </div>
 
       {/* Search */}
@@ -94,17 +74,11 @@ export function SettingsUsers() {
                     {user.full_name.charAt(0).toUpperCase()}
                   </div>
                   <div class="min-w-0">
-                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">
-                      {user.full_name}
-                    </div>
-                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">
-                      {user.email}
-                    </div>
+                    <div class="text-xs font-medium text-[var(--text-primary)] truncate">{user.full_name}</div>
+                    <div class="text-[10px] text-[var(--text-tertiary)] truncate">{user.email}</div>
                   </div>
                 </div>
-                <span
-                  class={`text-[9px] font-medium px-1.5 py-0.5 rounded ${roleBadgeClass(user.role)}`}
-                >
+                <span class={`text-[9px] font-medium px-1.5 py-0.5 rounded ${roleBadgeClass(user.role)}`}>
                   {roleLabel(user.role)}
                 </span>
               </div>
@@ -118,9 +92,7 @@ export function SettingsUsers() {
         <Show
           when={deactivatedUsers().length > 0}
           fallback={
-            <div class="text-center py-8 text-xs text-[var(--text-tertiary)]">
-              No deactivated users
-            </div>
+            <div class="text-center py-8 text-xs text-[var(--text-tertiary)]">No deactivated users</div>
           }
         >
           <div class="border border-[var(--border-default)] rounded-[var(--radius-md)] overflow-hidden">
@@ -132,17 +104,11 @@ export function SettingsUsers() {
                       {user.full_name.charAt(0).toUpperCase()}
                     </div>
                     <div class="min-w-0">
-                      <div class="text-xs font-medium text-[var(--text-primary)] truncate">
-                        {user.full_name}
-                      </div>
-                      <div class="text-[10px] text-[var(--text-tertiary)] truncate">
-                        {user.email}
-                      </div>
+                      <div class="text-xs font-medium text-[var(--text-primary)] truncate">{user.full_name}</div>
+                      <div class="text-[10px] text-[var(--text-tertiary)] truncate">{user.email}</div>
                     </div>
                   </div>
-                  <button class="text-[10px] text-[var(--interactive-primary)] hover:underline">
-                    Reactivate
-                  </button>
+                  <button class="text-[10px] text-[var(--interactive-primary)] hover:underline">Reactivate</button>
                 </div>
               )}
             </For>
@@ -153,24 +119,17 @@ export function SettingsUsers() {
       {/* Invitations */}
       <Show when={tab() === "invitations"}>
         <div class="text-center py-8">
-          <div class="text-sm text-[var(--text-tertiary)]">
-            No pending invitations
-          </div>
+          <div class="text-sm text-[var(--text-tertiary)]">No pending invitations</div>
           <div class="text-xs text-[var(--text-quaternary)] mt-1">
             Use the "Invite users" button to send invitations
           </div>
         </div>
       </Show>
     </div>
-  );
+  )
 }
 
-function TabBtn(props: {
-  label: string;
-  count?: number;
-  active: boolean;
-  onClick: () => void;
-}) {
+function TabBtn(props: { label: string; count?: number; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={props.onClick}
@@ -182,10 +141,8 @@ function TabBtn(props: {
     >
       {props.label}
       <Show when={props.count !== undefined}>
-        <span class="text-[9px] text-[var(--text-tertiary)]">
-          ({props.count})
-        </span>
+        <span class="text-[9px] text-[var(--text-tertiary)]">({props.count})</span>
       </Show>
     </button>
-  );
+  )
 }

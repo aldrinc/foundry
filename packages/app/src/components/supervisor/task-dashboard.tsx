@@ -1,6 +1,6 @@
-import type { SupervisorTask } from "@zulip/desktop/bindings";
-import { createSignal, For, Show } from "solid-js";
-import { useSupervisor } from "../../context/supervisor";
+import { For, Show, createSignal } from "solid-js"
+import { useSupervisor } from "../../context/supervisor"
+import type { SupervisorTask } from "@zulip/desktop/bindings"
 
 const STATUS_COLORS: Record<string, string> = {
   running: "bg-[var(--status-success)]",
@@ -10,17 +10,17 @@ const STATUS_COLORS: Record<string, string> = {
   paused: "bg-[var(--status-warning)]",
   stalled: "bg-orange-500",
   cancelled: "bg-[var(--text-tertiary)]",
-};
+}
 
 export function TaskDashboard() {
-  const supervisor = useSupervisor();
-  const [expanded, setExpanded] = createSignal(true);
+  const supervisor = useSupervisor()
+  const [expanded, setExpanded] = createSignal(true)
 
   const completedCount = () =>
-    supervisor.store.tasks.filter((t) => t.status === "completed").length;
-  const totalCount = () => supervisor.store.tasks.length;
+    supervisor.store.tasks.filter(t => t.status === "completed").length
+  const totalCount = () => supervisor.store.tasks.length
   const progressPct = () =>
-    totalCount() > 0 ? Math.round((completedCount() / totalCount()) * 100) : 0;
+    totalCount() > 0 ? Math.round((completedCount() / totalCount()) * 100) : 0
 
   return (
     <div
@@ -28,26 +28,15 @@ export function TaskDashboard() {
       data-component="task-dashboard"
     >
       <button
-        onClick={() => setExpanded((e) => !e)}
+        onClick={() => setExpanded(e => !e)}
         class="w-full flex items-center justify-between px-3 py-2 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors"
       >
-        <span>
-          Tasks ({completedCount()}/{totalCount()})
-        </span>
+        <span>Tasks ({completedCount()}/{totalCount()})</span>
         <svg
-          width="12"
-          height="12"
-          viewBox="0 0 12 12"
-          fill="none"
+          width="12" height="12" viewBox="0 0 12 12" fill="none"
           class={`transition-transform ${expanded() ? "rotate-180" : ""}`}
         >
-          <path
-            d="M3 4.5l3 3 3-3"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
+          <path d="M3 4.5l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
       </button>
 
@@ -70,26 +59,25 @@ export function TaskDashboard() {
         </div>
       </Show>
     </div>
-  );
+  )
 }
 
 function TaskRow(props: { task: SupervisorTask }) {
-  const supervisor = useSupervisor();
-  const [replyText, setReplyText] = createSignal("");
+  const supervisor = useSupervisor()
+  const [replyText, setReplyText] = createSignal("")
 
-  const statusDot = () =>
-    STATUS_COLORS[props.task.status || "queued"] || "bg-[var(--text-tertiary)]";
+  const statusDot = () => STATUS_COLORS[props.task.status || "queued"] || "bg-[var(--text-tertiary)]"
 
   const handleControl = (action: string) => {
-    supervisor.controlTask(props.task.task_id, action);
-  };
+    supervisor.controlTask(props.task.task_id, action)
+  }
 
   const handleReply = () => {
-    const text = replyText().trim();
-    if (!text) return;
-    supervisor.replyToClarification(props.task.task_id, text);
-    setReplyText("");
-  };
+    const text = replyText().trim()
+    if (!text) return
+    supervisor.replyToClarification(props.task.task_id, text)
+    setReplyText("")
+  }
 
   return (
     <div class="px-3 py-1.5 border-t border-[var(--border-default)] first:border-t-0">
@@ -104,9 +92,7 @@ function TaskRow(props: { task: SupervisorTask }) {
       </div>
 
       {/* Action buttons */}
-      <Show
-        when={props.task.status === "running" || props.task.status === "paused"}
-      >
+      <Show when={props.task.status === "running" || props.task.status === "paused"}>
         <div class="flex gap-1 mt-1 ml-3.5">
           <Show when={props.task.status === "running"}>
             <button
@@ -136,9 +122,7 @@ function TaskRow(props: { task: SupervisorTask }) {
       {/* Clarification reply */}
       <Show when={props.task.clarification_requested}>
         <div class="mt-1.5 ml-3.5">
-          <div class="text-[10px] text-[var(--status-warning)] mb-1">
-            Clarification needed
-          </div>
+          <div class="text-[10px] text-[var(--status-warning)] mb-1">Clarification needed</div>
           <div class="flex gap-1">
             <input
               type="text"
@@ -165,5 +149,5 @@ function TaskRow(props: { task: SupervisorTask }) {
         </div>
       </Show>
     </div>
-  );
+  )
 }

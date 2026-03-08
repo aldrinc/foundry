@@ -1,1 +1,1 @@
-export { SupervisorPanel } from "./supervisor-panel";
+export { SupervisorPanel } from "./supervisor-panel"
