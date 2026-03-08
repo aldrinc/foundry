@@ -2,6 +2,7 @@ import { For, Show, createMemo, createSignal, type JSX } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
+import { useSupervisor } from "../context/supervisor"
 import { commands } from "@zulip/desktop/bindings"
 import type { Topic } from "@zulip/desktop/bindings"
 import { DirectMessageList } from "./dm-list"
@@ -10,9 +11,12 @@ import { PersonalMenu } from "./personal-menu"
 
 export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: () => void }) {
   const sync = useZulipSync()
+  const org = useOrg()
   const nav = useNavigation()
+  const supervisor = useSupervisor()
   const [showSearch, setShowSearch] = createSignal(false)
   const [showPersonalMenu, setShowPersonalMenu] = createSignal(false)
+  const [showCreateChannel, setShowCreateChannel] = createSignal(false)
 
   const currentUserName = () => {
     const userId = sync.store.currentUserId
@@ -39,6 +43,10 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
   )
 
   const handleStreamClick = (streamId: number) => {
+    // Close supervisor when switching channels — it's scoped to a specific channel+topic
+    if (supervisor.store.active && supervisor.store.streamId !== streamId) {
+      supervisor.close()
+    }
     nav.setActiveNarrow(`stream:${streamId}`)
   }
 
@@ -101,20 +109,39 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
         />
       </div>
 
-      {/* Channels header with search icon */}
+      {/* Channels header with search and add icons */}
       <div class="px-3 py-2 flex items-center justify-between">
         <span class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Channels</span>
-        <button
-          class="p-0.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-          onClick={() => setShowSearch(s => !s)}
-          title="Search messages (⌘K)"
-        >
-          <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-            <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.3" />
-            <path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-          </svg>
-        </button>
+        <div class="flex items-center gap-0.5">
+          <button
+            class="p-0.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+            onClick={() => setShowCreateChannel(s => !s)}
+            title="Create channel"
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </button>
+          <button
+            class="p-0.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+            onClick={() => setShowSearch(s => !s)}
+            title="Search messages (⌘K)"
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
+              <circle cx="6" cy="6" r="4.5" stroke="currentColor" stroke-width="1.3" />
+              <path d="M9.5 9.5L13 13" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {/* Create channel form */}
+      <Show when={showCreateChannel()}>
+        <CreateChannelForm
+          orgId={org.orgId}
+          onClose={() => setShowCreateChannel(false)}
+        />
+      </Show>
 
       {/* Expandable search bar */}
       <Show when={showSearch()}>
@@ -194,11 +221,39 @@ function StreamItem(props: {
   const org = useOrg()
   const nav = useNavigation()
   const sync = useZulipSync()
+  const supervisor = useSupervisor()
   const [expanded, setExpanded] = createSignal(false)
   const [topics, setTopics] = createSignal<Topic[]>([])
   const [loadingTopics, setLoadingTopics] = createSignal(false)
   const [topicError, setTopicError] = createSignal("")
   const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; type: "stream" | "topic"; topicName?: string } | null>(null)
+
+  /** Fetch topics if not already loaded */
+  const ensureTopicsLoaded = async () => {
+    if (topics().length > 0 || loadingTopics()) return
+    setLoadingTopics(true)
+    setTopicError("")
+    try {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Request timed out")), 15000)
+      )
+      const result = await Promise.race([
+        commands.getStreamTopics(org.orgId, props.stream.stream_id),
+        timeoutPromise,
+      ])
+      if (result.status === "ok") {
+        setTopics(result.data)
+      } else {
+        console.error(`[Topics] Failed to load topics for stream ${props.stream.name}:`, result.error)
+        setTopicError(result.error || "Failed to load")
+      }
+    } catch (e: any) {
+      console.error(`[Topics] Error loading topics for stream ${props.stream.name}:`, e)
+      setTopicError(e?.message || "Failed to load topics")
+    } finally {
+      setLoadingTopics(false)
+    }
+  }
 
   const toggleExpand = async (e: MouseEvent) => {
     e.stopPropagation()
@@ -207,31 +262,7 @@ function StreamItem(props: {
       return
     }
     setExpanded(true)
-    if (topics().length === 0 && !loadingTopics()) {
-      setLoadingTopics(true)
-      setTopicError("")
-      try {
-        // Add timeout to prevent indefinite hanging
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Request timed out")), 15000)
-        )
-        const result = await Promise.race([
-          commands.getStreamTopics(org.orgId, props.stream.stream_id),
-          timeoutPromise,
-        ])
-        if (result.status === "ok") {
-          setTopics(result.data)
-        } else {
-          console.error(`[Topics] Failed to load topics for stream ${props.stream.name}:`, result.error)
-          setTopicError(result.error || "Failed to load")
-        }
-      } catch (e: any) {
-        console.error(`[Topics] Error loading topics for stream ${props.stream.name}:`, e)
-        setTopicError(e?.message || "Failed to load topics")
-      } finally {
-        setLoadingTopics(false)
-      }
-    }
+    await ensureTopicsLoaded()
   }
 
   const handleStreamContextMenu = (e: MouseEvent) => {
@@ -271,6 +302,10 @@ function StreamItem(props: {
   }
 
   const handleTopicClick = (topic: string) => {
+    // Close supervisor if switching to a different channel's topic
+    if (supervisor.store.active && supervisor.store.streamId !== props.stream.stream_id) {
+      supervisor.close()
+    }
     nav.setActiveNarrow(`stream:${props.stream.stream_id}/topic:${topic}`)
   }
 
@@ -291,7 +326,14 @@ function StreamItem(props: {
           "bg-[var(--background-surface)]": props.active,
           "opacity-50": props.muted,
         }}
-        onClick={props.onClick}
+        onClick={() => {
+          props.onClick()
+          // Auto-expand topics when clicking a channel
+          if (!expanded()) {
+            setExpanded(true)
+            void ensureTopicsLoaded()
+          }
+        }}
         onContextMenu={handleStreamContextMenu}
         data-component="stream-item"
       >
@@ -403,6 +445,68 @@ function StreamItem(props: {
         )}
       </Show>
     </div>
+  )
+}
+
+function CreateChannelForm(props: { orgId: string; onClose: () => void }) {
+  const [name, setName] = createSignal("")
+  const [creating, setCreating] = createSignal(false)
+  const [error, setError] = createSignal("")
+
+  const handleSubmit = async (e: Event) => {
+    e.preventDefault()
+    const channelName = name().trim()
+    if (!channelName) return
+
+    setCreating(true)
+    setError("")
+    try {
+      const result = await commands.subscribeStream(props.orgId, [channelName])
+      if (result.status === "ok") {
+        props.onClose()
+      } else {
+        setError(result.error || "Failed to create channel")
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to create channel")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} class="px-2 pb-2">
+      <div class="flex items-center gap-1">
+        <input
+          type="text"
+          class="flex-1 text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] placeholder:text-[var(--text-quaternary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+          placeholder="Channel name..."
+          value={name()}
+          onInput={(e) => setName(e.currentTarget.value)}
+          disabled={creating()}
+          autofocus
+        />
+        <button
+          type="submit"
+          class="px-2 py-1.5 text-[11px] rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-50 shrink-0"
+          disabled={creating() || !name().trim()}
+        >
+          {creating() ? "..." : "Add"}
+        </button>
+        <button
+          type="button"
+          class="p-1 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors shrink-0"
+          onClick={props.onClose}
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+      <Show when={error()}>
+        <div class="text-[10px] text-[var(--status-error)] mt-1 px-0.5">{error()}</div>
+      </Show>
+    </form>
   )
 }
 
