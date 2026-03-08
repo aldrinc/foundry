@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::supervisor_types::*;
 use super::ZulipClient;
 
@@ -70,12 +72,28 @@ impl ZulipClient {
             params.push(("topic", t.to_string()));
         }
 
-        let resp = self
-            .post(&path)
-            .form(&params)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to send supervisor message: {}", e))?;
+        // The backend de-duplicates by client_msg_id, so one retry is safe if
+        // the transport flakes after the request may already have been
+        // accepted upstream.
+        let mut attempt = 0;
+        let resp = loop {
+            match self.post(&path).form(&params).send().await {
+                Ok(resp) => break resp,
+                Err(error) if attempt == 0 => {
+                    tracing::warn!(
+                        ?error,
+                        topic_scope_id = %topic_scope_id,
+                        client_msg_id = %client_msg_id,
+                        "Retrying supervisor message after transport error"
+                    );
+                    attempt += 1;
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                }
+                Err(error) => {
+                    return Err(format!("Failed to send supervisor message: {}", error));
+                }
+            }
+        };
 
         if !resp.status().is_success() {
             let status = resp.status();

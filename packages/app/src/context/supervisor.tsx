@@ -482,6 +482,12 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
           if (data.events) {
             mergeSupervisorSnapshot({ events: data.events })
           }
+          setStore(produce(s => {
+            if (s.warningTone === "error") {
+              s.warning = ""
+              s.warningTone = "info"
+            }
+          }))
         }
       } catch (e: any) {
         setWarning(e?.toString() || "Failed to send message")

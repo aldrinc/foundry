@@ -383,6 +383,12 @@ export function SupervisorProvider(props) {
                     if (data.events) {
                         mergeSupervisorSnapshot({ events: data.events });
                     }
+                    setStore(produce(s => {
+                        if (s.warningTone === "error") {
+                            s.warning = "";
+                            s.warningTone = "info";
+                        }
+                    }));
                 }
             }
             catch (e) {
