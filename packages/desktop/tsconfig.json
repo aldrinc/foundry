@@ -12,6 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "outDir": ".tsc-out",
     "noEmit": true,
     "paths": {
       "@zulip/ui/*": ["../ui/src/*"],
@@ -19,6 +20,7 @@
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/**/*.d.ts", "src/**/*.d.ts.map", "src/**/*.js", "src/**/*.jsx"],
   "references": [
     { "path": "../ui" },
     { "path": "../app" }
