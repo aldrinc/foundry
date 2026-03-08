@@ -1,9 +1,11 @@
-import { createContext, useContext, onCleanup } from "solid-js";
+import { createContext, createEffect, useContext, onCleanup } from "solid-js";
 import { createStore, produce } from "solid-js/store";
 import { listen } from "@tauri-apps/api/event";
 import { commands } from "@zulip/desktop/bindings";
 import { unwrapSupervisorMessageWithDelegates, wrapSupervisorMessageWithDelegates, } from "./agent-runtime";
 import { useAgents } from "./agents";
+import { useNavigation } from "./navigation";
+import { shouldKeepSupervisorOpenForNarrow } from "./supervisor-navigation";
 const initialStore = {
     active: false,
     topicScopeId: null,
@@ -37,6 +39,7 @@ const SUPERVISOR_PREVIEW_WARNING = "Supervisor runtime is unavailable in browser
 import { sanitizeEventId } from "../tauri-event-utils";
 export function SupervisorProvider(props) {
     const agents = useAgents();
+    const nav = useNavigation();
     const [store, setStore] = createStore({ ...initialStore, seenEventIds: new Set(), pendingUserEchoes: new Map() });
     let unlisteners = [];
     let pollTimer;
@@ -449,6 +452,14 @@ export function SupervisorProvider(props) {
             return null;
         },
     };
+    createEffect(() => {
+        const activeNarrow = nav.activeNarrow();
+        if (!store.active)
+            return;
+        if (shouldKeepSupervisorOpenForNarrow(activeNarrow, store.streamId, store.topicName))
+            return;
+        ctx.close();
+    });
     onCleanup(() => {
         stopPollingFallback();
         cleanupEventListeners();

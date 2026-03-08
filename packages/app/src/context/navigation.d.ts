@@ -1,4 +1,5 @@
 import { type JSX, type Accessor, type Setter } from "solid-js";
+import { type ParsedNarrow } from "./navigation-utils";
 /** Narrow string format:
  * - null: Inbox view
  * - "stream:{stream_id}": All messages in a stream
@@ -10,9 +11,6 @@ import { type JSX, type Accessor, type Setter } from "solid-js";
  * - "search:{query}": Search results
  */
 export type Narrow = string | null;
-/** Special view narrows (not Zulip API narrows) */
-export declare const SPECIAL_NARROWS: readonly ["starred", "all-messages", "recent-topics"];
-export type SpecialNarrow = typeof SPECIAL_NARROWS[number];
 export interface NavigationContext {
     activeNarrow: Accessor<Narrow>;
     setActiveNarrow: Setter<Narrow>;
@@ -22,13 +20,7 @@ export interface NavigationContext {
         operand: string | number[];
     }[];
     /** Get display info from a narrow string */
-    parseNarrow(narrow: string): {
-        type: "stream" | "topic" | "dm" | "starred" | "all-messages" | "recent-topics" | "search";
-        streamId?: number;
-        topic?: string;
-        userIds?: number[];
-        query?: string;
-    } | null;
+    parseNarrow(narrow: string): ParsedNarrow | null;
     /** Check if a narrow is a special view type */
     isSpecialNarrow(narrow: string): boolean;
 }

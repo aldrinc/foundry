@@ -2,7 +2,6 @@ import { For, Show, createMemo, createSignal, type JSX } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
-import { useSupervisor } from "../context/supervisor"
 import { commands } from "@zulip/desktop/bindings"
 import type { Topic } from "@zulip/desktop/bindings"
 import { DirectMessageList } from "./dm-list"
@@ -13,7 +12,6 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
-  const supervisor = useSupervisor()
   const [showSearch, setShowSearch] = createSignal(false)
   const [showPersonalMenu, setShowPersonalMenu] = createSignal(false)
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
@@ -43,10 +41,6 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
   )
 
   const handleStreamClick = (streamId: number) => {
-    // Close supervisor when switching channels — it's scoped to a specific channel+topic
-    if (supervisor.store.active && supervisor.store.streamId !== streamId) {
-      supervisor.close()
-    }
     nav.setActiveNarrow(`stream:${streamId}`)
   }
 
@@ -221,7 +215,6 @@ function StreamItem(props: {
   const org = useOrg()
   const nav = useNavigation()
   const sync = useZulipSync()
-  const supervisor = useSupervisor()
   const [expanded, setExpanded] = createSignal(false)
   const [topics, setTopics] = createSignal<Topic[]>([])
   const [loadingTopics, setLoadingTopics] = createSignal(false)
@@ -302,10 +295,6 @@ function StreamItem(props: {
   }
 
   const handleTopicClick = (topic: string) => {
-    // Close supervisor if switching to a different channel's topic
-    if (supervisor.store.active && supervisor.store.streamId !== props.stream.stream_id) {
-      supervisor.close()
-    }
     nav.setActiveNarrow(`stream:${props.stream.stream_id}/topic:${topic}`)
   }
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, type JSX, onCleanup } from "solid-js"
+import { createContext, createEffect, useContext, type JSX, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { commands } from "@zulip/desktop/bindings"
@@ -13,6 +13,8 @@ import {
   wrapSupervisorMessageWithDelegates,
 } from "./agent-runtime"
 import { useAgents } from "./agents"
+import { useNavigation } from "./navigation"
+import { shouldKeepSupervisorOpenForNarrow } from "./supervisor-navigation"
 
 // ── Store shape ──
 
@@ -94,6 +96,7 @@ import { sanitizeEventId } from "../tauri-event-utils"
 
 export function SupervisorProvider(props: { orgId: string; children: JSX.Element }) {
   const agents = useAgents()
+  const nav = useNavigation()
   const [store, setStore] = createStore<SupervisorStore>({ ...initialStore, seenEventIds: new Set(), pendingUserEchoes: new Map() })
   let unlisteners: UnlistenFn[] = []
   let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -553,6 +556,13 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       return null
     },
   }
+
+  createEffect(() => {
+    const activeNarrow = nav.activeNarrow()
+    if (!store.active) return
+    if (shouldKeepSupervisorOpenForNarrow(activeNarrow, store.streamId, store.topicName)) return
+    ctx.close()
+  })
 
   onCleanup(() => {
     stopPollingFallback()
