@@ -71,8 +71,7 @@ impl ZulipClient {
 
     /// Unauthenticated GET (for server_settings)
     pub fn get_unauth(&self, path: &str) -> reqwest::RequestBuilder {
-        self.client
-            .get(format!("{}{}", self.base_url, path))
+        self.client.get(format!("{}{}", self.base_url, path))
     }
 
     /// Build an authenticated GET request for SSE streaming using a provided
@@ -180,7 +179,8 @@ mod tests {
             assert!(
                 !result.contains('.'),
                 "sanitize_event_id({:?}) = {:?} still contains dots",
-                input, result
+                input,
+                result
             );
         }
     }

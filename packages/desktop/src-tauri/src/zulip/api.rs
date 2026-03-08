@@ -252,14 +252,9 @@ impl ZulipClient {
     }
 
     /// POST /api/v1/messages/flags — Update message flags
-    pub async fn update_flags(
-        &self,
-        messages: &[u64],
-        op: &str,
-        flag: &str,
-    ) -> Result<(), String> {
-        let messages_json = serde_json::to_string(messages)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+    pub async fn update_flags(&self, messages: &[u64], op: &str, flag: &str) -> Result<(), String> {
+        let messages_json =
+            serde_json::to_string(messages).map_err(|e| format!("Serialize error: {}", e))?;
 
         let resp = self
             .post("/api/v1/messages/flags")
@@ -352,8 +347,8 @@ impl ZulipClient {
             .map(|name| serde_json::json!({"name": name}))
             .collect();
 
-        let subscriptions_json = serde_json::to_string(&subscriptions)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+        let subscriptions_json =
+            serde_json::to_string(&subscriptions).map_err(|e| format!("Serialize error: {}", e))?;
 
         let resp = self
             .post("/api/v1/users/me/subscriptions")
@@ -372,8 +367,8 @@ impl ZulipClient {
 
     /// DELETE /api/v1/users/me/subscriptions — Unsubscribe from streams
     pub async fn unsubscribe(&self, stream_names: &[String]) -> Result<(), String> {
-        let streams_json = serde_json::to_string(stream_names)
-            .map_err(|e| format!("Serialize error: {}", e))?;
+        let streams_json =
+            serde_json::to_string(stream_names).map_err(|e| format!("Serialize error: {}", e))?;
 
         let resp = self
             .delete("/api/v1/users/me/subscriptions")
@@ -394,10 +389,7 @@ impl ZulipClient {
     pub async fn update_presence(&self, status: &str) -> Result<(), String> {
         let resp = self
             .post("/api/v1/users/me/presence")
-            .form(&[
-                ("status", status),
-                ("ping_only", "false"),
-            ])
+            .form(&[("status", status), ("ping_only", "false")])
             .send()
             .await
             .map_err(|e| format!("Update presence failed: {}", e))?;
@@ -490,9 +482,12 @@ impl ZulipClient {
     }
 
     /// POST /api/v1/user_uploads — Upload a file
-    pub async fn upload_file(&self, file_bytes: Vec<u8>, file_name: &str) -> Result<UploadResult, String> {
-        let part = reqwest::multipart::Part::bytes(file_bytes)
-            .file_name(file_name.to_string());
+    pub async fn upload_file(
+        &self,
+        file_bytes: Vec<u8>,
+        file_name: &str,
+    ) -> Result<UploadResult, String> {
+        let part = reqwest::multipart::Part::bytes(file_bytes).file_name(file_name.to_string());
         let form = reqwest::multipart::Form::new().part("file", part);
 
         let resp = self
