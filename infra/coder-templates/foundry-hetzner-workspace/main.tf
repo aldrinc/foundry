@@ -102,7 +102,9 @@ resource "hcloud_volume_attachment" "home" {
 }
 
 resource "hcloud_firewall_attachment" "runner" {
-  for_each = data.coder_workspace.me.start_count == 0 ? toset([]) : toset(var.firewall_ids)
+  for_each = data.coder_workspace.me.start_count == 0 ? {} : {
+    for id in var.firewall_ids : tostring(id) => id
+  }
 
   firewall_id = each.value
   server_ids  = [hcloud_server.runner[0].id]
