@@ -44,6 +44,7 @@ class AppConfig:
     public_base_url: str
     api_base_url: str
     support_email: str
+    database_path: str
     self_host_mode: bool
     auth_provider: AuthProvider
     oidc_issuer_url: str
@@ -107,6 +108,10 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         public_base_url=source.get("FOUNDRY_PUBLIC_BASE_URL", "http://127.0.0.1:8090"),
         api_base_url=source.get("FOUNDRY_API_BASE_URL", "http://127.0.0.1:8090"),
         support_email=source.get("FOUNDRY_SUPPORT_EMAIL", "support@example.com"),
+        database_path=source.get(
+            "FOUNDRY_DATABASE_PATH",
+            "./data/foundry-server.db",
+        ),
         self_host_mode=_env_bool(source, "FOUNDRY_SELF_HOST_MODE", False),
         auth_provider=AuthProvider(
             source.get("FOUNDRY_AUTH_PROVIDER", AuthProvider.OIDC.value)

@@ -40,6 +40,8 @@ ssh -i ~/.ssh/hetzner_prod -o StrictHostKeyChecking=accept-new "root@${HOST}" \
 set -euo pipefail
 
 mkdir -p /etc/foundry
+mkdir -p /var/lib/foundry
+chown foundrydev:foundrydev /var/lib/foundry
 cat > /etc/foundry/foundry-server.env <<ENVFILE
 FOUNDRY_ENVIRONMENT=staging
 FOUNDRY_HOST=127.0.0.1
@@ -47,6 +49,7 @@ FOUNDRY_PORT=8090
 FOUNDRY_PUBLIC_BASE_URL=https://${SERVER_HOSTNAME}
 FOUNDRY_API_BASE_URL=https://${SERVER_HOSTNAME}
 FOUNDRY_SUPPORT_EMAIL=${SUPPORT_EMAIL}
+FOUNDRY_DATABASE_PATH=/var/lib/foundry/foundry-server.db
 FOUNDRY_AUTH_PROVIDER=oidc
 FOUNDRY_GITHUB_APP_NAME=${GITHUB_APP_NAME}
 FOUNDRY_GITHUB_API_URL=${GITHUB_API_URL}
