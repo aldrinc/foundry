@@ -9,6 +9,7 @@ from fastapi import Body
 from fastapi import FastAPI
 from fastapi import Header, HTTPException, Request
 
+from .coder_client import CoderClient, CoderConfigurationError, CoderRequestError
 from .config import AppConfig, load_config
 from .decisions import LAUNCH_DECISIONS
 from .domain import (
@@ -50,10 +51,23 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             app.state.github_app_client = client
         return client
 
+    def get_coder_client() -> CoderClient:
+        client = getattr(app.state, "coder_client", None)
+        if client is None:
+            client = CoderClient.from_config(server_config)
+            app.state.coder_client = client
+        return client
+
     def require_github_app_client() -> GitHubAppClient:
         try:
             return get_github_app_client()
         except GitHubAppConfigurationError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def require_coder_client() -> CoderClient:
+        try:
+            return get_coder_client()
+        except CoderConfigurationError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     def get_store() -> FoundryStore:
@@ -199,7 +213,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 "Add OIDC-backed hosted auth and self-host bootstrap auth.",
                 "Bind GitHub App installations to persisted organizations.",
                 "Migrate orchestration and workspace policy from the internal service.",
-                "Deploy a Foundry-owned Coder control plane on Terraform-managed infrastructure.",
+                "Drive the Foundry-owned Coder template and workspace lifecycle from this API.",
             ],
         }
 
@@ -369,6 +383,41 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         try:
             return client.list_installations()
         except GitHubAppRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    @app.get("/api/v1/coder/status")
+    def coder_status() -> dict[str, object]:
+        client = require_coder_client()
+        try:
+            build_info = client.build_info()
+            templates = client.list_templates()
+            workspaces = client.list_workspaces()
+        except CoderRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+        return {
+            "configured": True,
+            "url": server_config.coder_url,
+            "build": build_info,
+            "template_count": len(templates),
+            "workspace_count": len(workspaces),
+            "healthy_workspace_count": sum(1 for item in workspaces if item["healthy"]),
+        }
+
+    @app.get("/api/v1/coder/templates")
+    def coder_templates() -> list[dict[str, object]]:
+        client = require_coder_client()
+        try:
+            return client.list_templates()
+        except CoderRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    @app.get("/api/v1/coder/workspaces")
+    def coder_workspaces() -> list[dict[str, object]]:
+        client = require_coder_client()
+        try:
+            return client.list_workspaces()
+        except CoderRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     @app.post("/api/v1/organizations/{organization_id}/github/installations/{installation_id}/bind")

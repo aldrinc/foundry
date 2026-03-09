@@ -61,7 +61,83 @@ class _ControlPlaneGitHubApiHandler(BaseHTTPRequestHandler):
         return
 
 
+class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
+    def _write_json(self, payload: dict[str, object] | list[dict[str, object]]) -> None:
+        encoded = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def do_GET(self) -> None:  # noqa: N802
+        if self.path == "/api/v2/buildinfo":
+            self._write_json(
+                {
+                    "version": "v2.31.3+test",
+                    "dashboard_url": "https://coder-dev.foundry.test",
+                    "external_url": "https://github.com/coder/coder/commit/test",
+                    "telemetry": False,
+                    "workspace_proxy": False,
+                    "agent_api_version": "1.0",
+                    "provisioner_api_version": "1.15",
+                    "deployment_id": "deployment-test",
+                }
+            )
+            return
+
+        if self.path == "/api/v2/templates":
+            self._write_json(
+                [
+                    {
+                        "id": "template-1",
+                        "name": "foundry-hetzner-workspace",
+                        "display_name": "",
+                        "active_version_id": "version-1",
+                        "created_by_name": "foundryadmin",
+                        "active_user_count": 1,
+                        "deprecated": False,
+                        "deleted": False,
+                    }
+                ]
+            )
+            return
+
+        if self.path == "/api/v2/workspaces?q=":
+            self._write_json(
+                {
+                    "workspaces": [
+                        {
+                            "id": "workspace-1",
+                            "name": "foundry-owned-smoke",
+                            "owner_name": "foundryadmin",
+                            "organization_name": "coder",
+                            "template_name": "foundry-hetzner-workspace",
+                            "health": {"healthy": True},
+                            "outdated": False,
+                            "last_used_at": "2026-03-09T20:57:07.148301Z",
+                            "latest_build": {
+                                "status": "running",
+                                "transition": "start",
+                            },
+                        }
+                    ]
+                }
+            )
+            return
+
+        self.send_error(404)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        return
+
+
 class _ThreadingControlPlaneGitHubApiServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+class _ThreadingControlPlaneCoderApiServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
@@ -97,6 +173,16 @@ class ControlPlaneTests(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(lambda: thread.join(timeout=5))
 
+        coder_server = _ThreadingControlPlaneCoderApiServer(
+            ("127.0.0.1", 0),
+            _ControlPlaneCoderApiHandler,
+        )
+        coder_thread = threading.Thread(target=coder_server.serve_forever, daemon=True)
+        coder_thread.start()
+        self.addCleanup(coder_server.shutdown)
+        self.addCleanup(coder_server.server_close)
+        self.addCleanup(lambda: coder_thread.join(timeout=5))
+
         config = load_config(
             {
                 "FOUNDRY_DATABASE_PATH": database_handle.name,
@@ -104,6 +190,8 @@ class ControlPlaneTests(unittest.TestCase):
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
                 "FOUNDRY_GITHUB_API_URL": f"http://127.0.0.1:{server.server_address[1]}",
+                "FOUNDRY_CODER_URL": f"http://127.0.0.1:{coder_server.server_address[1]}",
+                "FOUNDRY_CODER_API_TOKEN": "coder-test-token",
                 "FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET": "bootstrap-secret",
             }
         )
@@ -204,6 +292,22 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(installation_response.status_code, 200)
             self.assertEqual(installation_response.json()["installation_id"], "115185467")
+
+    def test_coder_status_and_inventory_endpoints(self) -> None:
+        with self._create_client() as client:
+            status_response = client.get("/api/v1/coder/status")
+            self.assertEqual(status_response.status_code, 200)
+            self.assertEqual(status_response.json()["build"]["version"], "v2.31.3+test")
+            self.assertEqual(status_response.json()["template_count"], 1)
+            self.assertEqual(status_response.json()["healthy_workspace_count"], 1)
+
+            templates_response = client.get("/api/v1/coder/templates")
+            self.assertEqual(templates_response.status_code, 200)
+            self.assertEqual(templates_response.json()[0]["name"], "foundry-hetzner-workspace")
+
+            workspaces_response = client.get("/api/v1/coder/workspaces")
+            self.assertEqual(workspaces_response.status_code, 200)
+            self.assertEqual(workspaces_response.json()[0]["name"], "foundry-owned-smoke")
 
 
 if __name__ == "__main__":

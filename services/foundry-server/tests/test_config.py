@@ -30,6 +30,7 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.self_host_mode)
         self.assertFalse(config.github_app_private_key_present)
         self.assertFalse(config.github_webhook_secret_present)
+        self.assertFalse(config.coder_api_token_present)
         self.assertFalse(config.stripe_secret_key_present)
 
     def test_env_overrides_are_applied(self) -> None:
@@ -41,6 +42,8 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_SUPPORT_EMAIL": "support@foundry.test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": "/tmp/foundry.pem",
                 "FOUNDRY_GITHUB_WEBHOOK_SECRET": "secret",
+                "FOUNDRY_CODER_URL": "https://coder.foundry.test",
+                "FOUNDRY_CODER_API_TOKEN": "coder-token",
                 "FOUNDRY_STRIPE_SECRET_KEY": "sk_test_123",
                 "FOUNDRY_STRIPE_WEBHOOK_SECRET": "whsec_123",
                 "FOUNDRY_ORG_WORKSPACE_POOL_SIZE": "8",
@@ -54,6 +57,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.support_email, "support@foundry.test")
         self.assertTrue(config.github_app_private_key_present)
         self.assertTrue(config.github_webhook_secret_present)
+        self.assertEqual(config.coder_url, "https://coder.foundry.test")
+        self.assertTrue(config.coder_api_token_present)
         self.assertTrue(config.stripe_secret_key_present)
         self.assertTrue(config.stripe_webhook_secret_present)
         self.assertEqual(config.organization_workspace_pool_size, 8)

@@ -58,6 +58,9 @@ class AppConfig:
     github_app_private_key_present: bool
     github_webhook_secret: str
     github_webhook_secret_present: bool
+    coder_url: str
+    coder_api_token: str
+    coder_api_token_present: bool
     workspace_bootstrap_secret: str
     workspace_bootstrap_secret_present: bool
     stripe_secret_key_present: bool
@@ -88,6 +91,9 @@ class AppConfig:
             ),
             "github_app_private_key_present": self.github_app_private_key_present,
             "github_webhook_secret_present": self.github_webhook_secret_present,
+            "coder_url": self.coder_url,
+            "coder_configured": bool(self.coder_url and self.coder_api_token_present),
+            "coder_api_token_present": self.coder_api_token_present,
             "workspace_bootstrap_secret_present": self.workspace_bootstrap_secret_present,
             "stripe_configured": self.stripe_secret_key_present,
             "stripe_webhook_secret_present": self.stripe_webhook_secret_present,
@@ -131,6 +137,9 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         github_webhook_secret_present=bool(
             source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", "").strip()
         ),
+        coder_url=source.get("FOUNDRY_CODER_URL", "").rstrip("/"),
+        coder_api_token=source.get("FOUNDRY_CODER_API_TOKEN", ""),
+        coder_api_token_present=bool(source.get("FOUNDRY_CODER_API_TOKEN", "").strip()),
         workspace_bootstrap_secret=source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", ""),
         workspace_bootstrap_secret_present=bool(
             source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", "").strip()

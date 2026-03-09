@@ -15,6 +15,8 @@ GITHUB_APP_ID="${FOUNDRY_GITHUB_APP_ID:-}"
 GITHUB_CLIENT_ID="${FOUNDRY_GITHUB_CLIENT_ID:-}"
 GITHUB_WEBHOOK_SECRET="${FOUNDRY_GITHUB_WEBHOOK_SECRET:-}"
 GITHUB_APP_PRIVATE_KEY_PATH="${FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH:-}"
+CODER_URL="${FOUNDRY_CODER_URL:-${SERVER_HOSTNAME/server-dev./coder-dev.}}"
+CODER_API_TOKEN="${FOUNDRY_CODER_API_TOKEN:-}"
 WORKSPACE_BOOTSTRAP_SECRET="${FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="${ROOT}/services/foundry-server/"
@@ -36,12 +38,56 @@ if [[ -n "${GITHUB_APP_PRIVATE_KEY_PATH}" ]]; then
 fi
 
 ssh -i ~/.ssh/hetzner_prod -o StrictHostKeyChecking=accept-new "root@${HOST}" \
-  "SERVER_HOSTNAME='${SERVER_HOSTNAME}' SUPPORT_EMAIL='${SUPPORT_EMAIL}' DEST='${DEST}' GITHUB_APP_NAME='${GITHUB_APP_NAME}' GITHUB_API_URL='${GITHUB_API_URL}' GITHUB_APP_ID='${GITHUB_APP_ID}' GITHUB_CLIENT_ID='${GITHUB_CLIENT_ID}' GITHUB_WEBHOOK_SECRET='${GITHUB_WEBHOOK_SECRET}' GITHUB_APP_PRIVATE_KEY_PATH='${GITHUB_APP_PRIVATE_KEY_PATH}' WORKSPACE_BOOTSTRAP_SECRET='${WORKSPACE_BOOTSTRAP_SECRET}' bash -s" <<'EOF'
+  "SERVER_HOSTNAME='${SERVER_HOSTNAME}' SUPPORT_EMAIL='${SUPPORT_EMAIL}' DEST='${DEST}' GITHUB_APP_NAME='${GITHUB_APP_NAME}' GITHUB_API_URL='${GITHUB_API_URL}' GITHUB_APP_ID='${GITHUB_APP_ID}' GITHUB_CLIENT_ID='${GITHUB_CLIENT_ID}' GITHUB_WEBHOOK_SECRET='${GITHUB_WEBHOOK_SECRET}' GITHUB_APP_PRIVATE_KEY_PATH='${GITHUB_APP_PRIVATE_KEY_PATH}' CODER_URL='${CODER_URL}' CODER_API_TOKEN='${CODER_API_TOKEN}' WORKSPACE_BOOTSTRAP_SECRET='${WORKSPACE_BOOTSTRAP_SECRET}' bash -s" <<'EOF'
 set -euo pipefail
 
 mkdir -p /etc/foundry
 mkdir -p /var/lib/foundry
 chown foundrydev:foundrydev /var/lib/foundry
+
+read_env_value() {
+  local key="$1"
+  local env_file="/etc/foundry/foundry-server.env"
+  python3 - "$key" "$env_file" <<'PY'
+from pathlib import Path
+import sys
+
+key = sys.argv[1]
+env_file = Path(sys.argv[2])
+if not env_file.is_file():
+    raise SystemExit(0)
+
+for line in env_file.read_text(encoding="utf-8").splitlines():
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    current_key, value = line.split("=", 1)
+    if current_key == key:
+        print(value)
+        raise SystemExit(0)
+PY
+}
+
+if [[ -f /etc/foundry/foundry-server.env ]]; then
+  [[ -n "${GITHUB_APP_NAME}" ]] || GITHUB_APP_NAME="$(read_env_value FOUNDRY_GITHUB_APP_NAME)"
+  [[ -n "${GITHUB_API_URL}" ]] || GITHUB_API_URL="$(read_env_value FOUNDRY_GITHUB_API_URL)"
+  [[ -n "${GITHUB_APP_ID}" ]] || GITHUB_APP_ID="$(read_env_value FOUNDRY_GITHUB_APP_ID)"
+  [[ -n "${GITHUB_CLIENT_ID}" ]] || GITHUB_CLIENT_ID="$(read_env_value FOUNDRY_GITHUB_CLIENT_ID)"
+  [[ -n "${GITHUB_WEBHOOK_SECRET}" ]] || GITHUB_WEBHOOK_SECRET="$(read_env_value FOUNDRY_GITHUB_WEBHOOK_SECRET)"
+  [[ -n "${GITHUB_APP_PRIVATE_KEY_PATH}" ]] || GITHUB_APP_PRIVATE_KEY_PATH="$(read_env_value FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH)"
+  [[ -n "${CODER_URL}" ]] || CODER_URL="$(read_env_value FOUNDRY_CODER_URL)"
+  [[ -n "${CODER_API_TOKEN}" ]] || CODER_API_TOKEN="$(read_env_value FOUNDRY_CODER_API_TOKEN)"
+  [[ -n "${WORKSPACE_BOOTSTRAP_SECRET}" ]] || WORKSPACE_BOOTSTRAP_SECRET="$(read_env_value FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET)"
+fi
+
+if [[ -z "${CODER_API_TOKEN}" && -f /etc/foundry/coder-admin.token ]]; then
+  CODER_API_TOKEN="$(cat /etc/foundry/coder-admin.token)"
+fi
+
+coder_env_url="${CODER_URL}"
+if [[ "${coder_env_url}" != http://* && "${coder_env_url}" != https://* ]]; then
+  coder_env_url="https://${coder_env_url}"
+fi
+
 cat > /etc/foundry/foundry-server.env <<ENVFILE
 FOUNDRY_ENVIRONMENT=staging
 FOUNDRY_HOST=127.0.0.1
@@ -56,6 +102,8 @@ FOUNDRY_GITHUB_API_URL=${GITHUB_API_URL}
 FOUNDRY_GITHUB_APP_ID=${GITHUB_APP_ID}
 FOUNDRY_GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
 FOUNDRY_GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET}
+FOUNDRY_CODER_URL=${coder_env_url}
+FOUNDRY_CODER_API_TOKEN=${CODER_API_TOKEN}
 FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET=${WORKSPACE_BOOTSTRAP_SECRET}
 ENVFILE
 

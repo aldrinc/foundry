@@ -81,6 +81,7 @@ resource "hcloud_server" "dev_host" {
 
   user_data = templatefile("${path.module}/templates/cloud-init-foundry-dev.yaml.tftpl", {
     acme_email              = var.acme_email
+    foundry_coder_hostname  = "coder-dev.${hcloud_primary_ip.dev_host.ip_address}.sslip.io"
     foundry_core_hostname   = "core-dev.${hcloud_primary_ip.dev_host.ip_address}.sslip.io"
     foundry_server_hostname = "server-dev.${hcloud_primary_ip.dev_host.ip_address}.sslip.io"
   })

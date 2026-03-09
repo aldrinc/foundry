@@ -49,6 +49,11 @@ write_files:
         reverse_proxy 127.0.0.1:9991
       }
 
+      ${foundry_coder_hostname} {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:17080
+      }
+
   - path: /etc/sudoers.d/foundrydev
     permissions: "0440"
     owner: root:root
