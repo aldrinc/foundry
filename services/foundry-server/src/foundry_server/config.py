@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Mapping
@@ -83,7 +84,7 @@ class AppConfig:
 
 
 def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
-    source = env or {}
+    source = env if env is not None else os.environ
     return AppConfig(
         environment=DeploymentEnvironment(
             source.get("FOUNDRY_ENVIRONMENT", DeploymentEnvironment.LOCAL.value)

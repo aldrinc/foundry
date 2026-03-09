@@ -1,0 +1,15 @@
+project_prefix = "foundry"
+environment    = "dev"
+location       = "ash"
+server_type    = "cpx31"
+
+admin_allowed_cidrs = [
+  "203.0.113.10/32",
+]
+
+ssh_key_ids = [123456]
+
+private_network_name = "foundry-private"
+private_ipv4         = "10.40.1.10"
+
+acme_email = "support@example.com"

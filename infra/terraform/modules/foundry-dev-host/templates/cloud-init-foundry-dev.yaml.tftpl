@@ -1,0 +1,64 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - curl
+  - jq
+  - rsync
+  - caddy
+  - ca-certificates
+  - python3
+  - python3-venv
+  - python3-pip
+  - python3-dev
+  - build-essential
+  - libffi-dev
+  - libssl-dev
+  - pkg-config
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-foundry-hardening.conf
+    permissions: "0644"
+    owner: root:root
+    content: |
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PermitRootLogin prohibit-password
+      PubkeyAuthentication yes
+
+  - path: /etc/caddy/Caddyfile
+    permissions: "0644"
+    owner: root:root
+    content: |
+      {
+        email ${acme_email}
+      }
+
+      ${foundry_server_hostname} {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:8090
+      }
+
+      ${foundry_core_hostname} {
+        encode zstd gzip
+        reverse_proxy 127.0.0.1:9991
+      }
+
+runcmd:
+  - id -u foundrydev >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo,docker foundrydev
+  - mkdir -p /home/foundrydev/.ssh
+  - if [ -f /root/.ssh/authorized_keys ]; then cp /root/.ssh/authorized_keys /home/foundrydev/.ssh/authorized_keys; fi
+  - chown -R foundrydev:foundrydev /home/foundrydev/.ssh
+  - chmod 700 /home/foundrydev/.ssh
+  - chmod 600 /home/foundrydev/.ssh/authorized_keys || true
+  - mkdir -p /opt/foundry/services /opt/foundry/releases /var/log/foundry /etc/foundry
+  - chown -R foundrydev:foundrydev /opt/foundry /var/log/foundry
+  - sshd -t
+  - systemctl restart ssh
+  - systemctl enable --now docker
+  - systemctl enable --now caddy

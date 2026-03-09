@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1] / "src"
@@ -54,6 +55,20 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.stripe_webhook_secret_present)
         self.assertEqual(config.organization_workspace_pool_size, 8)
         self.assertEqual(config.organization_workspace_max_concurrency, 40)
+
+    def test_process_environment_is_used_by_default(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {
+                "FOUNDRY_ENVIRONMENT": "staging",
+                "FOUNDRY_PUBLIC_BASE_URL": "https://server-dev.example.com",
+            },
+            clear=True,
+        ):
+            config = load_config()
+
+        self.assertEqual(config.environment, DeploymentEnvironment.STAGING)
+        self.assertEqual(config.public_base_url, "https://server-dev.example.com")
 
 
 if __name__ == "__main__":

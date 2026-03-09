@@ -9,8 +9,12 @@ workspace VMs.
 
 - `modules/foundry-workspace-baseline/`
   - reusable Hetzner baseline resources for Foundry workspace VMs
+- `modules/foundry-dev-host/`
+  - reusable Hetzner dev host for `foundry-core` and `foundry-server`
 - `environments/dev/workspace-baseline/`
   - the first dev environment wiring for that module
+- `environments/dev/dev-host/`
+  - the first dev environment wiring for the Foundry dev host
 
 ## What the baseline provisions
 
@@ -18,7 +22,13 @@ workspace VMs.
 - a restrictive workspace firewall
 - optional SSH keys for workspace VM injection
 
-It does not create any Foundry app servers yet.
+## What the dev host provisions
+
+- one Foundry dev VM on the shared private network
+- a public IPv4 with temporary sslip.io hostnames
+- Caddy reverse proxy stubs for `foundry-core` and `foundry-server`
+- host prerequisites for deploying `foundry-server` and running the
+  `foundry-core` remote dev environment
 
 ## Secrets
 
