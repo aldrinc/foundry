@@ -50,8 +50,12 @@ class AppConfig:
     oidc_audience: str
     oidc_client_id: str
     github_app_name: str
+    github_api_url: str
     github_app_id: str
     github_client_id: str
+    github_app_private_key_path: str
+    github_app_private_key_present: bool
+    github_webhook_secret: str
     github_webhook_secret_present: bool
     stripe_secret_key_present: bool
     stripe_webhook_secret_present: bool
@@ -73,7 +77,13 @@ class AppConfig:
                 self.oidc_issuer_url and self.oidc_audience and self.oidc_client_id
             ),
             "github_app_name": self.github_app_name,
-            "github_app_configured": bool(self.github_app_id and self.github_client_id),
+            "github_api_url": self.github_api_url,
+            "github_app_configured": bool(
+                self.github_app_id
+                and self.github_client_id
+                and self.github_app_private_key_present
+            ),
+            "github_app_private_key_present": self.github_app_private_key_present,
             "github_webhook_secret_present": self.github_webhook_secret_present,
             "stripe_configured": self.stripe_secret_key_present,
             "stripe_webhook_secret_present": self.stripe_webhook_secret_present,
@@ -102,8 +112,14 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         oidc_audience=source.get("FOUNDRY_OIDC_AUDIENCE", ""),
         oidc_client_id=source.get("FOUNDRY_OIDC_CLIENT_ID", ""),
         github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
+        github_api_url=source.get("FOUNDRY_GITHUB_API_URL", "https://api.github.com"),
         github_app_id=source.get("FOUNDRY_GITHUB_APP_ID", ""),
         github_client_id=source.get("FOUNDRY_GITHUB_CLIENT_ID", ""),
+        github_app_private_key_path=source.get("FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH", ""),
+        github_app_private_key_present=bool(
+            source.get("FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH", "").strip()
+        ),
+        github_webhook_secret=source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", ""),
         github_webhook_secret_present=bool(
             source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", "").strip()
         ),

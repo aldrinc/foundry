@@ -49,6 +49,12 @@ write_files:
         reverse_proxy 127.0.0.1:9991
       }
 
+  - path: /etc/sudoers.d/foundrydev
+    permissions: "0440"
+    owner: root:root
+    content: |
+      foundrydev ALL=(ALL) NOPASSWD:ALL
+
 runcmd:
   - id -u foundrydev >/dev/null 2>&1 || useradd -m -s /bin/bash -G sudo,docker foundrydev
   - mkdir -p /home/foundrydev/.ssh

@@ -28,6 +28,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.auth_provider, AuthProvider.OIDC)
         self.assertEqual(config.workspace_topology, WorkspaceTopology.ORGANIZATION_POOLED)
         self.assertFalse(config.self_host_mode)
+        self.assertFalse(config.github_app_private_key_present)
         self.assertFalse(config.github_webhook_secret_present)
         self.assertFalse(config.stripe_secret_key_present)
 
@@ -38,6 +39,7 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_PORT": "9001",
                 "FOUNDRY_SELF_HOST_MODE": "true",
                 "FOUNDRY_SUPPORT_EMAIL": "support@foundry.test",
+                "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": "/tmp/foundry.pem",
                 "FOUNDRY_GITHUB_WEBHOOK_SECRET": "secret",
                 "FOUNDRY_STRIPE_SECRET_KEY": "sk_test_123",
                 "FOUNDRY_STRIPE_WEBHOOK_SECRET": "whsec_123",
@@ -50,6 +52,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.port, 9001)
         self.assertTrue(config.self_host_mode)
         self.assertEqual(config.support_email, "support@foundry.test")
+        self.assertTrue(config.github_app_private_key_present)
         self.assertTrue(config.github_webhook_secret_present)
         self.assertTrue(config.stripe_secret_key_present)
         self.assertTrue(config.stripe_webhook_secret_present)
