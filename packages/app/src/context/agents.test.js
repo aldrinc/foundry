@@ -25,15 +25,28 @@ function createDelegate(overrides = {}) {
     };
 }
 describe("agents helpers", () => {
-    test("maps live Foundry provider payloads to a usable connection status", () => {
+    test("maps active provider credentials to a connected status", () => {
         const provider = {
             provider: "codex",
             display_name: "Codex",
             auth_modes: ["oauth"],
-            oauth_configured: false,
-            connected: true,
+            credential_status: "not_connected",
+            credential: {
+                auth_mode: "oauth",
+                status: "active",
+                updated_at: "2026-03-08T00:00:00.000Z",
+            },
         };
         expect(getProviderConnectionStatus(provider)).toBe("connected");
+    });
+    test("does not treat OAuth capability as a connected account", () => {
+        const provider = {
+            provider: "codex",
+            display_name: "Codex",
+            auth_modes: ["oauth"],
+            oauth_configured: true,
+        };
+        expect(getProviderConnectionStatus(provider)).toBe("not_connected");
     });
     test("builds a supervisor delegate manifest only from enabled delegateable agents", () => {
         const manifest = buildSupervisorDelegateContextFromDelegates([

@@ -10,6 +10,14 @@ export declare const commands: {
      */
     login(url: string, email: string, apiKey: string): Promise<Result<LoginResult, string>>;
     /**
+     * Exchange a password for an API key using Zulip's fetch_api_key endpoint
+     */
+    fetchApiKey(url: string, username: string, password: string): Promise<Result<FetchApiKeyResult, string>>;
+    /**
+     * Open an app-owned sign-in window for Zulip external authentication flows.
+     */
+    openExternalAuthWindow(url: string): Promise<Result<null, string>>;
+    /**
      * Disconnect from a Zulip server
      */
     logout(orgId: string): Promise<Result<null, string>>;
@@ -48,9 +56,17 @@ export declare const commands: {
      */
     sendTyping(orgId: string, op: string, typingType: string, to: string, topic: string | null): Promise<Result<null, string>>;
     /**
+     * Save bytes to a temporary file and return its path (for paste/drag-drop uploads)
+     */
+    saveTempFile(fileName: string, data: number[]): Promise<Result<string, string>>;
+    /**
      * Upload a file
      */
     uploadFile(orgId: string, filePath: string): Promise<Result<UploadResult, string>>;
+    /**
+     * Fetch an authenticated media URL and convert it to a data URL for the webview.
+     */
+    fetchAuthenticatedMediaDataUrl(orgId: string, mediaUrl: string): Promise<Result<string, string>>;
     /**
      * Update message flags (read, starred, etc.)
      */
@@ -290,6 +306,18 @@ export declare const commands: {
      */
     getFoundryProviders(orgId: string): Promise<Result<FoundryProvidersResponse, string>>;
     /**
+     * Connect a Foundry provider using an API key credential
+     */
+    connectFoundryProvider(orgId: string, provider: string, apiKey: string, label: string | null): Promise<Result<FoundryProviderCredentialResponse, string>>;
+    /**
+     * Disconnect a Foundry provider credential
+     */
+    disconnectFoundryProvider(orgId: string, provider: string): Promise<Result<FoundryProviderCredentialResponse, string>>;
+    /**
+     * Start a Foundry provider OAuth flow
+     */
+    startFoundryProviderOauth(orgId: string, provider: string, redirectUri: string | null): Promise<Result<FoundryProviderOauthStartResponse, string>>;
+    /**
      * Get events for a specific task
      */
     getTaskEvents(orgId: string, topicScopeId: string, taskId: string, afterId: number, limit: number): Promise<Result<TaskEventsResponse, string>>;
@@ -316,10 +344,17 @@ export type AnonymousGroupSetting = {
 };
 export type AuthMethods = {
     password?: boolean;
+    email?: boolean;
     google?: boolean;
     github?: boolean;
     ldap?: boolean;
     dev?: boolean;
+    remoteuser?: boolean;
+    gitlab?: boolean;
+    azuread?: boolean;
+    apple?: boolean;
+    saml?: boolean;
+    "openid connect"?: boolean;
 };
 /**
  * Bot info returned by GET /api/v1/bots.
@@ -414,6 +449,21 @@ export type DisplayRecipientUser = {
     email: string;
     full_name: string;
 };
+export type ExternalAuthenticationMethod = {
+    name: string;
+    display_name: string;
+    display_icon: string | null;
+    login_url: string;
+    signup_url: string;
+};
+/**
+ * Result of POST /api/v1/fetch_api_key
+ */
+export type FetchApiKeyResult = {
+    api_key: string;
+    email: string;
+    user_id?: number | null;
+};
 /**
  * Provider authentication entry
  */
@@ -422,10 +472,40 @@ export type FoundryProviderAuth = {
     display_name?: string;
     auth_modes?: string[];
     oauth_configured?: boolean;
+    connected?: boolean;
+    default_model?: string | null;
+    credential?: FoundryProviderCredential | null;
     credential_status?: string | null;
 };
 /**
- * Response from GET /json/foundry/providers/auth
+ * A connected provider credential preview returned by Meridian
+ */
+export type FoundryProviderCredential = {
+    auth_mode?: string | null;
+    label?: string | null;
+    status?: string | null;
+    created_at?: string | null;
+    updated_at?: string | null;
+};
+/**
+ * Response from POST /json/meridian/providers/connect or /disconnect
+ */
+export type FoundryProviderCredentialResponse = {
+    provider: string;
+    credential?: FoundryProviderCredential | null;
+};
+/**
+ * Response from POST /json/meridian/providers/oauth/start
+ */
+export type FoundryProviderOauthStartResponse = {
+    provider: string;
+    authorize_url?: string | null;
+    state?: string | null;
+    expires_at?: string | null;
+    redirect_uri?: string | null;
+};
+/**
+ * Response from GET /json/meridian/providers/auth
  */
 export type FoundryProvidersResponse = {
     providers?: FoundryProviderAuth[];
@@ -484,6 +564,7 @@ export type LoginResult = {
     org_id: string;
     realm_name: string;
     realm_icon: string;
+    realm_url: string;
     queue_id: string;
     /**
      * The logged-in user's ID (from Zulip register response)
@@ -492,6 +573,8 @@ export type LoginResult = {
     subscriptions: Subscription[];
     users: User[];
     user_topics: UserTopic[];
+    unread_msgs: UnreadMessages;
+    recent_private_conversations: RecentPrivateConversation[];
 };
 /**
  * A Zulip message
@@ -633,6 +716,13 @@ export type RealmSettingsSnapshot = {
  */
 export type RealmTopicsPolicy = "allow_empty_topic" | "disable_empty_topic";
 /**
+ * Recent DM/group-DM metadata returned by Zulip register.
+ */
+export type RecentPrivateConversation = {
+    user_ids?: number[];
+    max_message_id: number;
+};
+/**
  * Request to resolve or unresolve a topic by renaming it with Zulip's
  * canonical resolved-topic prefix.
  */
@@ -691,10 +781,14 @@ export type ServerSettings = {
     zulip_version: string;
     zulip_feature_level: number;
     push_notifications_enabled: boolean;
-    realm_name: string;
-    realm_icon: string;
-    realm_description: string;
+    realm_name?: string;
+    realm_icon?: string;
+    realm_description?: string;
+    realm_url?: string;
+    email_auth_enabled?: boolean;
+    require_email_format_usernames?: boolean;
     authentication_methods?: AuthMethods;
+    external_authentication_methods?: ExternalAuthenticationMethod[];
 };
 /**
  * Server-advertised permission-setting support for realm, stream, and group scopes.
@@ -854,6 +948,31 @@ export type TaskEventsResponse = {
 export type Topic = {
     name: string;
     max_id: number;
+};
+export type UnreadDirectMessage = {
+    other_user_id: number | null;
+    sender_id: number | null;
+    unread_message_ids?: number[];
+};
+export type UnreadGroupDirectMessage = {
+    user_ids_string: string;
+    unread_message_ids?: number[];
+};
+/**
+ * Aggregated unread metadata returned by Zulip register.
+ */
+export type UnreadMessages = {
+    count?: number;
+    pms?: UnreadDirectMessage[];
+    streams?: UnreadStream[];
+    huddles?: UnreadGroupDirectMessage[];
+    mentions?: number[];
+    old_unreads_missing?: boolean;
+};
+export type UnreadStream = {
+    topic: string;
+    stream_id: number;
+    unread_message_ids?: number[];
 };
 /**
  * Upload file result

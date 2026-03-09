@@ -9,6 +9,7 @@ import { SearchBar } from "./search-bar"
 import { PersonalMenu } from "./personal-menu"
 import { OrgSwitcher } from "./org-switcher"
 import type { SavedServerStatus } from "@zulip/desktop/bindings"
+import { getUnreadTotalCount } from "../context/unread-state"
 
 export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: () => void | Promise<void>; onSwitchOrg?: (server: SavedServerStatus) => void }) {
   const sync = useZulipSync()
@@ -41,6 +42,8 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
       .filter(s => s.is_muted)
       .sort((a, b) => a.name.localeCompare(b.name))
   )
+
+  const totalUnread = createMemo(() => getUnreadTotalCount(sync.store.unreadItems))
 
   const handleStreamClick = (streamId: number) => {
     nav.setActiveNarrow(`stream:${streamId}`)
@@ -90,6 +93,7 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
           label="Inbox"
           active={nav.activeNarrow() === null}
           onClick={() => nav.setActiveNarrow(null)}
+          badge={totalUnread()}
           icon={<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l5 3 5-3M2 4v6a1 1 0 001 1h8a1 1 0 001-1V4M2 4a1 1 0 011-1h8a1 1 0 011 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /></svg>}
         />
         <NavButton
@@ -437,20 +441,18 @@ function StreamItem(props: {
           </svg>
         </span>
 
-        {/* Expand arrow */}
-        <Show when={!topicsLoaded() || topics().length > 0}>
-          <span
-            onClick={toggleExpand}
-            class="w-3 h-3 flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer shrink-0"
+        {/* Expand arrow — always visible so empty channels can be expanded */}
+        <span
+          onClick={toggleExpand}
+          class="w-3 h-3 flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer shrink-0"
+        >
+          <svg
+            width="8" height="8" viewBox="0 0 8 8" fill="none"
+            class={`transition-transform ${expanded() ? "rotate-90" : ""}`}
           >
-            <svg
-              width="8" height="8" viewBox="0 0 8 8" fill="none"
-              class={`transition-transform ${expanded() ? "rotate-90" : ""}`}
-            >
-              <path d="M2 1l3 3-3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-          </span>
-        </Show>
+            <path d="M2 1l3 3-3 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
       </div>
 
       {/* Topics list */}
@@ -475,6 +477,11 @@ function StreamItem(props: {
                 Retry
               </button>
             </div>
+          </Show>
+
+          {/* Empty state when no topics exist */}
+          <Show when={topicsLoaded() && topics().length === 0 && !loadingTopics() && !topicError()}>
+            <div class="text-[10px] text-[var(--text-tertiary)] px-3 py-1">No topics yet</div>
           </Show>
 
           <For each={topics()}>
@@ -503,6 +510,26 @@ function StreamItem(props: {
               </div>
             )}
           </For>
+
+          {/* New topic row — always shown at bottom of expanded topics */}
+          <Show when={!loadingTopics() && !topicError()}>
+            <div
+              class="w-full flex items-center gap-2 px-3 py-1 text-left text-xs text-[var(--text-tertiary)] hover:bg-[var(--background-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+              onClick={() => {
+                nav.setActiveNarrow(`stream:${props.stream.stream_id}`)
+                // Focus the topic input after navigation settles
+                requestAnimationFrame(() => {
+                  const topicInput = document.querySelector<HTMLInputElement>('[placeholder="New topic..."]')
+                  topicInput?.focus()
+                })
+              }}
+            >
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" class="shrink-0">
+                <path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+              <span class="flex-1 truncate">New topic</span>
+            </div>
+          </Show>
         </div>
       </Show>
 

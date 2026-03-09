@@ -133,6 +133,21 @@ pub struct TaskEventsResponse {
     pub events: Vec<TaskEvent>,
 }
 
+/// A connected provider credential preview returned by Meridian
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct FoundryProviderCredential {
+    #[serde(default)]
+    pub auth_mode: Option<String>,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+}
+
 /// Provider authentication entry
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProviderAuth {
@@ -144,12 +159,40 @@ pub struct FoundryProviderAuth {
     #[serde(default)]
     pub oauth_configured: bool,
     #[serde(default)]
+    pub connected: bool,
+    #[serde(default)]
+    pub default_model: Option<String>,
+    #[serde(default)]
+    pub credential: Option<FoundryProviderCredential>,
+    #[serde(default)]
     pub credential_status: Option<String>,
 }
 
-/// Response from GET /json/foundry/providers/auth
+/// Response from GET /json/meridian/providers/auth
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProvidersResponse {
     #[serde(default)]
     pub providers: Vec<FoundryProviderAuth>,
+}
+
+/// Response from POST /json/meridian/providers/connect or /disconnect
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct FoundryProviderCredentialResponse {
+    pub provider: String,
+    #[serde(default)]
+    pub credential: Option<FoundryProviderCredential>,
+}
+
+/// Response from POST /json/meridian/providers/oauth/start
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct FoundryProviderOauthStartResponse {
+    pub provider: String,
+    #[serde(default)]
+    pub authorize_url: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
 }

@@ -40,6 +40,17 @@ async fetchApiKey(url: string, username: string, password: string) : Promise<Res
 }
 },
 /**
+ * Open an app-owned sign-in window for Zulip external authentication flows.
+ */
+async openExternalAuthWindow(url: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_external_auth_window", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Disconnect from a Zulip server
  */
 async logout(orgId: string) : Promise<Result<null, string>> {
@@ -141,11 +152,33 @@ async sendTyping(orgId: string, op: string, typingType: string, to: string, topi
 }
 },
 /**
+ * Save bytes to a temporary file and return its path (for paste/drag-drop uploads)
+ */
+async saveTempFile(fileName: string, data: number[]) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_temp_file", { fileName, data }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Upload a file
  */
 async uploadFile(orgId: string, filePath: string) : Promise<Result<UploadResult, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("upload_file", { orgId, filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch an authenticated media URL and convert it to a data URL for the webview.
+ */
+async fetchAuthenticatedMediaDataUrl(orgId: string, mediaUrl: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fetch_authenticated_media_data_url", { orgId, mediaUrl }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -798,6 +831,39 @@ async getFoundryProviders(orgId: string) : Promise<Result<FoundryProvidersRespon
 }
 },
 /**
+ * Connect a Foundry provider using an API key credential
+ */
+async connectFoundryProvider(orgId: string, provider: string, apiKey: string, label: string | null) : Promise<Result<FoundryProviderCredentialResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("connect_foundry_provider", { orgId, provider, apiKey, label }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Disconnect a Foundry provider credential
+ */
+async disconnectFoundryProvider(orgId: string, provider: string) : Promise<Result<FoundryProviderCredentialResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("disconnect_foundry_provider", { orgId, provider }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Start a Foundry provider OAuth flow
+ */
+async startFoundryProviderOauth(orgId: string, provider: string, redirectUri: string | null) : Promise<Result<FoundryProviderOauthStartResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_foundry_provider_oauth", { orgId, provider, redirectUri }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Get events for a specific task
  */
 async getTaskEvents(orgId: string, topicScopeId: string, taskId: string, afterId: number, limit: number) : Promise<Result<TaskEventsResponse, string>> {
@@ -889,9 +955,21 @@ export type FetchApiKeyResult = { api_key: string; email: string; user_id?: numb
 /**
  * Provider authentication entry
  */
-export type FoundryProviderAuth = { provider: string; display_name?: string; auth_modes?: string[]; oauth_configured?: boolean; credential_status?: string | null }
+export type FoundryProviderAuth = { provider: string; display_name?: string; auth_modes?: string[]; oauth_configured?: boolean; connected?: boolean; default_model?: string | null; credential?: FoundryProviderCredential | null; credential_status?: string | null }
 /**
- * Response from GET /json/foundry/providers/auth
+ * A connected provider credential preview returned by Meridian
+ */
+export type FoundryProviderCredential = { auth_mode?: string | null; label?: string | null; status?: string | null; created_at?: string | null; updated_at?: string | null }
+/**
+ * Response from POST /json/meridian/providers/connect or /disconnect
+ */
+export type FoundryProviderCredentialResponse = { provider: string; credential?: FoundryProviderCredential | null }
+/**
+ * Response from POST /json/meridian/providers/oauth/start
+ */
+export type FoundryProviderOauthStartResponse = { provider: string; authorize_url?: string | null; state?: string | null; expires_at?: string | null; redirect_uri?: string | null }
+/**
+ * Response from GET /json/meridian/providers/auth
  */
 export type FoundryProvidersResponse = { providers?: FoundryProviderAuth[] }
 /**
@@ -918,11 +996,11 @@ export type LinkifierCreateResponse = { id: number }
 /**
  * Result of login flow
  */
-export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; queue_id: string; 
+export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; realm_url: string; queue_id: string; 
 /**
  * The logged-in user's ID (from Zulip register response)
  */
-user_id: number | null; subscriptions: Subscription[]; users: User[]; user_topics: UserTopic[] }
+user_id: number | null; subscriptions: Subscription[]; users: User[]; user_topics: UserTopic[]; unread_msgs: UnreadMessages; recent_private_conversations: RecentPrivateConversation[] }
 /**
  * A Zulip message
  */
@@ -970,6 +1048,10 @@ export type RealmSettingsSnapshot = { realm_name?: string; realm_description?: s
  * Organization-level topic policy.
  */
 export type RealmTopicsPolicy = "allow_empty_topic" | "disable_empty_topic"
+/**
+ * Recent DM/group-DM metadata returned by Zulip register.
+ */
+export type RecentPrivateConversation = { user_ids?: number[]; max_message_id: number }
 /**
  * Request to resolve or unresolve a topic by renaming it with Zulip's
  * canonical resolved-topic prefix.
@@ -1068,6 +1150,13 @@ export type TaskEventsResponse = { task_id: string; events?: TaskEvent[] }
  * Topic within a stream
  */
 export type Topic = { name: string; max_id: number }
+export type UnreadDirectMessage = { other_user_id: number | null; sender_id: number | null; unread_message_ids?: number[] }
+export type UnreadGroupDirectMessage = { user_ids_string: string; unread_message_ids?: number[] }
+/**
+ * Aggregated unread metadata returned by Zulip register.
+ */
+export type UnreadMessages = { count?: number; pms?: UnreadDirectMessage[]; streams?: UnreadStream[]; huddles?: UnreadGroupDirectMessage[]; mentions?: number[]; old_unreads_missing?: boolean }
+export type UnreadStream = { topic: string; stream_id: number; unread_message_ids?: number[] }
 /**
  * Upload file result
  */

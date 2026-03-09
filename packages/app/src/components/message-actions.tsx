@@ -1,8 +1,10 @@
-import { createSignal, Show } from "solid-js"
+import { createSignal, Show, onCleanup, createEffect } from "solid-js"
+import { Portal } from "solid-js/web"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
 import { commands } from "@zulip/desktop/bindings"
 import type { Message } from "../context/zulip-sync"
+import { DEFAULT_MESSAGE_QUICK_REACTIONS } from "./emoji-quick-reactions"
 import { EmojiPicker } from "./emoji-picker"
 
 export function MessageActions(props: {
@@ -14,8 +16,43 @@ export function MessageActions(props: {
   const org = useOrg()
   const sync = useZulipSync()
   const [showEmoji, setShowEmoji] = createSignal(false)
+  const [pickerPos, setPickerPos] = createSignal({ top: 0, left: 0 })
   const [confirming, setConfirming] = createSignal(false)
   const [copied, setCopied] = createSignal(false)
+  let triggerRef!: HTMLDivElement
+
+  const PICKER_WIDTH = 280
+  const PICKER_HEIGHT = 310 // search + tabs + grid approx height
+
+  const openPicker = () => {
+    const rect = triggerRef.getBoundingClientRect()
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+
+    const top = spaceBelow >= PICKER_HEIGHT
+      ? rect.bottom + 4
+      : spaceAbove >= PICKER_HEIGHT
+        ? rect.top - PICKER_HEIGHT - 4
+        : Math.max(8, window.innerHeight - PICKER_HEIGHT - 8) // fallback: pin to bottom
+
+    // Right-align to the trigger, but don't go off-screen left
+    const left = Math.max(8, rect.right - PICKER_WIDTH)
+
+    setPickerPos({ top, left })
+    setShowEmoji(true)
+  }
+
+  const closePicker = () => setShowEmoji(false)
+
+  // Close picker when the message list scrolls
+  createEffect(() => {
+    if (!showEmoji()) return
+    const scrollParent = triggerRef?.closest(".overflow-y-auto, [style*='overflow']") as HTMLElement | null
+    if (!scrollParent) return
+    const onScroll = () => closePicker()
+    scrollParent.addEventListener("scroll", onScroll, { passive: true })
+    onCleanup(() => scrollParent.removeEventListener("scroll", onScroll))
+  })
 
   const isOwnMessage = () => props.currentUserId && props.message.sender_id === props.currentUserId
   const isStarred = () => (props.message.flags || []).includes("starred")
@@ -42,7 +79,21 @@ export function MessageActions(props: {
 
   const handleReaction = async (emojiName: string, emojiCode: string) => {
     setShowEmoji(false)
-    await commands.addReaction(org.orgId, props.message.id, emojiName, emojiCode)
+    const hasReaction =
+      props.currentUserId !== undefined &&
+      (props.message.reactions || []).some(
+        reaction => reaction.emoji_code === emojiCode && reaction.user_id === props.currentUserId,
+      )
+
+    try {
+      if (hasReaction) {
+        await commands.removeReaction(org.orgId, props.message.id, emojiName, emojiCode)
+      } else {
+        await commands.addReaction(org.orgId, props.message.id, emojiName, emojiCode)
+      }
+    } catch (error) {
+      console.error("Failed to update reaction:", error)
+    }
   }
 
   const handleToggleStar = async () => {
@@ -93,10 +144,10 @@ export function MessageActions(props: {
       data-component="message-actions"
     >
       {/* React button */}
-      <div class="relative">
+      <div ref={triggerRef!}>
         <ActionButton
           title="Add reaction"
-          onClick={() => setShowEmoji(e => !e)}
+          onClick={() => showEmoji() ? closePicker() : openPicker()}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.2" />
@@ -105,15 +156,22 @@ export function MessageActions(props: {
             <path d="M5 8.5c.5.8 1.2 1 2 1s1.5-.2 2-1" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
           </svg>
         </ActionButton>
-        <Show when={showEmoji()}>
-          <div class="absolute top-full right-0 mt-1 z-50">
+      </div>
+      <Show when={showEmoji()}>
+        <Portal>
+          <div class="fixed inset-0 z-[9999]" onClick={closePicker} />
+          <div
+            class="fixed z-[10000]"
+            style={{ top: `${pickerPos().top}px`, left: `${pickerPos().left}px` }}
+          >
             <EmojiPicker
               onSelect={handleReaction}
-              onClose={() => setShowEmoji(false)}
+              onClose={closePicker}
+              quickReactions={DEFAULT_MESSAGE_QUICK_REACTIONS}
             />
           </div>
-        </Show>
-      </div>
+        </Portal>
+      </Show>
 
       {/* Star toggle */}
       <ActionButton

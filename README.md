@@ -16,8 +16,8 @@ Foundry is evolving into a cross-platform desktop app plus a hosted or self-host
 ```bash
 bun install
 bun test
-cd packages/desktop
 bun run build
+bun run bundle:desktop
 ```
 
 The control-plane scaffold lives under [`services/foundry-server`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/services/foundry-server). See its local README for setup and run instructions.
@@ -46,8 +46,31 @@ Useful local commands:
 bun run lint
 bun run typecheck
 bun run check:rust
-bun run verify
+bun run bundle:desktop
+bun run bundle:desktop:macos
 ```
+
+## Desktop Distribution
+
+Foundry can now be packaged locally from the repo root into installable desktop artifacts.
+
+```bash
+bun install
+bun run test
+bun run typecheck
+bun run lint:eslint
+bun run check:rust
+bun run bundle:desktop
+```
+
+On macOS, `bun run bundle:desktop:macos` produces:
+
+- `packages/desktop/src-tauri/target/release/bundle/macos/Foundry.app`
+- `packages/desktop/src-tauri/target/release/bundle/dmg/Foundry_<version>_<arch>.dmg`
+
+Use the `.dmg` for internal team distribution. The current process creates unsigned local artifacts, so macOS Gatekeeper/notarization hardening is still a follow-up if you want friction-free installs outside the team.
+
+The full step-by-step packaging notes live in [`docs/desktop-distribution.md`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/docs/desktop-distribution.md).
 
 ## Safe Publishing
 

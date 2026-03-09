@@ -14,6 +14,8 @@ export default defineConfig({
       "@zulip/ui": path.resolve(__dirname, "../ui/src"),
       "@zulip/desktop": path.resolve(__dirname, "./src"),
     },
+    // Prefer workspace TypeScript sources over stale generated .js artifacts.
+    extensions: [".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],
   },
   server: {
     port: 1420,

@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "bundle:desktop": "bun --cwd packages/desktop tauri build",
+    "bundle:desktop:macos": "bun --cwd packages/desktop tauri build --bundles app,dmg",
     "test": "bun test packages/app/src",
     "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src",
     "typecheck": "turbo typecheck",

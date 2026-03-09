@@ -6,6 +6,27 @@ import { commands } from "@zulip/desktop/bindings"
 import { MessageItem } from "../components/message-item"
 import type { Message } from "../context/zulip-sync"
 
+function formatDateSeparator(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return "Today"
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"
+
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  })
+}
+
+function isDifferentDay(ts1: number, ts2: number): boolean {
+  return new Date(ts1 * 1000).toDateString() !== new Date(ts2 * 1000).toDateString()
+}
+
 /**
  * AllMessagesView — shows all messages across all streams and DMs,
  * in chronological order with stream > topic divider headers.
@@ -186,9 +207,15 @@ export function AllMessagesView() {
               const prev = () => idx() > 0 ? messages()[idx() - 1] : null
               const showDivider = () => needsDivider(message, prev())
               const context = () => getMessageContext(message)
-              const showSender = () => {
+              const showDateSeparator = () => {
                 const p = prev()
+                if (!p) return true
+                return isDifferentDay(p.timestamp, message.timestamp)
+              }
+              const showSender = () => {
+                if (showDateSeparator()) return true
                 if (showDivider()) return true
+                const p = prev()
                 if (!p) return true
                 if (p.sender_id !== message.sender_id) return true
                 if (message.timestamp - p.timestamp > 300) return true
@@ -197,6 +224,15 @@ export function AllMessagesView() {
 
               return (
                 <>
+                  <Show when={showDateSeparator()}>
+                    <div class="flex items-center gap-4 px-4 pt-4 pb-1 select-none" data-component="date-separator">
+                      <div class="flex-1 h-px bg-[var(--border-default)]" />
+                      <span class="text-xs font-medium text-[var(--text-tertiary)] whitespace-nowrap">
+                        {formatDateSeparator(message.timestamp)}
+                      </span>
+                      <div class="flex-1 h-px bg-[var(--border-default)]" />
+                    </div>
+                  </Show>
                   <Show when={showDivider()}>
                     <button
                       class="w-full flex items-center gap-1.5 px-4 py-1.5 text-left bg-[var(--background-surface)] border-b border-t border-[var(--border-default)] hover:bg-[var(--background-elevated)] transition-colors sticky top-0 z-10"

@@ -31,6 +31,34 @@ export const commands = {
         }
     },
     /**
+     * Exchange a password for an API key using Zulip's fetch_api_key endpoint
+     */
+    async fetchApiKey(url, username, password) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("fetch_api_key", { url, username, password }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Open an app-owned sign-in window for Zulip external authentication flows.
+     */
+    async openExternalAuthWindow(url) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("open_external_auth_window", { url }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
      * Disconnect from a Zulip server
      */
     async logout(orgId) {
@@ -159,11 +187,39 @@ export const commands = {
         }
     },
     /**
+     * Save bytes to a temporary file and return its path (for paste/drag-drop uploads)
+     */
+    async saveTempFile(fileName, data) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("save_temp_file", { fileName, data }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
      * Upload a file
      */
     async uploadFile(orgId, filePath) {
         try {
             return { status: "ok", data: await TAURI_INVOKE("upload_file", { orgId, filePath }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Fetch an authenticated media URL and convert it to a data URL for the webview.
+     */
+    async fetchAuthenticatedMediaDataUrl(orgId, mediaUrl) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("fetch_authenticated_media_data_url", { orgId, mediaUrl }) };
         }
         catch (e) {
             if (e instanceof Error)
@@ -984,6 +1040,48 @@ export const commands = {
     async getFoundryProviders(orgId) {
         try {
             return { status: "ok", data: await TAURI_INVOKE("get_foundry_providers", { orgId }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Connect a Foundry provider using an API key credential
+     */
+    async connectFoundryProvider(orgId, provider, apiKey, label) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("connect_foundry_provider", { orgId, provider, apiKey, label }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Disconnect a Foundry provider credential
+     */
+    async disconnectFoundryProvider(orgId, provider) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("disconnect_foundry_provider", { orgId, provider }) };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
+     * Start a Foundry provider OAuth flow
+     */
+    async startFoundryProviderOauth(orgId, provider, redirectUri) {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("start_foundry_provider_oauth", { orgId, provider, redirectUri }) };
         }
         catch (e) {
             if (e instanceof Error)

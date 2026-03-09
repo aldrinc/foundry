@@ -8,13 +8,11 @@ import type {
   ServerSettings,
 } from "@zulip/desktop/bindings"
 import {
-  buildExternalAuthUrl,
   completePendingSso,
   consumePendingDeepLinks,
-  generateOtpHex,
+  openExternalAuth,
   parseSsoCallbackUrl,
   resolveServerUrl,
-  savePendingSso,
   subscribeToDeepLinks,
   supportsPasswordAuth,
   usernameLabel,
@@ -155,14 +153,18 @@ export function SettingsServers() {
     }
   }
 
-  const handleExternalAuth = (method: ExternalAuthenticationMethod) => {
+  const handleExternalAuth = async (method: ExternalAuthenticationMethod) => {
     const url = resolveServerUrl(newUrl(), serverInfo())
-    const otp = generateOtpHex()
 
     setError("")
     setPendingSsoProvider(method.name)
-    savePendingSso(window.localStorage, url, otp)
-    platform.openLink(buildExternalAuthUrl(url, method, otp))
+
+    try {
+      await openExternalAuth(platform, window.localStorage, url, method)
+    } catch (e: any) {
+      setPendingSsoProvider(null)
+      setError(e?.message || e?.toString() || "SSO sign-in failed")
+    }
   }
 
   const handleDeepLinks = async (urls: string[]) => {
@@ -264,7 +266,7 @@ export function SettingsServers() {
                     {(method) => (
                       <button
                         class="w-full py-2 px-3 rounded-[var(--radius-sm)] border border-[var(--border-default)] text-xs text-[var(--text-primary)] hover:bg-[var(--background-surface)] transition-colors disabled:opacity-50"
-                        onClick={() => handleExternalAuth(method)}
+                        onClick={() => void handleExternalAuth(method)}
                         disabled={loading()}
                       >
                         {pendingSsoProvider() === method.name

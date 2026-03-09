@@ -13,6 +13,10 @@ export interface NotificationContext {
   currentUserId: number | null
   currentUserEmail: string | null
   isFollowedTopic?: boolean
+  isTopicMuted?: boolean
+  isChannelMuted?: boolean
+  channelDesktopNotifications?: boolean | null
+  channelWildcardMentionsNotify?: boolean | null
 }
 
 const ATTACHMENT_CONTENT = "(attached file)"
@@ -49,12 +53,11 @@ export function shouldNotifyMessage(
   preferences: NotificationPreferences,
   context: NotificationContext,
 ): boolean {
-  if (!preferences.desktopNotifs) return false
   if (hasFlag(message, "read")) return false
   if (isMessageSentByCurrentUser(message, context)) return false
 
   if (message.type === "private") {
-    return preferences.dmNotifs
+    return preferences.desktopNotifs && preferences.dmNotifs
   }
 
   if (context.isFollowedTopic && preferences.followedTopics) {
@@ -64,11 +67,26 @@ export function shouldNotifyMessage(
   if (isWildcardMention(message)) {
     if (preferences.wildcardMentions === "notify") return true
     if (preferences.wildcardMentions === "silent") return false
-    return preferences.mentionNotifs
+    if (context.channelWildcardMentionsNotify !== null && context.channelWildcardMentionsNotify !== undefined) {
+      return context.channelWildcardMentionsNotify
+    }
+    return preferences.desktopNotifs && preferences.mentionNotifs
   }
 
   if (isDirectMention(message)) {
-    return preferences.mentionNotifs
+    return preferences.desktopNotifs && preferences.mentionNotifs
+  }
+
+  if (context.isTopicMuted) {
+    return false
+  }
+
+  if (context.channelDesktopNotifications !== null && context.channelDesktopNotifications !== undefined) {
+    return context.channelDesktopNotifications
+  }
+
+  if (context.isChannelMuted) {
+    return false
   }
 
   return preferences.channelNotifs

@@ -92,6 +92,10 @@ pub struct RegisterResponse {
     pub realm_users: Vec<User>,
     #[serde(default)]
     pub user_topics: Vec<UserTopic>,
+    #[serde(default)]
+    pub unread_msgs: UnreadMessages,
+    #[serde(default)]
+    pub recent_private_conversations: Vec<RecentPrivateConversation>,
     pub max_message_length: Option<u32>,
 }
 
@@ -101,12 +105,63 @@ pub struct LoginResult {
     pub org_id: String,
     pub realm_name: String,
     pub realm_icon: String,
+    pub realm_url: String,
     pub queue_id: String,
     /// The logged-in user's ID (from Zulip register response)
     pub user_id: Option<u64>,
     pub subscriptions: Vec<Subscription>,
     pub users: Vec<User>,
     pub user_topics: Vec<UserTopic>,
+    pub unread_msgs: UnreadMessages,
+    pub recent_private_conversations: Vec<RecentPrivateConversation>,
+}
+
+/// Recent DM/group-DM metadata returned by Zulip register.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct RecentPrivateConversation {
+    #[serde(default)]
+    pub user_ids: Vec<u64>,
+    pub max_message_id: u64,
+}
+
+/// Aggregated unread metadata returned by Zulip register.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+pub struct UnreadMessages {
+    #[serde(default)]
+    pub count: u64,
+    #[serde(default)]
+    pub pms: Vec<UnreadDirectMessage>,
+    #[serde(default)]
+    pub streams: Vec<UnreadStream>,
+    #[serde(default)]
+    pub huddles: Vec<UnreadGroupDirectMessage>,
+    #[serde(default)]
+    pub mentions: Vec<u64>,
+    #[serde(default)]
+    pub old_unreads_missing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct UnreadDirectMessage {
+    pub other_user_id: Option<u64>,
+    pub sender_id: Option<u64>,
+    #[serde(default)]
+    pub unread_message_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct UnreadStream {
+    pub topic: String,
+    pub stream_id: u64,
+    #[serde(default)]
+    pub unread_message_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct UnreadGroupDirectMessage {
+    pub user_ids_string: String,
+    #[serde(default)]
+    pub unread_message_ids: Vec<u64>,
 }
 
 /// Stream/channel subscription

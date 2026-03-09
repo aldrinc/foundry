@@ -1,14 +1,36 @@
 export function getProviderConnectionStatus(provider) {
     const runtime = provider;
-    if (provider.credential_status)
-        return provider.credential_status;
+    if (runtime.credential?.status) {
+        return runtime.credential.status === "active"
+            ? "connected"
+            : runtime.credential.status;
+    }
     if (runtime.connected === true)
         return "connected";
-    if (runtime.credential)
-        return "configured";
-    if (provider.oauth_configured)
-        return "configured";
+    if (provider.credential_status)
+        return provider.credential_status;
     return "not_connected";
+}
+export function isProviderConnected(provider) {
+    return getProviderConnectionStatus(provider) === "connected";
+}
+export function getProviderCredentialLabel(provider) {
+    const runtime = provider;
+    const credential = runtime.credential;
+    if (!credential || !isProviderConnected(provider)) {
+        return null;
+    }
+    const label = credential.label?.trim();
+    if (label)
+        return label;
+    const mode = credential.auth_mode?.trim().toLowerCase();
+    if (mode === "oauth")
+        return "OAuth";
+    if (mode === "api_key")
+        return "API key";
+    if (mode)
+        return mode;
+    return "Credential";
 }
 export function getProviderDefaultModel(provider) {
     const runtime = provider;

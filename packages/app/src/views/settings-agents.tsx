@@ -8,9 +8,12 @@ import {
   useAgents,
 } from "../context/agents"
 import {
+  getProviderCredentialLabel,
   getProviderConnectionStatus,
   getProviderDefaultModel,
+  isProviderConnected,
 } from "../context/agent-runtime"
+import { usePlatform } from "../context/platform"
 import { useZulipSync } from "../context/zulip-sync"
 import { SettingToggle } from "./settings-general"
 
@@ -48,8 +51,7 @@ export function SettingsAgents() {
 
   const connectedProviders = createMemo(() =>
     (agents.store.providers || []).filter((provider) =>
-      getProviderConnectionStatus(provider) === "connected" ||
-      getProviderConnectionStatus(provider) === "configured",
+      isProviderConnected(provider),
     ),
   )
 
@@ -116,8 +118,9 @@ export function SettingsAgents() {
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-primary)]">Moltis Runtime</h3>
             <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              Provider state comes from Foundry today. Delegate definitions are stored locally and injected into
-              Supervisor requests until native Foundry agent sync endpoints land.
+              Provider account state comes from Meridian. Connected accounts are usable immediately, while delegate
+              definitions remain stored locally and injected into Supervisor requests until native Meridian agent sync
+              endpoints land.
             </div>
           </div>
           <button
@@ -142,6 +145,12 @@ export function SettingsAgents() {
               {(provider) => <ProviderCard provider={provider} />}
             </For>
           </div>
+          <Show when={connectedProviders().length === 0}>
+            <div class="p-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)] text-xs text-[var(--text-tertiary)]">
+              Connect at least one provider below before validating Supervisor runtime behavior or assigning delegate
+              provider overrides.
+            </div>
+          </Show>
         </Show>
       </section>
 
@@ -397,7 +406,8 @@ export function SettingsAgents() {
 
             <div class="flex items-center justify-between gap-3">
               <div class="text-[11px] text-[var(--text-tertiary)]">
-                Delegate execution is not wired yet. This slice makes the catalog, inheritance, and Supervisor visibility real first.
+                Saved delegates are applied to outgoing Supervisor requests immediately. Native Meridian agent sync is
+                the remaining gap.
               </div>
               <button
                 class="px-3 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity"
@@ -440,14 +450,111 @@ export function SettingsAgents() {
 }
 
 function ProviderCard(props: { provider: FoundryProviderAuth }) {
+  const agents = useAgents()
+  const platform = usePlatform()
+  const [showApiKeyForm, setShowApiKeyForm] = createSignal(false)
+  const [apiKey, setApiKey] = createSignal("")
+  const [message, setMessage] = createSignal("")
+  const [error, setError] = createSignal("")
+  const [busyAction, setBusyAction] = createSignal<"api_key" | "oauth" | "disconnect" | null>(null)
+  const [oauthPending, setOauthPending] = createSignal(false)
   const label = () => props.provider.display_name || props.provider.provider
   const defaultModel = () => getProviderDefaultModel(props.provider)
-  const authLabel = () => {
-    if ((props.provider.auth_modes || []).includes("oauth")) return "OAuth"
-    if ((props.provider.auth_modes || []).includes("local")) return "Local"
-    return "API key"
+  const status = () => getProviderConnectionStatus(props.provider)
+  const connected = () => isProviderConnected(props.provider)
+  const supportsOauth = () => (props.provider.auth_modes || []).includes("oauth")
+  const supportsApiKey = () => (props.provider.auth_modes || []).includes("api_key")
+  const credentialLabel = () => getProviderCredentialLabel(props.provider)
+  const authLabels = () => {
+    const labels: string[] = []
+    if (supportsOauth()) labels.push("OAuth")
+    if ((props.provider.auth_modes || []).includes("api_key")) labels.push("API key")
+    if ((props.provider.auth_modes || []).includes("local")) labels.push("Local")
+    return labels
   }
-  const statusLabel = () => getProviderConnectionStatus(props.provider)
+  const statusLabel = () => status().replace(/_/g, " ")
+  const statusTone = () => {
+    if (connected()) return "success" as const
+    if (status() === "revoked") return "neutral" as const
+    return "warning" as const
+  }
+  const statusDescription = () => {
+    if (connected()) {
+      return `Connected via ${credentialLabel() || "credential"}`
+    }
+    if (status() === "revoked") {
+      return "Credential revoked. Reconnect to use this provider."
+    }
+    return "Not connected"
+  }
+
+  const resetFeedback = () => {
+    setError("")
+    setMessage("")
+  }
+
+  const handleApiKeyConnect = async () => {
+    resetFeedback()
+    setBusyAction("api_key")
+
+    const result = await agents.connectProvider(props.provider.provider, apiKey())
+    if (!result.ok) {
+      setError(result.error || "Failed to connect provider.")
+      setBusyAction(null)
+      return
+    }
+
+    setApiKey("")
+    setShowApiKeyForm(false)
+    setMessage("Provider connected.")
+    setBusyAction(null)
+  }
+
+  const handleDisconnect = async () => {
+    resetFeedback()
+    setBusyAction("disconnect")
+
+    const result = await agents.disconnectProvider(props.provider.provider)
+    if (!result.ok) {
+      setError(result.error || "Failed to disconnect provider.")
+      setBusyAction(null)
+      return
+    }
+
+    setMessage("Provider disconnected.")
+    setBusyAction(null)
+  }
+
+  const handleOauth = async () => {
+    resetFeedback()
+    setBusyAction("oauth")
+
+    const result = await agents.startProviderOauth(props.provider.provider)
+    if (!result.ok) {
+      setError(result.error || "Failed to start OAuth sign-in.")
+      setBusyAction(null)
+      return
+    }
+
+    if (result.authorizeUrl) {
+      platform.openLink(result.authorizeUrl)
+    }
+
+    setMessage("OAuth sign-in started. Finish in your browser; this card will refresh automatically.")
+    setOauthPending(true)
+    setBusyAction(null)
+
+    void agents.waitForProviderConnection(props.provider.provider).then((waitResult) => {
+      setOauthPending(false)
+      if (waitResult.connected) {
+        setError("")
+        setMessage("Provider connected.")
+        return
+      }
+
+      setError(waitResult.error || "OAuth sign-in did not complete before the timeout.")
+    })
+  }
 
   return (
     <div class="p-3 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)]">
@@ -460,15 +567,89 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
               <span> · {defaultModel()}</span>
             </Show>
           </div>
+          <div class="text-[11px] text-[var(--text-secondary)] mt-2">{statusDescription()}</div>
         </div>
-        <div class="flex items-center gap-1.5">
-          <ProviderBadge label={authLabel()} tone="neutral" />
+        <div class="flex flex-wrap items-center justify-end gap-1.5">
+          <For each={authLabels()}>
+            {(authLabel) => <ProviderBadge label={authLabel} tone="neutral" />}
+          </For>
           <ProviderBadge
             label={statusLabel()}
-            tone={statusLabel() === "connected" || statusLabel() === "configured" ? "success" : "warning"}
+            tone={statusTone()}
           />
         </div>
       </div>
+
+      <div class="flex flex-wrap gap-2 mt-3">
+        <Show when={supportsOauth()}>
+          <button
+            class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-60"
+            onClick={() => void handleOauth()}
+            disabled={busyAction() !== null || oauthPending()}
+          >
+            {oauthPending() ? "Waiting for OAuth..." : "OAuth sign-in"}
+          </button>
+        </Show>
+
+        <Show when={supportsApiKey()}>
+          <button
+            class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-60"
+            onClick={() => {
+              resetFeedback()
+              setShowApiKeyForm(!showApiKeyForm())
+            }}
+            disabled={busyAction() !== null}
+          >
+            {showApiKeyForm() ? "Cancel API key" : connected() ? "Update API key" : "Use API key"}
+          </button>
+        </Show>
+
+        <button
+          class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-60"
+          onClick={() => void agents.refreshProviders()}
+          disabled={busyAction() !== null}
+        >
+          Check status
+        </button>
+
+        <button
+          class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--status-error)]/30 text-[var(--status-error)] hover:bg-[var(--status-error)]/10 transition-colors disabled:opacity-60"
+          onClick={() => void handleDisconnect()}
+          disabled={!connected() || busyAction() !== null}
+        >
+          {busyAction() === "disconnect" ? "Disconnecting..." : "Disconnect"}
+        </button>
+      </div>
+
+      <Show when={showApiKeyForm()}>
+        <div class="mt-3 p-3 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--background-base)] space-y-2">
+          <div class="text-[11px] text-[var(--text-tertiary)]">
+            Paste the provider API key to connect this account for the current user.
+          </div>
+          <input
+            type="password"
+            value={apiKey()}
+            onInput={(event) => setApiKey(event.currentTarget.value)}
+            class="w-full text-xs bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)]"
+            placeholder="sk-..."
+          />
+          <div class="flex justify-end">
+            <button
+              class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-60"
+              onClick={() => void handleApiKeyConnect()}
+              disabled={busyAction() !== null}
+            >
+              {busyAction() === "api_key" ? "Connecting..." : "Connect API key"}
+            </button>
+          </div>
+        </div>
+      </Show>
+
+      <Show when={message() || error()}>
+        <div class={`text-[11px] mt-3 ${error() ? "text-[var(--status-error)]" : "text-[var(--text-tertiary)]"}`}>
+          {error() || message()}
+        </div>
+      </Show>
     </div>
   )
 }

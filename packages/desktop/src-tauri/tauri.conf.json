@@ -37,6 +37,9 @@
       "icons/icon.ico"
     ],
     "active": true,
+    "resources": {
+      "resources/notifications/default.wav": "notifications/default.wav"
+    },
     "targets": ["deb", "rpm", "dmg", "nsis", "app"]
   },
   "plugins": {

@@ -1,5 +1,7 @@
 import { createSignal, For, Show, createMemo } from "solid-js"
 
+import type { QuickReactionEntry } from "./emoji-quick-reactions"
+
 // ── Emoji data organized by category ──
 
 interface EmojiEntry {
@@ -228,6 +230,8 @@ const ALL_EMOJI = EMOJI_CATEGORIES.flatMap(c => c.emoji)
 export function EmojiPicker(props: {
   onSelect: (emojiName: string, emojiCode: string) => void
   onClose: () => void
+  quickReactions?: readonly QuickReactionEntry[]
+  quickReactionsLabel?: string
 }) {
   const [search, setSearch] = createSignal("")
   const [activeCategory, setActiveCategory] = createSignal("smileys")
@@ -248,7 +252,6 @@ export function EmojiPicker(props: {
     <div
       class="w-[280px] bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-md overflow-hidden"
       data-component="emoji-picker"
-      onClick={(e) => e.stopPropagation()}
     >
       {/* Search */}
       <div class="p-2 border-b border-[var(--border-default)]">
@@ -262,6 +265,28 @@ export function EmojiPicker(props: {
           autofocus
         />
       </div>
+
+      {/* Quick reactions */}
+      <Show when={!filtered() && props.quickReactions && props.quickReactions.length > 0}>
+        <div class="px-2 pt-2 pb-1 border-b border-[var(--border-default)]">
+          <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider px-1 mb-1">
+            {props.quickReactionsLabel ?? "Quick reactions"}
+          </div>
+          <div class="grid grid-cols-4 gap-1">
+            <For each={props.quickReactions}>
+              {(emoji) => (
+                <button
+                  onClick={() => props.onSelect(emoji.name, emoji.code)}
+                  class="h-9 rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--background-base)] hover:bg-[var(--background-elevated)] transition-colors text-lg"
+                  title={`:${emoji.name}:`}
+                >
+                  {emoji.char}
+                </button>
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
 
       {/* Category tabs */}
       <Show when={!filtered()}>

@@ -102,6 +102,49 @@ pub async fn get_foundry_providers(
     client.get_foundry_providers().await
 }
 
+/// Connect a Foundry provider using an API key credential
+#[tauri::command]
+#[specta::specta]
+pub async fn connect_foundry_provider(
+    state: State<'_, AppState>,
+    org_id: String,
+    provider: String,
+    api_key: String,
+    label: Option<String>,
+) -> Result<FoundryProviderCredentialResponse, String> {
+    let client = get_client(&state, &org_id)?;
+    client
+        .connect_foundry_provider(&provider, &api_key, label.as_deref())
+        .await
+}
+
+/// Disconnect a Foundry provider credential
+#[tauri::command]
+#[specta::specta]
+pub async fn disconnect_foundry_provider(
+    state: State<'_, AppState>,
+    org_id: String,
+    provider: String,
+) -> Result<FoundryProviderCredentialResponse, String> {
+    let client = get_client(&state, &org_id)?;
+    client.disconnect_foundry_provider(&provider).await
+}
+
+/// Start a Foundry provider OAuth flow
+#[tauri::command]
+#[specta::specta]
+pub async fn start_foundry_provider_oauth(
+    state: State<'_, AppState>,
+    org_id: String,
+    provider: String,
+    redirect_uri: Option<String>,
+) -> Result<FoundryProviderOauthStartResponse, String> {
+    let client = get_client(&state, &org_id)?;
+    client
+        .start_foundry_provider_oauth(&provider, redirect_uri.as_deref())
+        .await
+}
+
 /// Get events for a specific task
 #[tauri::command]
 #[specta::specta]

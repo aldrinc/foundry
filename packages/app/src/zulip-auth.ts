@@ -1,7 +1,9 @@
+import { commands } from "@zulip/desktop/bindings"
 import type {
   ExternalAuthenticationMethod,
   ServerSettings,
 } from "@zulip/desktop/bindings"
+import type { Platform } from "./context/platform"
 
 export const PENDING_SSO_STORAGE_KEY = "foundry.desktop.pending-sso"
 const DEEP_LINK_EVENT_NAME = "foundry:deep-link"
@@ -103,6 +105,34 @@ export function decryptOtpEncryptedApiKey(otpEncryptedApiKey: string, otp: strin
   }
 
   return new TextDecoder().decode(Uint8Array.from(hexEncodedApiKey.match(/../g)?.map((byte) => Number.parseInt(byte, 16)) ?? []))
+}
+
+export async function openExternalAuth(
+  platform: Pick<Platform, "platform" | "openLink">,
+  storage: StorageLike,
+  serverUrl: string,
+  method: Pick<ExternalAuthenticationMethod, "login_url">,
+): Promise<void> {
+  const normalizedServerUrl = normalizeServerUrl(serverUrl)
+  const otp = generateOtpHex()
+  const authUrl = buildExternalAuthUrl(normalizedServerUrl, method, otp)
+
+  savePendingSso(storage, normalizedServerUrl, otp)
+
+  try {
+    if (platform.platform === "desktop") {
+      const result = await commands.openExternalAuthWindow(authUrl)
+      if (result.status === "error") {
+        throw new Error(result.error)
+      }
+      return
+    }
+
+    platform.openLink(authUrl)
+  } catch (error) {
+    clearPendingSso(storage, normalizedServerUrl)
+    throw error
+  }
 }
 
 export function savePendingSso(storage: StorageLike, serverUrl: string, otp: string): void {

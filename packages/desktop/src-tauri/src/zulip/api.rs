@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use serde::de::DeserializeOwned;
 
 use super::types::*;
@@ -38,6 +39,30 @@ fn json_value_to_form_value(value: serde_json::Value) -> String {
         serde_json::Value::String(string) => string,
         other => other.to_string(),
     }
+}
+
+fn resolve_realm_media_url(base_url: &str, media_url: &str) -> Result<reqwest::Url, String> {
+    let base = reqwest::Url::parse(base_url)
+        .map_err(|e| format!("Invalid base URL '{}': {}", base_url, e))?;
+    let resolved = if let Ok(absolute) = reqwest::Url::parse(media_url) {
+        absolute
+    } else {
+        base.join(media_url)
+            .map_err(|e| format!("Invalid media URL '{}': {}", media_url, e))?
+    };
+
+    let same_origin = resolved.scheme() == base.scheme()
+        && resolved.host_str() == base.host_str()
+        && resolved.port_or_known_default() == base.port_or_known_default();
+
+    if !same_origin {
+        return Err(format!(
+            "Refusing to fetch media from a different origin: {}",
+            resolved
+        ));
+    }
+
+    Ok(resolved)
 }
 
 impl ZulipClient {
@@ -165,6 +190,7 @@ impl ZulipClient {
                 "realm",
                 "realm_domains",
                 "realm_user",
+                "recent_private_conversations",
                 "user_topic",
             ],
         )
@@ -892,6 +918,47 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse upload result: {}", e))
     }
 
+    /// Fetch an authenticated media asset and return it as a data URL for the webview.
+    pub async fn fetch_authenticated_media_data_url(
+        &self,
+        media_url: &str,
+    ) -> Result<String, String> {
+        let resolved_url = resolve_realm_media_url(&self.base_url, media_url)?;
+        let resp = self
+            .client
+            .get(resolved_url.clone())
+            .basic_auth(&self.email, Some(&self.api_key))
+            .send()
+            .await
+            .map_err(|e| format!("Media fetch failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            let preview = body.chars().take(200).collect::<String>();
+            return Err(format!("Media fetch failed ({}): {}", status, preview));
+        }
+
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .unwrap_or("application/octet-stream")
+            .to_string();
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|e| format!("Failed to read media response: {}", e))?;
+
+        Ok(format!(
+            "data:{};base64,{}",
+            content_type,
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ))
+    }
+
     /// POST /api/v1/users/{user_id}/reactivate
     pub async fn reactivate_user(&self, user_id: u64) -> Result<(), String> {
         let resp = self
@@ -1521,6 +1588,31 @@ mod tests {
             r#"{"new":5,"old":2}"#
         );
         assert_eq!(json_value_to_form_value(serde_json::Value::Null), "null");
+    }
+
+    #[test]
+    fn resolves_relative_realm_media_urls() {
+        let resolved = resolve_realm_media_url(
+            "https://zulip.meridian.cv",
+            "/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolved.as_str(),
+            "https://zulip.meridian.cv/user_uploads/thumbnail/3/5b/file.png/840x560.webp"
+        );
+    }
+
+    #[test]
+    fn rejects_cross_origin_media_urls() {
+        let error = resolve_realm_media_url(
+            "https://zulip.meridian.cv",
+            "https://example.com/user_uploads/file.png",
+        )
+        .unwrap_err();
+
+        assert!(error.contains("different origin"));
     }
 
     #[test]

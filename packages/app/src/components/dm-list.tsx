@@ -1,11 +1,13 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { useZulipSync } from "../context/zulip-sync"
+import { useZulipSync, type UnreadItem } from "../context/zulip-sync"
 import { useNavigation } from "../context/navigation"
 import type { User } from "../context/zulip-sync"
+import { narrowForRecentDirectMessage } from "../context/recent-dms"
 
 /**
  * DirectMessageList — shows recent DM conversations in the sidebar.
- * Derives conversations from message store keys starting with "dm:".
+ * Uses the recent conversation snapshot from Zulip register/resync payloads,
+ * then decorates items with cached message previews when available.
  * Also includes a "New message" button with a user picker.
  */
 export function DirectMessageList() {
@@ -14,35 +16,71 @@ export function DirectMessageList() {
   const [collapsed, setCollapsed] = createSignal(false)
   const [showUserPicker, setShowUserPicker] = createSignal(false)
   const [userFilter, setUserFilter] = createSignal("")
+  const unreadCountsByNarrow = createMemo(() =>
+    Object.fromEntries(
+      sync.store.unreadItems
+        .filter((item): item is Extract<UnreadItem, { kind: "dm" }> => item.kind === "dm")
+        .map((item) => [item.narrow, item.count]),
+    ),
+  )
 
-  // Derive DM conversations from message store
+  // Derive DM conversations from recent-conversation metadata plus any cached messages.
   const dmConversations = createMemo(() => {
-    const convos: Array<{
+    const convos = new Map<string, {
       narrow: string
       participants: User[]
+      sortKey: number
       lastTimestamp: number
       lastPreview: string
-    }> = []
+    }>()
 
-    for (const [narrow, messages] of Object.entries(sync.store.messages)) {
-      if (!narrow.startsWith("dm:")) continue
-      const userIds = narrow.slice(3).split(",").map(Number)
+    for (const conversation of sync.store.recentDirectMessages) {
+      const narrow = narrowForRecentDirectMessage(conversation)
+      const userIds = conversation.user_ids
       const participants = userIds
         .map(id => sync.store.users.find(u => u.user_id === id))
         .filter((u): u is User => !!u)
 
-      // Get last message for preview
-      const lastMsg = messages[messages.length - 1]
-      const lastTimestamp = lastMsg?.timestamp ?? 0
-      const lastPreview = lastMsg
-        ? stripHtml(lastMsg.content).slice(0, 60)
-        : ""
-
-      convos.push({ narrow, participants, lastTimestamp, lastPreview })
+      convos.set(narrow, {
+        narrow,
+        participants,
+        sortKey: conversation.max_message_id,
+        lastTimestamp: 0,
+        lastPreview: "",
+      })
     }
 
-    // Sort by most recent
-    return convos.sort((a, b) => b.lastTimestamp - a.lastTimestamp)
+    for (const [narrow, messages] of Object.entries(sync.store.messages)) {
+      if (!narrow.startsWith("dm:")) continue
+
+      const existing = convos.get(narrow)
+      const participants = existing?.participants ?? narrow
+        .slice(3)
+        .split(",")
+        .map(Number)
+        .map(id => sync.store.users.find(u => u.user_id === id))
+        .filter((u): u is User => !!u)
+
+      const lastMsg = messages[messages.length - 1]
+      const lastPreview = lastMsg
+        ? stripHtml(lastMsg.content).slice(0, 60)
+        : existing?.lastPreview ?? ""
+
+      convos.set(narrow, {
+        narrow,
+        participants,
+        sortKey: Math.max(existing?.sortKey ?? 0, lastMsg?.id ?? 0),
+        lastTimestamp: lastMsg?.timestamp ?? existing?.lastTimestamp ?? 0,
+        lastPreview,
+      })
+    }
+
+    return Array.from(convos.values()).sort((a, b) => {
+      if (a.lastTimestamp !== b.lastTimestamp) {
+        return b.lastTimestamp - a.lastTimestamp
+      }
+      return b.sortKey - a.sortKey
+    })
   })
 
   // Filter users for new DM picker
@@ -197,7 +235,14 @@ export function DirectMessageList() {
                 {/* Timestamp */}
                 <Show when={convo.lastTimestamp}>
                   <span class="text-[10px] text-[var(--text-tertiary)] shrink-0">
-                    {formatTimestamp(convo.lastTimestamp)}
+                    <Show
+                      when={(unreadCountsByNarrow()[convo.narrow] ?? 0) > 0}
+                      fallback={formatTimestamp(convo.lastTimestamp)}
+                    >
+                      <span class="text-[10px] font-medium text-[var(--interactive-primary)]">
+                        {unreadCountsByNarrow()[convo.narrow]}
+                      </span>
+                    </Show>
                   </span>
                 </Show>
               </button>

@@ -86,6 +86,17 @@ describe("shouldNotifyMessage", () => {
     })).toBe(false)
   })
 
+  test("does not gate ordinary channel notifications on personal desktop notification settings", () => {
+    const message = createMessage()
+    const context = { currentUserId: 99, currentUserEmail: "desdemona@example.com" }
+
+    expect(shouldNotifyMessage(message, {
+      ...DEFAULT_PREFERENCES,
+      desktopNotifs: false,
+      channelNotifs: true,
+    }, context)).toBe(true)
+  })
+
   test("supports wildcard mention overrides", () => {
     const message = createMessage({ flags: ["stream_wildcard_mentioned"] })
     const context = { currentUserId: 99, currentUserEmail: "desdemona@example.com" }
@@ -109,6 +120,48 @@ describe("shouldNotifyMessage", () => {
       currentUserId: 99,
       currentUserEmail: "desdemona@example.com",
       isFollowedTopic: true,
+    })).toBe(true)
+  })
+
+  test("respects explicit per-channel desktop notification overrides", () => {
+    const message = createMessage()
+    const context = { currentUserId: 99, currentUserEmail: "desdemona@example.com" }
+
+    expect(shouldNotifyMessage(message, {
+      ...DEFAULT_PREFERENCES,
+      channelNotifs: false,
+    }, {
+      ...context,
+      channelDesktopNotifications: true,
+    })).toBe(true)
+
+    expect(shouldNotifyMessage(message, {
+      ...DEFAULT_PREFERENCES,
+      channelNotifs: true,
+    }, {
+      ...context,
+      channelDesktopNotifications: false,
+    })).toBe(false)
+  })
+
+  test("suppresses ordinary channel notifications for muted topics", () => {
+    const message = createMessage()
+    expect(shouldNotifyMessage(message, {
+      ...DEFAULT_PREFERENCES,
+      channelNotifs: true,
+    }, {
+      currentUserId: 99,
+      currentUserEmail: "desdemona@example.com",
+      isTopicMuted: true,
+    })).toBe(false)
+  })
+
+  test("still allows direct mentions in muted topics", () => {
+    const message = createMessage({ flags: ["mentioned"] })
+    expect(shouldNotifyMessage(message, DEFAULT_PREFERENCES, {
+      currentUserId: 99,
+      currentUserEmail: "desdemona@example.com",
+      isTopicMuted: true,
     })).toBe(true)
   })
 })

@@ -16,7 +16,33 @@ import {
   cacheKeysForMessage,
   hasStarredFlag,
   mergeMessagesById,
+  primaryNarrowForMessage,
 } from "./message-cache"
+import {
+  addUnreadDirectMessage,
+  addUnreadStreamMessage,
+  buildUnreadIndex,
+  buildUnreadUiState,
+  removeUnreadMessages,
+  updateUnreadStreamMessage,
+  type UnreadItem,
+  type UnreadMessagesSnapshot,
+} from "./unread-state"
+import {
+  hydrateRecentDirectMessages,
+  upsertRecentDirectMessageFromMessage,
+  type RecentDirectMessageConversation,
+  type RecentDirectMessageSnapshot,
+} from "./recent-dms"
+
+export type { UnreadItem } from "./unread-state"
+
+// Module-level getter for the active narrow — allows handleMessageEvent
+// to check if the user is viewing the conversation a new message belongs to.
+let _getActiveNarrow: (() => string | null) | null = null
+export function registerActiveNarrowGetter(getter: () => string | null) {
+  _getActiveNarrow = getter
+}
 
 // Types matching the specta-generated bindings
 export interface Subscription {
@@ -81,15 +107,6 @@ export interface Topic {
   max_id: number
 }
 
-export interface UnreadItem {
-  stream_id: number
-  stream_name: string
-  stream_color: string
-  topic: string
-  count: number
-  last_message_id: number
-}
-
 export interface ZulipStore {
   // Connection state
   connected: boolean
@@ -103,6 +120,7 @@ export interface ZulipStore {
   // Core data
   subscriptions: Subscription[]
   users: User[]
+  recentDirectMessages: RecentDirectMessageConversation[]
 
   // Messages keyed by narrow string (e.g., "stream:5/topic:foo")
   messages: Record<string, Message[]>
@@ -129,6 +147,7 @@ const initialStore: ZulipStore = {
   currentUserEmail: null,
   subscriptions: [],
   users: [],
+  recentDirectMessages: [],
   messages: {},
   messageLoadState: {},
   messageHydrated: {},
@@ -143,7 +162,17 @@ export interface ZulipSync {
   store: ZulipStore
 
   // Actions
-  setConnected(orgId: string, queueId: string, subscriptions: Subscription[], users: User[], loginEmail?: string, userId?: number | null, userTopics?: UserTopic[]): void
+  setConnected(
+    orgId: string,
+    queueId: string,
+    subscriptions: Subscription[],
+    users: User[],
+    loginEmail?: string,
+    userId?: number | null,
+    userTopics?: UserTopic[],
+    unreadMessages?: UnreadMessagesSnapshot,
+    recentDirectMessages?: RecentDirectMessageSnapshot[],
+  ): void
   setDisconnected(): void
   addMessages(narrow: string, messages: Message[]): void
   setMessageLoadState(narrow: string, state: "idle" | "loading" | "loaded-all"): void
@@ -181,10 +210,63 @@ const ZulipSyncContext = createContext<ZulipSync>()
 export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element }) {
   const [store, setStore] = createStore<ZulipStore>({ ...initialStore })
   const inFlightFetches = new Map<string, Promise<{ status: "ok" | "error"; fromCache: boolean; error?: string }>>()
+  const unreadIndex = new Map<number, { kind: "stream"; streamId: number; topic: string } | { kind: "dm"; userIds: number[] }>()
   const platform = usePlatform()
   const { store: settings } = useSettings()
 
+  const syncUnreadUi = (
+    subscriptions = store.subscriptions,
+    users = store.users,
+    currentUserId = store.currentUserId,
+  ) => {
+    const unreadState = buildUnreadUiState(unreadIndex, subscriptions, users, currentUserId)
+    setStore(produce(s => {
+      s.unreadCounts = unreadState.unreadCounts
+      s.unreadItems = unreadState.unreadItems
+    }))
+  }
+
+  const seedUnreadState = (
+    unreadMessages?: UnreadMessagesSnapshot,
+    subscriptions = store.subscriptions,
+    users = store.users,
+    currentUserId = store.currentUserId,
+  ) => {
+    unreadIndex.clear()
+    const seeded = buildUnreadIndex(unreadMessages, currentUserId)
+    for (const [messageId, entry] of seeded.entries()) {
+      unreadIndex.set(messageId, entry)
+    }
+    syncUnreadUi(subscriptions, users, currentUserId)
+  }
+
+  const seedRecentDirectMessages = (
+    recentDirectMessages?: RecentDirectMessageSnapshot[],
+    currentUserId = store.currentUserId,
+  ) => {
+    setStore(
+      "recentDirectMessages",
+      hydrateRecentDirectMessages(recentDirectMessages, currentUserId),
+    )
+  }
+
+  const getTopicVisibility = (streamId: number, topic: string): UserTopicVisibilityPolicy => {
+    const userTopic = store.userTopics.find(
+      entry => entry.stream_id === streamId && entry.topic_name === topic,
+    )
+    return (userTopic?.visibility_policy as UserTopicVisibilityPolicy) || "Inherit"
+  }
+
   const maybeNotifyForMessage = (message: Message) => {
+    const subscription = message.stream_id
+      ? store.subscriptions.find(entry => entry.stream_id === message.stream_id)
+      : undefined
+    const topicVisibility = message.stream_id ? getTopicVisibility(message.stream_id, message.subject) : "Inherit"
+    const isFollowedTopic = topicVisibility === "Followed"
+    const isTopicMuted = topicVisibility === "Muted"
+    const isTopicUnmuted = topicVisibility === "Unmuted" || isFollowedTopic
+    const isChannelMuted = Boolean(subscription?.is_muted) && !isTopicUnmuted
+
     const shouldNotify = shouldNotifyMessage(message, {
       desktopNotifs: settings.desktopNotifs,
       dmNotifs: settings.dmNotifs,
@@ -195,27 +277,34 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
     }, {
       currentUserId: store.currentUserId,
       currentUserEmail: store.currentUserEmail,
-      isFollowedTopic: false,
+      isFollowedTopic,
+      isTopicMuted,
+      isChannelMuted,
+      channelDesktopNotifications: subscription?.desktop_notifications ?? null,
+      channelWildcardMentionsNotify: subscription?.wildcard_mentions_notify ?? null,
     })
 
     if (!shouldNotify) {
       return
     }
 
-    const streamName = message.stream_id
-      ? store.subscriptions.find(subscription => subscription.stream_id === message.stream_id)?.name
-      : undefined
+    const silent = settings.muteAllSounds || !(
+      message.type === "private"
+        ? settings.notifSound
+        : (subscription?.audible_notifications ?? settings.notifSound)
+    )
 
     void platform.notify(
-      buildNotificationTitle(message, streamName),
+      buildNotificationTitle(message, subscription?.name),
       buildNotificationBody(message.content),
+      { silent },
     )
   }
 
   const sync: ZulipSync = {
     get store() { return store },
 
-    setConnected(orgId, queueId, subscriptions, users, loginEmail, userId, userTopics) {
+    setConnected(orgId, queueId, subscriptions, users, loginEmail, userId, userTopics, unreadMessages, recentDirectMessages) {
       // Resolve the current user ID:
       // 1. Use the user_id directly from the Zulip register API response (most reliable)
       // 2. Fall back to case-insensitive email matching
@@ -253,12 +342,19 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.currentUserEmail = resolvedEmail
         s.userTopics = userTopics || []
       }))
+
+      seedUnreadState(unreadMessages, subscriptions, users, resolvedUserId)
+      seedRecentDirectMessages(recentDirectMessages, resolvedUserId)
     },
 
     setDisconnected() {
+      unreadIndex.clear()
       setStore(produce(s => {
         s.connected = false
         s.queueId = null
+        s.recentDirectMessages = []
+        s.unreadCounts = {}
+        s.unreadItems = []
       }))
     },
 
@@ -365,17 +461,49 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       if (!data?.message) return
       const msg = data.message as Message
 
+      setStore(
+        "recentDirectMessages",
+        upsertRecentDirectMessageFromMessage(
+          store.recentDirectMessages,
+          msg,
+          store.currentUserId,
+        ),
+      )
+
       for (const narrow of cacheKeysForMessage(msg)) {
         sync.addMessages(narrow, [msg])
       }
 
-      // Update unread counts
-      if (msg.stream_id && !(msg.flags || []).includes("read")) {
-        const currentCount = store.unreadCounts[msg.stream_id] || 0
-        sync.updateUnreadCount(msg.stream_id, currentCount + 1)
+      // Check if the user is currently viewing this conversation
+      const activeNarrow = _getActiveNarrow?.() ?? null
+      const messageNarrow = primaryNarrowForMessage(msg)
+      const isViewingConversation = activeNarrow != null && messageNarrow != null && (
+        activeNarrow === messageNarrow
+        || (activeNarrow.startsWith("stream:") && !activeNarrow.includes("/topic:") && messageNarrow.startsWith(`${activeNarrow}/topic:`))
+      )
+
+      // Update unread counts — skip if user is already viewing this conversation
+      if (isViewingConversation) {
+        // Mark as read immediately — user is already looking at this conversation
+        commands.updateMessageFlags(props.orgId, [msg.id], "add", "read").catch(() => {})
+      } else if (msg.stream_id && !(msg.flags || []).includes("read")) {
+        if (addUnreadStreamMessage(unreadIndex, msg.id, msg.stream_id, msg.subject)) {
+          syncUnreadUi()
+        }
+      } else if (Array.isArray(msg.display_recipient) && !(msg.flags || []).includes("read")) {
+        if (addUnreadDirectMessage(
+          unreadIndex,
+          msg.id,
+          msg.display_recipient.map((recipient) => recipient.id),
+        )) {
+          syncUnreadUi()
+        }
       }
 
-      maybeNotifyForMessage(msg)
+      // Never notify for messages sent by the current user
+      if (msg.sender_id !== store.currentUserId) {
+        maybeNotifyForMessage(msg)
+      }
     },
 
     // Event: typing indicator (DM + stream/topic)
@@ -383,6 +511,9 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       if (!data) return
       const op = data.op as string
       const senderId = data.sender?.user_id as number
+
+      // Never show the current user's own typing indicator
+      if (senderId === store.currentUserId) return
 
       // Build narrow key — two different payload shapes:
       // DM:     { sender, recipients: [{user_id}] }     → narrow = "dm:id1,id2"
@@ -436,13 +567,17 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           const idx = msgs.findIndex(m => m.id === messageId)
           if (idx >= 0) {
             if (op === "add") {
-              msgs[idx].reactions = [...(msgs[idx].reactions || []), reaction]
+              const already = (msgs[idx].reactions || []).some(
+                r => r.emoji_code === reaction.emoji_code && r.user_id === reaction.user_id
+              )
+              if (!already) {
+                msgs[idx].reactions = [...(msgs[idx].reactions || []), reaction]
+              }
             } else if (op === "remove") {
               msgs[idx].reactions = (msgs[idx].reactions || []).filter(
                 r => !(r.emoji_code === reaction.emoji_code && r.user_id === reaction.user_id)
               )
             }
-            break
           }
         }
       }))
@@ -474,12 +609,15 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           }
         }))
       }
+
+      syncUnreadUi()
     },
 
     // Event: message edited
     handleUpdateMessageEvent(data: any) {
       if (!data?.message_id) return
       const messageId = data.message_id as number
+      let unreadChanged = false
 
       setStore(produce(s => {
         for (const narrow of Object.keys(s.messages)) {
@@ -487,11 +625,24 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           const idx = msgs.findIndex(m => m.id === messageId)
           if (idx >= 0) {
             if (data.content) msgs[idx].content = data.content
-            if (data.subject) msgs[idx].subject = data.subject
+            if (data.subject) {
+              msgs[idx].subject = data.subject
+              unreadChanged = updateUnreadStreamMessage(unreadIndex, messageId, { topic: data.subject }) || unreadChanged
+            }
             break
           }
         }
       }))
+
+      if (typeof data.new_stream_id === "number") {
+        unreadChanged = updateUnreadStreamMessage(unreadIndex, messageId, {
+          streamId: data.new_stream_id,
+        }) || unreadChanged
+      }
+
+      if (unreadChanged) {
+        syncUnreadUi()
+      }
     },
 
     // Event: message deleted
@@ -508,6 +659,10 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           s.messages[narrow] = s.messages[narrow].filter(m => !deleteSet.has(m.id))
         }
       }))
+
+      if (removeUnreadMessages(unreadIndex, deleteIds)) {
+        syncUnreadUi()
+      }
     },
 
     // Event: message flags updated (read, starred)
@@ -557,6 +712,44 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           }
         }
       }))
+
+      if (flag === "read") {
+        let unreadChanged = false
+
+        if (op === "add") {
+          unreadChanged = removeUnreadMessages(unreadIndex, messageIds)
+        } else if (op === "remove") {
+          const details = data.message_details as Record<string, any> | undefined
+
+          for (const messageId of messageIds) {
+            const detail = details?.[String(messageId)] || details?.[messageId]
+            if (detail?.type === "stream" && typeof detail.stream_id === "number") {
+              unreadChanged = addUnreadStreamMessage(
+                unreadIndex,
+                messageId,
+                detail.stream_id,
+                detail.topic || "",
+              ) || unreadChanged
+              continue
+            }
+
+            if (detail?.type === "private" && Array.isArray(detail.user_ids)) {
+              unreadChanged = addUnreadDirectMessage(
+                unreadIndex,
+                messageId,
+                [
+                  ...detail.user_ids,
+                  ...(typeof store.currentUserId === "number" ? [store.currentUserId] : []),
+                ],
+              ) || unreadChanged
+            }
+          }
+        }
+
+        if (unreadChanged) {
+          syncUnreadUi()
+        }
+      }
     },
 
     // Event: resync (queue was re-registered)
@@ -570,6 +763,14 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.messageLoadState = {}
         s.messageHydrated = {}
       }))
+
+      seedUnreadState(
+        data.unread_msgs,
+        data.subscriptions || store.subscriptions,
+        data.users || store.users,
+        store.currentUserId,
+      )
+      seedRecentDirectMessages(data.recent_private_conversations, store.currentUserId)
     },
 
     handleUserTopicEvent(data: any) {
@@ -591,10 +792,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
     },
 
     getTopicVisibility(streamId: number, topic: string): UserTopicVisibilityPolicy {
-      const ut = store.userTopics.find(
-        t => t.stream_id === streamId && t.topic_name === topic,
-      )
-      return (ut?.visibility_policy as UserTopicVisibilityPolicy) || "Inherit"
+      return getTopicVisibility(streamId, topic)
     },
   }
 

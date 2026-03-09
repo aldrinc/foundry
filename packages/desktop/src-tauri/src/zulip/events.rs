@@ -53,6 +53,8 @@ pub async fn start_event_loop(
                                 "subscriptions": reg.subscriptions,
                                 "users": reg.realm_users,
                                 "user_topics": reg.user_topics,
+                                "unread_msgs": reg.unread_msgs,
+                                "recent_private_conversations": reg.recent_private_conversations,
                             }),
                         );
 

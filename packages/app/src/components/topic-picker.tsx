@@ -7,6 +7,7 @@ export function TopicPicker(props: {
   streamId: number
   value: string
   onChange: (topic: string) => void
+  onSubmit?: () => void
 }) {
   const org = useOrg()
   const [topics, setTopics] = createSignal<Topic[]>([])
@@ -49,11 +50,23 @@ export function TopicPicker(props: {
           onInput={(e) => props.onChange(e.currentTarget.value)}
           onFocus={handleFocus}
           onBlur={() => setTimeout(() => setFocused(false), 150)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              setFocused(false)
+              props.onSubmit?.()
+            }
+          }}
         />
       </div>
 
-      <Show when={focused() && filteredTopics().length > 0}>
+      <Show when={focused() && loaded()}>
         <div class="absolute left-0 right-0 bottom-full z-50 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-lg max-h-[200px] overflow-y-auto">
+          <Show when={filteredTopics().length === 0}>
+            <div class="px-3 py-1.5 text-xs text-[var(--text-tertiary)] italic">
+              Type a topic name to start a new conversation
+            </div>
+          </Show>
           <For each={filteredTopics()}>
             {(topic) => (
               <button

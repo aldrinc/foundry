@@ -8,6 +8,27 @@ import type { NarrowFilter } from "@zulip/desktop/bindings"
 import { MessageItem } from "./message-item"
 import { SearchBar } from "./search-bar"
 
+function formatDateSeparator(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return "Today"
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"
+
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: date.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  })
+}
+
+function isDifferentDay(ts1: number, ts2: number): boolean {
+  return new Date(ts1 * 1000).toDateString() !== new Date(ts2 * 1000).toDateString()
+}
+
 export function MessageList(props: { narrow: string; onToggleUserPanel?: () => void }) {
   const sync = useZulipSync()
   const org = useOrg()
@@ -292,16 +313,34 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
           <For each={messages()}>
             {(message, idx) => {
               const prev = () => idx() > 0 ? messages()[idx() - 1] : null
+              const showDateSeparator = () => {
+                const p = prev()
+                if (!p) return true
+                return isDifferentDay(p.timestamp, message.timestamp)
+              }
               const showSender = () => {
+                if (showDateSeparator()) return true
                 const p = prev()
                 if (!p) return true
                 if (p.sender_id !== message.sender_id) return true
-                // Show sender if more than 5 minutes gap
                 if (message.timestamp - p.timestamp > 300) return true
                 return false
               }
 
-              return <MessageItem message={message} showSender={showSender()} />
+              return (
+                <>
+                  <Show when={showDateSeparator()}>
+                    <div class="flex items-center gap-4 px-4 pt-4 pb-1 select-none" data-component="date-separator">
+                      <div class="flex-1 h-px bg-[var(--border-default)]" />
+                      <span class="text-xs font-medium text-[var(--text-tertiary)] whitespace-nowrap">
+                        {formatDateSeparator(message.timestamp)}
+                      </span>
+                      <div class="flex-1 h-px bg-[var(--border-default)]" />
+                    </div>
+                  </Show>
+                  <MessageItem message={message} showSender={showSender()} />
+                </>
+              )
             }}
           </For>
         </Show>

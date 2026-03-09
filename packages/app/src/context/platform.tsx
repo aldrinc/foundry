@@ -27,7 +27,7 @@ export interface Platform {
   }): Promise<string | string[] | null>
 
   // Notifications
-  notify(title: string, description?: string, href?: string): Promise<void>
+  notify(title: string, description?: string, options?: NotifyOptions): Promise<void>
 
   // Debounced persistent storage
   storage?(name?: string): AsyncStorageWithFlush
@@ -48,6 +48,11 @@ export interface AsyncStorageWithFlush {
   key(index: number): Promise<string | undefined>
   getLength(): Promise<number>
   flush(): Promise<void>
+}
+
+export interface NotifyOptions {
+  href?: string
+  silent?: boolean
 }
 
 const PlatformContext = createContext<Platform>()

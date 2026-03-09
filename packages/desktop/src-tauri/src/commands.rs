@@ -1,9 +1,106 @@
-use tauri::State;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::{Emitter, Manager, State, Url, WebviewUrl};
 
 use crate::server::load_desktop_settings;
 use crate::zulip::types::*;
 use crate::zulip::ZulipClient;
 use crate::AppState;
+
+const AUTH_CALLBACK_EVENT: &str = "deep-link://new-url";
+const AUTH_WINDOW_LABEL_PREFIX: &str = "sso-auth-";
+static AUTH_WINDOW_COUNTER: AtomicUsize = AtomicUsize::new(1);
+
+fn next_auth_window_label() -> String {
+    format!(
+        "{AUTH_WINDOW_LABEL_PREFIX}{}",
+        AUTH_WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed)
+    )
+}
+
+fn is_sso_callback_url(url: &Url) -> bool {
+    matches!(url.scheme(), "zulip" | "foundry")
+        && (url.host_str() == Some("login") || url.path() == "/login")
+}
+
+fn close_auth_windows(app: &tauri::AppHandle) {
+    for (label, window) in app.webview_windows() {
+        if label.starts_with(AUTH_WINDOW_LABEL_PREFIX) {
+            let _ = window.close();
+        }
+    }
+}
+
+fn focus_main_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn handle_sso_callback(app: tauri::AppHandle, callback_url: String) {
+    let _ = app.emit(AUTH_CALLBACK_EVENT, vec![callback_url]);
+    focus_main_window(&app);
+    close_auth_windows(&app);
+}
+
+fn build_auth_window(
+    app: &tauri::AppHandle,
+    label: String,
+    url: Url,
+    features: Option<NewWindowFeatures>,
+) -> Result<tauri::WebviewWindow, String> {
+    let app_for_navigation = app.clone();
+    let app_for_new_window = app.clone();
+
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(app, &label, WebviewUrl::External(url.clone()))
+            .title("Sign in")
+            .inner_size(480.0, 720.0)
+            .min_inner_size(420.0, 600.0)
+            .center()
+            .focused(true)
+            .resizable(true)
+            .on_document_title_changed(|window, title| {
+                let _ = window.set_title(&title);
+            })
+            .on_navigation(move |next_url| {
+                if !is_sso_callback_url(next_url) {
+                    return true;
+                }
+
+                let callback_url = next_url.to_string();
+                let app = app_for_navigation.clone();
+                tauri::async_runtime::spawn(async move {
+                    handle_sso_callback(app, callback_url);
+                });
+                false
+            })
+            .on_new_window(move |next_url, features| {
+                match build_auth_window(
+                    &app_for_new_window,
+                    next_auth_window_label(),
+                    next_url,
+                    Some(features),
+                ) {
+                    Ok(window) => NewWindowResponse::Create { window },
+                    Err(error) => {
+                        tracing::warn!(?error, "Failed to open SSO popup window");
+                        NewWindowResponse::Deny
+                    }
+                }
+            });
+
+    if let Some(features) = features {
+        builder = builder.window_features(features);
+    }
+
+    builder
+        .build()
+        .map_err(|error| format!("Failed to open sign-in window: {error}"))
+}
 
 async fn connect_with_api_key(
     app: tauri::AppHandle,
@@ -65,11 +162,18 @@ async fn connect_with_api_key(
         org_id,
         realm_name: settings.realm_name,
         realm_icon: settings.realm_icon,
+        realm_url: if settings.realm_url.is_empty() {
+            url.trim_end_matches('/').to_string()
+        } else {
+            settings.realm_url
+        },
         queue_id: reg.queue_id,
         user_id: reg.user_id,
         subscriptions: reg.subscriptions,
         users: reg.realm_users,
         user_topics: reg.user_topics,
+        unread_msgs: reg.unread_msgs,
+        recent_private_conversations: reg.recent_private_conversations,
     })
 }
 
@@ -111,6 +215,19 @@ pub async fn fetch_api_key(
     let settings = load_desktop_settings(&app)?;
     let client = ZulipClient::with_desktop_settings(&url, "", "", settings)?;
     client.fetch_api_key(&username, &password).await
+}
+
+/// Open an app-owned sign-in window for Zulip external authentication flows.
+#[tauri::command]
+#[specta::specta]
+pub async fn open_external_auth_window(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let parsed_url = Url::parse(&url).map_err(|error| format!("Invalid sign-in URL: {error}"))?;
+
+    close_auth_windows(&app);
+    focus_main_window(&app);
+    build_auth_window(&app, next_auth_window_label(), parsed_url, None)?;
+
+    Ok(())
 }
 
 /// Disconnect from a Zulip server
@@ -257,6 +374,28 @@ pub async fn send_typing(
         .await
 }
 
+/// Save bytes to a temporary file and return its path (for paste/drag-drop uploads)
+#[tauri::command]
+#[specta::specta]
+pub async fn save_temp_file(file_name: String, data: Vec<u8>) -> Result<String, String> {
+    let temp_dir = std::env::temp_dir().join("foundry-uploads");
+    tokio::fs::create_dir_all(&temp_dir)
+        .await
+        .map_err(|e| format!("Failed to create temp dir: {}", e))?;
+
+    let sanitized = file_name.replace(['/', '\\', '\0'], "_");
+    let temp_path = temp_dir.join(&sanitized);
+
+    tokio::fs::write(&temp_path, &data)
+        .await
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    temp_path
+        .to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Invalid temp path".to_string())
+}
+
 /// Upload a file
 #[tauri::command]
 #[specta::specta]
@@ -278,6 +417,18 @@ pub async fn upload_file(
         .to_string();
 
     client.upload_file(file_bytes, &file_name).await
+}
+
+/// Fetch an authenticated media URL and convert it to a data URL for the webview.
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_authenticated_media_data_url(
+    state: State<'_, AppState>,
+    org_id: String,
+    media_url: String,
+) -> Result<String, String> {
+    let client = get_client(&state, &org_id)?;
+    client.fetch_authenticated_media_data_url(&media_url).await
 }
 
 /// Update message flags (read, starred, etc.)
@@ -443,4 +594,28 @@ pub fn get_client(state: &AppState, org_id: &str) -> Result<ZulipClient, String>
         .get(org_id)
         .ok_or_else(|| format!("Not connected to org: {}", org_id))?;
     Ok(org.client.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_sso_callback_url;
+    use tauri::Url;
+
+    #[test]
+    fn recognizes_zulip_mobile_flow_callbacks() {
+        let url = Url::parse("zulip://login?realm=https%3A%2F%2Fzulip.meridian.cv").unwrap();
+        assert!(is_sso_callback_url(&url));
+    }
+
+    #[test]
+    fn recognizes_foundry_mobile_flow_callbacks() {
+        let url = Url::parse("foundry://login?realm=https%3A%2F%2Fzulip.meridian.cv").unwrap();
+        assert!(is_sso_callback_url(&url));
+    }
+
+    #[test]
+    fn ignores_regular_https_navigation() {
+        let url = Url::parse("https://accounts.google.com/o/oauth2/auth").unwrap();
+        assert!(!is_sso_callback_url(&url));
+    }
 }

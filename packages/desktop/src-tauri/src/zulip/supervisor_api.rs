@@ -194,11 +194,11 @@ impl ZulipClient {
         Ok(())
     }
 
-    /// GET /api/v1/foundry/providers/auth
+    /// GET /json/meridian/providers/auth
     /// Get available AI providers and their auth status
     pub async fn get_foundry_providers(&self) -> Result<FoundryProvidersResponse, String> {
         let resp = self
-            .get("/api/v1/foundry/providers/auth")
+            .get("/json/meridian/providers/auth")
             .send()
             .await
             .map_err(|e| format!("Failed to get providers: {}", e))?;
@@ -212,6 +212,103 @@ impl ZulipClient {
         resp.json()
             .await
             .map_err(|e| format!("Failed to parse providers response: {}", e))
+    }
+
+    /// POST /json/meridian/providers/connect
+    /// Connect a provider using an API key credential
+    pub async fn connect_foundry_provider(
+        &self,
+        provider: &str,
+        api_key: &str,
+        label: Option<&str>,
+    ) -> Result<FoundryProviderCredentialResponse, String> {
+        let mut params = vec![
+            ("provider", provider.to_string()),
+            ("auth_mode", "api_key".to_string()),
+            ("api_key", api_key.to_string()),
+        ];
+
+        if let Some(value) = label.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("label", value.to_string()));
+        }
+
+        let resp = self
+            .post("/json/meridian/providers/connect")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to connect provider: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Provider connect failed ({}): {}", status, body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse provider connect response: {}", e))
+    }
+
+    /// POST /json/meridian/providers/disconnect
+    /// Disconnect a provider credential
+    pub async fn disconnect_foundry_provider(
+        &self,
+        provider: &str,
+    ) -> Result<FoundryProviderCredentialResponse, String> {
+        let resp = self
+            .post("/json/meridian/providers/disconnect")
+            .form(&[("provider", provider)])
+            .send()
+            .await
+            .map_err(|e| format!("Failed to disconnect provider: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Provider disconnect failed ({}): {}", status, body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse provider disconnect response: {}", e))
+    }
+
+    /// POST /json/meridian/providers/oauth/start
+    /// Start a provider OAuth flow and return the authorization URL
+    pub async fn start_foundry_provider_oauth(
+        &self,
+        provider: &str,
+        redirect_uri: Option<&str>,
+    ) -> Result<FoundryProviderOauthStartResponse, String> {
+        let mut params = vec![("provider", provider.to_string())];
+
+        if let Some(value) = redirect_uri
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            params.push(("redirect_uri", value.to_string()));
+        }
+
+        let resp = self
+            .post("/json/meridian/providers/oauth/start")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to start provider OAuth: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Provider OAuth start failed ({}): {}",
+                status, body
+            ));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse provider OAuth start response: {}", e))
     }
 
     /// GET /api/v1/foundry/topics/{scope}/tasks/{task_id}/events

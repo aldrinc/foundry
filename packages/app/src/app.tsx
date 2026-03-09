@@ -1,11 +1,12 @@
 import { type JSX, createSignal, createEffect, Show, onMount, onCleanup } from "solid-js"
-import { ZulipSyncProvider, useZulipSync } from "./context/zulip-sync"
-import { OrgProvider } from "./context/org"
+import { ZulipSyncProvider, useZulipSync, registerActiveNarrowGetter } from "./context/zulip-sync"
+import { OrgProvider, useOrg } from "./context/org"
 import { NavigationProvider, useNavigation } from "./context/navigation"
 import { AgentsProvider } from "./context/agents"
 import { SupervisorProvider } from "./context/supervisor"
 import { SettingsProvider, useSettings } from "./context/settings"
 import { PresenceProvider } from "./context/presence"
+import { getUnreadTotalCount } from "./context/unread-state"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
 import { SettingsView } from "./views/settings"
@@ -38,9 +39,24 @@ function createDemoLoginResult(): LoginResult {
     org_id: "demo-org-001",
     realm_name: "Foundry Demo",
     realm_icon: "",
+    realm_url: "https://demo.foundry.invalid",
     queue_id: "demo-queue",
     user_id: 100,
     user_topics: [],
+    unread_msgs: {
+      count: 3,
+      pms: [],
+      streams: [
+        { stream_id: 1, topic: "welcome", unread_message_ids: [1003, 1004, 1005] },
+      ],
+      huddles: [],
+      mentions: [],
+      old_unreads_missing: false,
+    },
+    recent_private_conversations: [
+      { user_ids: [101], max_message_id: 2002 },
+      { user_ids: [102, 103], max_message_id: 2004 },
+    ],
     subscriptions: [
       { stream_id: 1, name: "general", color: "#76ce90", pin_to_top: true },
       { stream_id: 2, name: "engineering", color: "#fae589" },
@@ -136,7 +152,6 @@ export function App(props: {
       if (servers.status === "ok") {
         const saved = servers.data.find(s => s.id === server.id)
         if (saved) {
-          setLoginResult(null) // Force re-render of provider tree
           const res = await commands.login(saved.url, saved.email, saved.api_key)
           if (res.status === "ok") {
             clearManualLogout(window.localStorage)
@@ -154,6 +169,7 @@ export function App(props: {
     <div class="h-screen w-screen flex flex-col" data-component="app-shell">
       <Show when={!autoLoginLoading()} fallback={<LoadingSplash />}>
         <Show
+          keyed
           when={loginResult()}
           fallback={<LoginView onLogin={(result) => {
             // Extract email from users list or saved servers
@@ -163,18 +179,19 @@ export function App(props: {
         >
           {(result) => (
             <OrgProvider org={{
-              orgId: result().org_id,
-              realmName: result().realm_name,
-              realmIcon: result().realm_icon,
+              orgId: result.org_id,
+              realmName: result.realm_name,
+              realmIcon: result.realm_icon,
+              realmUrl: result.realm_url,
             }}>
-              <SettingsProvider orgId={result().org_id}>
-                <PresenceProvider orgId={result().org_id}>
-                  <AgentsProvider orgId={result().org_id}>
-                    <ZulipSyncProvider orgId={result().org_id}>
+              <SettingsProvider orgId={result.org_id}>
+                <PresenceProvider orgId={result.org_id}>
+                  <AgentsProvider orgId={result.org_id}>
+                    <ZulipSyncProvider orgId={result.org_id}>
                       <NavigationProvider>
-                        <SupervisorProvider orgId={result().org_id}>
+                        <SupervisorProvider orgId={result.org_id}>
                           <AppShell
-                            loginResult={result()}
+                            loginResult={result}
                             loginEmail={loginEmail()}
                             onLogout={handleManualLogout}
                             onSwitchOrg={handleSwitchOrg}
@@ -214,6 +231,7 @@ function AppShell(props: {
   onSwitchOrg?: (server: SavedServerStatus) => void
 }) {
   const sync = useZulipSync()
+  const org = useOrg()
   const nav = useNavigation()
   const { store: settingsStore } = useSettings()
   const [showSettings, setShowSettings] = createSignal(false)
@@ -230,8 +248,17 @@ function AppShell(props: {
     props.onLogout()
   }
 
+  // Let the sync layer know which narrow the user is viewing,
+  // so incoming messages in the active conversation are auto-marked as read.
+  registerActiveNarrowGetter(() => nav.activeNarrow())
+
   // Seed the store with initial data from login
   onMount(() => {
+    if (props.loginResult.realm_url) {
+      org.setRealmUrl(props.loginResult.realm_url)
+      ;(window as any).__FOUNDRY_REALM_URL = props.loginResult.realm_url
+    }
+
     sync.setConnected(
       props.loginResult.org_id,
       props.loginResult.queue_id,
@@ -240,7 +267,28 @@ function AppShell(props: {
       props.loginEmail,
       props.loginResult.user_id,
       props.loginResult.user_topics,
+      props.loginResult.unread_msgs,
+      props.loginResult.recent_private_conversations,
     )
+
+    void commands.getSavedServerStatuses().then((result) => {
+      if (result.status !== "ok") return
+
+      const currentServer = result.data.find((server) => server.org_id === props.loginResult.org_id)
+        || result.data.find((server) =>
+          server.connected
+          && server.realm_name === props.loginResult.realm_name
+          && server.email === props.loginEmail,
+        )
+        || result.data.find((server) =>
+          server.connected
+          && server.realm_name === props.loginResult.realm_name,
+        )
+      if (currentServer?.url) {
+        org.setRealmUrl(currentServer.url)
+        ;(window as any).__FOUNDRY_REALM_URL = currentServer.url
+      }
+    }).catch(() => {})
 
     // Apply homeView setting to set the initial navigation narrow
     if (!IS_DEMO) {
@@ -270,8 +318,7 @@ function AppShell(props: {
 
   // ── Unread badge count ──
   createEffect(() => {
-    const counts = sync.store.unreadCounts
-    const total = Object.values(counts).reduce((sum, c) => sum + c, 0)
+    const total = getUnreadTotalCount(sync.store.unreadItems)
     commands.setUnreadBadgeCount(total > 0 ? total : null).catch(() => {})
   })
 

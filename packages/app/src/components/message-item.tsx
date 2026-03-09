@@ -1,10 +1,16 @@
-import { Show, For, createSignal } from "solid-js"
-import DOMPurify from "dompurify"
+import { Show, For, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import type { Message, Reaction } from "../context/zulip-sync"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
+import { usePlatform } from "../context/platform"
 import { commands } from "@zulip/desktop/bindings"
 import { MessageActions } from "./message-actions"
+import {
+  hydrateAuthenticatedMessageImages,
+  resolveMessageUrl,
+  resolveRealmUrlFromSavedServers,
+  sanitizeMessageHtml,
+} from "./message-html"
 
 /** Convert an emoji hex code to its Unicode character(s) */
 export function emojiCodeToChar(code: string): string {
@@ -25,11 +31,16 @@ export function MessageItem(props: {
 }) {
   const org = useOrg()
   const sync = useZulipSync()
+  const platform = usePlatform()
   const [editing, setEditing] = createSignal(false)
   const [editContent, setEditContent] = createSignal("")
   const [saving, setSaving] = createSignal(false)
+  const [resolvedServerUrl, setResolvedServerUrl] = createSignal(props.serverUrl || org.realmUrl || (window as any).__FOUNDRY_REALM_URL || "")
+  let contentEl!: HTMLDivElement
 
   const currentUserId = () => sync.store.currentUserId
+
+  const serverUrl = () => resolvedServerUrl()
 
   const timestamp = () => {
     const date = new Date(props.message.timestamp * 1000)
@@ -39,24 +50,10 @@ export function MessageItem(props: {
   const avatarUrl = () => {
     const url = props.message.avatar_url
     if (!url) return null
-    if (url.startsWith("/") && props.serverUrl) {
-      return `${props.serverUrl}${url}`
+    if (url.startsWith("/") && serverUrl()) {
+      return resolveMessageUrl(url, serverUrl())
     }
     return url
-  }
-
-  const sanitizedContent = () => {
-    return DOMPurify.sanitize(props.message.content, {
-      ALLOWED_TAGS: [
-        "p", "br", "strong", "em", "code", "pre", "a", "img", "ul", "ol", "li",
-        "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead",
-        "tbody", "tr", "th", "td", "span", "div", "del", "sup", "sub", "hr",
-      ],
-      ALLOWED_ATTR: [
-        "href", "src", "alt", "title", "class", "target", "rel",
-        "data-user-id", "data-stream-id",
-      ],
-    })
   }
 
   const startEdit = () => {
@@ -103,16 +100,62 @@ export function MessageItem(props: {
     }
   }
 
+  const handleContentClick = (event: MouseEvent) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+
+    const link = target.closest("a[href]") as HTMLAnchorElement | null
+    if (!link) return
+
+    const href = link.getAttribute("href")
+    if (!href) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    platform.openLink(resolveMessageUrl(href, serverUrl()))
+  }
+
+  createEffect(() => {
+    const nextServerUrl = props.serverUrl || org.realmUrl || (window as any).__FOUNDRY_REALM_URL || ""
+    if (nextServerUrl && nextServerUrl !== resolvedServerUrl()) {
+      setResolvedServerUrl(nextServerUrl)
+    }
+  })
+
+  onMount(() => {
+    if (resolvedServerUrl()) return
+
+    void resolveRealmUrlFromSavedServers(org.orgId, org.realmName).then((url) => {
+      if (url) {
+        setResolvedServerUrl(url)
+      }
+    }).catch(() => {})
+  })
+
+  createEffect(() => {
+    if (!contentEl) return
+    contentEl.innerHTML = sanitizeMessageHtml(props.message.content, serverUrl())
+    const cleanup = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
+    onCleanup(cleanup)
+  })
+
   return (
     <div
       class="group relative flex gap-3 px-4 py-1 hover:bg-[var(--background-surface)]/50"
-      classList={{ "pt-3": props.showSender, "pt-0.5": !props.showSender }}
+      classList={{ "pt-4": props.showSender, "pt-0.5": !props.showSender }}
       data-component="message-item"
       data-message-id={props.message.id}
     >
       {/* Avatar column */}
       <div class="w-8 shrink-0">
-        <Show when={props.showSender}>
+        <Show
+          when={props.showSender}
+          fallback={
+            <span class="block w-8 text-center text-[10px] leading-[1.25rem] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity select-none whitespace-nowrap overflow-hidden">
+              {new Date(props.message.timestamp * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: false })}
+            </span>
+          }
+        >
           <Show
             when={avatarUrl()}
             fallback={
@@ -137,10 +180,10 @@ export function MessageItem(props: {
       <div class="flex-1 min-w-0">
         <Show when={props.showSender}>
           <div class="flex items-baseline gap-2 mb-0.5">
-            <span class="text-sm font-semibold text-[var(--text-primary)]">
+            <span class="text-[15px] font-bold text-[var(--text-primary)] leading-snug">
               {props.message.sender_full_name}
             </span>
-            <span class="text-xs text-[var(--text-tertiary)]">
+            <span class="text-[11px] text-[var(--text-tertiary)] ml-0.5">
               {timestamp()}
             </span>
           </div>
@@ -184,9 +227,10 @@ export function MessageItem(props: {
           }
         >
           <div
+            ref={contentEl!}
             class="text-sm text-[var(--text-primary)] message-content select-text"
             data-component="message-content"
-            innerHTML={sanitizedContent()}
+            onClick={handleContentClick}
           />
         </Show>
 

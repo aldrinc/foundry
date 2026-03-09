@@ -18,14 +18,12 @@ export function isDirectMention(message) {
     return hasFlag(message, "mentioned") || hasFlag(message, "has_alert_word");
 }
 export function shouldNotifyMessage(message, preferences, context) {
-    if (!preferences.desktopNotifs)
-        return false;
     if (hasFlag(message, "read"))
         return false;
     if (isMessageSentByCurrentUser(message, context))
         return false;
     if (message.type === "private") {
-        return preferences.dmNotifs;
+        return preferences.desktopNotifs && preferences.dmNotifs;
     }
     if (context.isFollowedTopic && preferences.followedTopics) {
         return true;
@@ -35,10 +33,22 @@ export function shouldNotifyMessage(message, preferences, context) {
             return true;
         if (preferences.wildcardMentions === "silent")
             return false;
-        return preferences.mentionNotifs;
+        if (context.channelWildcardMentionsNotify !== null && context.channelWildcardMentionsNotify !== undefined) {
+            return context.channelWildcardMentionsNotify;
+        }
+        return preferences.desktopNotifs && preferences.mentionNotifs;
     }
     if (isDirectMention(message)) {
-        return preferences.mentionNotifs;
+        return preferences.desktopNotifs && preferences.mentionNotifs;
+    }
+    if (context.isTopicMuted) {
+        return false;
+    }
+    if (context.channelDesktopNotifications !== null && context.channelDesktopNotifications !== undefined) {
+        return context.channelDesktopNotifications;
+    }
+    if (context.isChannelMuted) {
+        return false;
     }
     return preferences.channelNotifs;
 }

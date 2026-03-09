@@ -1,8 +1,23 @@
+import { createSignal } from "solid-js"
 import { useSettings } from "../context/settings"
+import { usePlatform } from "../context/platform"
 import { SettingToggle, SettingRow } from "./settings-general"
 
 export function SettingsNotifications() {
   const { store, setSetting } = useSettings()
+  const platform = usePlatform()
+  const [testStatus, setTestStatus] = createSignal("")
+
+  const handleTestNotification = async () => {
+    setTestStatus("Sending...")
+    try {
+      await platform.notify("Test Notification", "If you see this, notifications are working!")
+      setTestStatus("Sent! Check your OS notifications.")
+    } catch (err) {
+      setTestStatus(`Error: ${err}`)
+    }
+    setTimeout(() => setTestStatus(""), 5000)
+  }
 
   return (
     <div class="space-y-6">
@@ -72,6 +87,22 @@ export function SettingsNotifications() {
           <option value="notify">Always notify</option>
           <option value="silent">Don't notify</option>
         </select>
+      </SettingRow>
+
+      <hr class="border-[var(--border-default)]" />
+
+      <SettingRow label="Test notifications" description="Send a test notification to verify your setup">
+        <div class="flex items-center gap-2">
+          <button
+            class="text-xs bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] px-3 py-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--interactive-primary-hover)] transition-colors"
+            onClick={handleTestNotification}
+          >
+            Send test
+          </button>
+          {testStatus() && (
+            <span class="text-[10px] text-[var(--text-tertiary)]">{testStatus()}</span>
+          )}
+        </div>
       </SettingRow>
     </div>
   )

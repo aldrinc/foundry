@@ -4,6 +4,7 @@ import { commands } from "@zulip/desktop/bindings"
 import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
+  isProviderConnected,
   normalizeProvider,
 } from "./agent-runtime"
 
@@ -75,25 +76,27 @@ export const DELEGATE_TEMPLATES: DelegateTemplate[] = [
 
 const DEMO_PROVIDERS: FoundryProviderAuth[] = [
   {
-    provider: "openai-codex",
-    display_name: "OpenAI Codex",
-    auth_modes: ["oauth"],
-    oauth_configured: true,
-    credential_status: "connected",
-  },
-  {
-    provider: "anthropic",
+    provider: "claude_code",
     display_name: "Claude Code",
-    auth_modes: ["api_key"],
-    oauth_configured: false,
-    credential_status: "connected",
+    auth_modes: ["api_key", "oauth"],
+    oauth_configured: true,
+    connected: false,
+    default_model: "claude-sonnet-4",
   },
   {
-    provider: "custom-fireworks",
-    display_name: "Fireworks",
+    provider: "codex",
+    display_name: "Codex",
+    auth_modes: ["api_key", "oauth"],
+    oauth_configured: true,
+    connected: false,
+    default_model: "gpt-5.2-2025-12-11",
+  },
+  {
+    provider: "opencode",
+    display_name: "OpenCode",
     auth_modes: ["api_key"],
-    oauth_configured: false,
-    credential_status: "connected",
+    connected: false,
+    default_model: "fireworks/kimi-k2p5",
   },
 ]
 
@@ -109,7 +112,11 @@ export interface AgentsContextValue {
   store: AgentsStore
   upsertAgent(agent: DelegateAgent): Promise<{ ok: boolean; error?: string }>
   deleteAgent(id: string): Promise<void>
-  refreshProviders(): Promise<void>
+  refreshProviders(): Promise<FoundryProviderAuth[]>
+  connectProvider(provider: string, apiKey: string, label?: string | null): Promise<{ ok: boolean; error?: string }>
+  disconnectProvider(provider: string): Promise<{ ok: boolean; error?: string }>
+  startProviderOauth(provider: string, redirectUri?: string | null): Promise<{ ok: boolean; authorizeUrl?: string | null; error?: string }>
+  waitForProviderConnection(provider: string, timeoutMs?: number, intervalMs?: number): Promise<{ ok: boolean; connected: boolean; error?: string }>
   availableDelegatesForStream(streamId: number | null): DelegateAgent[]
   buildSupervisorDelegateContext(streamId: number | null): string | null
 }
@@ -190,6 +197,10 @@ function agentMatchesStream(agent: DelegateAgent, streamId: number | null) {
   return agent.streamIds.includes(streamId)
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function AgentsProvider(props: { orgId: string; children: JSX.Element }) {
   const [store, setStore] = createStore<AgentsStore>({
     delegates: [],
@@ -209,25 +220,45 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
     }
   }
 
+  const findProvider = (providerId: string, providers = store.providers) =>
+    providers.find((provider) => provider.provider === providerId) || null
+
+  function setDemoProvider(
+    providerId: string,
+    updater: (provider: FoundryProviderAuth) => FoundryProviderAuth,
+  ) {
+    setStore(
+      "providers",
+      store.providers.map((provider) =>
+        provider.provider === providerId
+          ? normalizeProvider(updater(provider))
+          : provider,
+      ),
+    )
+  }
+
   async function refreshProviders() {
     setStore("providersLoading", true)
     setStore("providerError", "")
 
     if (IS_DEMO || !HAS_TAURI_BRIDGE) {
-      setStore("providers", DEMO_PROVIDERS)
+      const nextProviders =
+        store.providers.length > 0
+          ? store.providers.map((provider) => normalizeProvider(provider))
+          : DEMO_PROVIDERS.map((provider) => normalizeProvider(provider))
+      setStore("providers", nextProviders)
       setStore("providersLoading", false)
-      return
+      return nextProviders
     }
 
     try {
       const result = await commands.getFoundryProviders(props.orgId)
       if (result.status === "ok") {
-        setStore(
-          "providers",
-          (result.data.providers || []).map((provider) =>
-            normalizeProvider(provider),
-          ),
+        const nextProviders = (result.data.providers || []).map((provider) =>
+          normalizeProvider(provider),
         )
+        setStore("providers", nextProviders)
+        return nextProviders
       } else {
         setStore("providerError", result.error || "Failed to load Moltis providers")
       }
@@ -236,6 +267,8 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
     } finally {
       setStore("providersLoading", false)
     }
+
+    return store.providers
   }
 
   onMount(async () => {
@@ -317,6 +350,175 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
     },
 
     refreshProviders,
+
+    async connectProvider(provider, apiKey, label) {
+      const trimmedProvider = provider.trim()
+      const trimmedApiKey = apiKey.trim()
+
+      if (!trimmedProvider) {
+        return { ok: false, error: "Provider is required." }
+      }
+
+      if (!trimmedApiKey) {
+        return { ok: false, error: "API key is required." }
+      }
+
+      if (IS_DEMO || !HAS_TAURI_BRIDGE) {
+        const now = new Date().toISOString()
+        setDemoProvider(trimmedProvider, (current) => ({
+          ...current,
+          connected: true,
+          credential_status: "connected",
+          credential: {
+            auth_mode: "api_key",
+            label: label?.trim() || "API key",
+            status: "active",
+            updated_at: now,
+          },
+        }))
+        return { ok: true }
+      }
+
+      try {
+        const result = await commands.connectFoundryProvider(
+          props.orgId,
+          trimmedProvider,
+          trimmedApiKey,
+          label?.trim() || null,
+        )
+
+        if (result.status !== "ok") {
+          return { ok: false, error: result.error || "Failed to connect provider." }
+        }
+
+        await refreshProviders()
+        return { ok: true }
+      } catch (error: any) {
+        return {
+          ok: false,
+          error: error?.message || error?.toString() || "Failed to connect provider.",
+        }
+      }
+    },
+
+    async disconnectProvider(provider) {
+      const trimmedProvider = provider.trim()
+      if (!trimmedProvider) {
+        return { ok: false, error: "Provider is required." }
+      }
+
+      if (IS_DEMO || !HAS_TAURI_BRIDGE) {
+        setDemoProvider(trimmedProvider, (current) => ({
+          ...current,
+          connected: false,
+          credential_status: "not_connected",
+          credential: null,
+        }))
+        return { ok: true }
+      }
+
+      try {
+        const result = await commands.disconnectFoundryProvider(
+          props.orgId,
+          trimmedProvider,
+        )
+
+        if (result.status !== "ok") {
+          return { ok: false, error: result.error || "Failed to disconnect provider." }
+        }
+
+        await refreshProviders()
+        return { ok: true }
+      } catch (error: any) {
+        return {
+          ok: false,
+          error: error?.message || error?.toString() || "Failed to disconnect provider.",
+        }
+      }
+    },
+
+    async startProviderOauth(provider, redirectUri) {
+      const trimmedProvider = provider.trim()
+      if (!trimmedProvider) {
+        return { ok: false, error: "Provider is required." }
+      }
+
+      if (IS_DEMO || !HAS_TAURI_BRIDGE) {
+        const now = new Date().toISOString()
+        setTimeout(() => {
+          setDemoProvider(trimmedProvider, (current) => ({
+            ...current,
+            connected: true,
+            credential_status: "connected",
+            credential: {
+              auth_mode: "oauth",
+              label: "OAuth",
+              status: "active",
+              updated_at: now,
+            },
+          }))
+        }, 1200)
+        return { ok: true, authorizeUrl: null }
+      }
+
+      try {
+        const result = await commands.startFoundryProviderOauth(
+          props.orgId,
+          trimmedProvider,
+          redirectUri?.trim() || null,
+        )
+
+        if (result.status !== "ok") {
+          return { ok: false, error: result.error || "Failed to start OAuth sign-in." }
+        }
+
+        if (!result.data.authorize_url) {
+          return {
+            ok: false,
+            error: "OAuth start did not return an authorization URL.",
+          }
+        }
+
+        return {
+          ok: true,
+          authorizeUrl: result.data.authorize_url || null,
+        }
+      } catch (error: any) {
+        return {
+          ok: false,
+          error: error?.message || error?.toString() || "Failed to start OAuth sign-in.",
+        }
+      }
+    },
+
+    async waitForProviderConnection(provider, timeoutMs = 45_000, intervalMs = 1_500) {
+      const trimmedProvider = provider.trim()
+      if (!trimmedProvider) {
+        return { ok: false, connected: false, error: "Provider is required." }
+      }
+
+      const deadline = Date.now() + timeoutMs
+
+      while (Date.now() <= deadline) {
+        const providers = await refreshProviders()
+        const current = findProvider(trimmedProvider, providers)
+        if (current && isProviderConnected(current)) {
+          return { ok: true, connected: true }
+        }
+
+        if (Date.now() + intervalMs > deadline) {
+          break
+        }
+
+        await sleep(intervalMs)
+      }
+
+      return {
+        ok: false,
+        connected: false,
+        error: "Timed out waiting for the provider to finish connecting.",
+      }
+    },
 
     availableDelegatesForStream(streamId) {
       return sortDelegates(store.delegates.filter((delegate) => agentMatchesStream(delegate, streamId)))

@@ -1,10 +1,11 @@
 // @refresh reload
 
 import { render } from "solid-js/web"
-import { App, type AsyncStorageWithFlush, type Platform, PlatformProvider } from "@zulip/app"
+import { App, type AsyncStorageWithFlush, type NotifyOptions, type Platform, PlatformProvider } from "@zulip/app"
+import { resolveResource } from "@tauri-apps/api/path"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
-import { isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification"
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { Store } from "@tauri-apps/plugin-store"
@@ -13,9 +14,20 @@ import { createMenu } from "./menu"
 import "./styles.css"
 
 const root = document.getElementById("root")
+const notificationSoundResourcePath = "notifications/default.wav"
 type PickerDialogOptions = {
   title?: string
   multiple?: boolean
+}
+
+let notificationSoundPathPromise: Promise<string | undefined> | undefined
+
+function getNotificationSoundPath() {
+  notificationSoundPathPromise ??= resolveResource(notificationSoundResourcePath).catch((error) => {
+    console.warn("Notification sound unavailable", error)
+    return undefined
+  })
+  return notificationSoundPathPromise
 }
 
 async function initializeDeepLinkHandling() {
@@ -217,29 +229,41 @@ const createPlatform = (): Platform => {
     },
 
     // Notifications
-    async notify(title: string, description?: string, href?: string) {
-      const granted = await isPermissionGranted().catch(() => false)
-      const permission = granted ? "granted" : await requestPermission().catch(() => "denied" as const)
-      if (permission !== "granted") return
-
-      const win = getCurrentWindow()
-      const focused = await win.isFocused().catch(() => document.hasFocus())
-      if (focused) return
-
-      const notification = new Notification(title, {
-        body: description ?? "",
-        icon: "https://zulip.com/static/images/logo/zulip-icon-128x128.png",
-        silent: true,
-      })
-
-      notification.addEventListener("click", () => {
-        if (href) {
-          void shellOpen(href).catch(() => undefined)
+    async notify(title: string, description?: string, options?: NotifyOptions) {
+      try {
+        const granted = await isPermissionGranted().catch((err) => {
+          console.warn("[Notify] isPermissionGranted failed:", err)
+          return false
+        })
+        const permission = granted ? "granted" : await requestPermission().catch((err) => {
+          console.warn("[Notify] requestPermission failed:", err)
+          return "denied" as const
+        })
+        if (permission !== "granted") {
+          console.warn("[Notify] Permission not granted:", permission)
+          return
         }
-        void win.show().catch(() => undefined)
-        void win.unminimize().catch(() => undefined)
-        void win.setFocus().catch(() => undefined)
-      })
+
+        const win = getCurrentWindow()
+        const focused = await win.isFocused().catch(() => document.hasFocus())
+        if (focused) return
+
+        // macOS expects system sound names (e.g. "Glass"), not file paths
+        const sound = options?.silent
+          ? undefined
+          : (ostype() === "macos" ? "Glass" : await getNotificationSoundPath())
+
+        console.log("[Notify] Sending notification:", { title, silent: options?.silent, hasSound: !!sound })
+        sendNotification({
+          title,
+          body: description ?? "",
+          silent: options?.silent,
+          sound,
+          extra: options?.href ? { href: options.href } : undefined,
+        })
+      } catch (err) {
+        console.error("[Notify] Unexpected error in notify():", err)
+      }
     },
   }
 }
