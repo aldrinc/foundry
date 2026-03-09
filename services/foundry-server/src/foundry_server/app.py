@@ -4,10 +4,15 @@ import json
 import hmac
 import sqlite3
 import uuid
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import Body
 from fastapi import FastAPI
-from fastapi import Header, HTTPException, Request
+from fastapi import Form, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 from .coder_client import CoderClient, CoderConfigurationError, CoderRequestError
 from .config import AppConfig, load_config
@@ -15,22 +20,35 @@ from .decisions import LAUNCH_DECISIONS
 from .domain import (
     AgentDefinition,
     GitHubInstallation,
+    OrganizationInvitation,
     Organization,
     OrganizationMembership,
     OrganizationRole,
     OrganizationRuntimeSettings,
     OrganizationWorkspacePool,
+    PlatformUser,
     RuntimeCredentialOwnership,
     RuntimeHealth,
     RuntimeProvider,
     RuntimeProviderCredential,
+    UserSession,
 )
 from .github_app import GitHubAppClient, GitHubAppConfigurationError, GitHubAppRequestError
+from .local_auth import (
+    generate_password_salt,
+    generate_session_token,
+    hash_password,
+    hash_token,
+    normalize_email,
+    verify_password,
+)
 from .store import FoundryStore
 
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
     server_config = config or load_config()
+    templates = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
+    session_cookie_name = "foundry_session"
 
     app = FastAPI(
         title="Foundry Server",
@@ -40,6 +58,31 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.config = server_config
     app.state.store = FoundryStore(server_config.database_path)
     app.state.store.migrate()
+
+    def ensure_bootstrap_admin() -> None:
+        if server_config.auth_provider.value != "local_password":
+            return
+        email = normalize_email(server_config.bootstrap_admin_email)
+        password = server_config.bootstrap_admin_password
+        if not email or not password:
+            return
+        existing = app.state.store.get_user_by_email(email)
+        user_id = existing.user_id if existing is not None else str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"foundry-bootstrap:{email}")
+        )
+        salt = generate_password_salt()
+        app.state.store.upsert_user(
+            PlatformUser(
+                user_id=user_id,
+                email=email,
+                display_name="Foundry Platform Admin",
+                password_salt=salt,
+                password_hash=hash_password(password, salt),
+                is_platform_admin=True,
+            )
+        )
+
+    ensure_bootstrap_admin()
 
     def get_github_app_client() -> GitHubAppClient:
         client = getattr(app.state, "github_app_client", None)
@@ -72,6 +115,128 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     def get_store() -> FoundryStore:
         return app.state.store
+
+    def utc_expiry(days: int) -> str:
+        return (datetime.now(UTC) + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
+
+    def serialize_user(user: PlatformUser) -> dict[str, object]:
+        return {
+            "user_id": user.user_id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_platform_admin": user.is_platform_admin,
+            "active": user.active,
+        }
+
+    def create_user_session(user: PlatformUser) -> str:
+        token = generate_session_token()
+        get_store().create_session(
+            UserSession(
+                session_id=str(uuid.uuid4()),
+                user_id=user.user_id,
+                token_hash=hash_token(token),
+                expires_at=utc_expiry(server_config.session_max_age_days),
+            )
+        )
+        get_store().touch_user_login(user.user_id)
+        return token
+
+    def current_user(request: Request) -> PlatformUser | None:
+        token = request.cookies.get(session_cookie_name, "")
+        if not token:
+            return None
+        session = get_store().get_session_by_token_hash(hash_token(token))
+        if session is None:
+            return None
+        return get_store().get_user(session.user_id)
+
+    def require_current_user(request: Request) -> PlatformUser:
+        user = current_user(request)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+        return user
+
+    def html_redirect(target: str, *, session_token: str | None = None) -> RedirectResponse:
+        response = RedirectResponse(target, status_code=303)
+        if session_token is not None:
+            response.set_cookie(
+                key=session_cookie_name,
+                value=session_token,
+                httponly=True,
+                secure=server_config.environment.value != "local",
+                samesite="lax",
+                max_age=server_config.session_max_age_days * 24 * 60 * 60,
+            )
+        return response
+
+    def role_weight(role: OrganizationRole) -> int:
+        weights = {
+            OrganizationRole.MEMBER: 0,
+            OrganizationRole.RUNTIME_ADMIN: 1,
+            OrganizationRole.BILLING_ADMIN: 1,
+            OrganizationRole.ADMIN: 2,
+            OrganizationRole.OWNER: 3,
+        }
+        return weights[role]
+
+    def allowed_organizations_for_user(user: PlatformUser) -> list[Organization]:
+        if user.is_platform_admin:
+            return get_store().list_organizations()
+        return get_store().list_organizations_for_user(user.user_id)
+
+    def require_org_access(user: PlatformUser, organization_id: str) -> OrganizationMembership | None:
+        if user.is_platform_admin:
+            return None
+        membership = get_store().get_membership(organization_id, user.user_id)
+        if membership is None:
+            raise HTTPException(status_code=403, detail="Organization access denied.")
+        return membership
+
+    def require_org_role(
+        user: PlatformUser,
+        organization_id: str,
+        minimum_role: OrganizationRole = OrganizationRole.ADMIN,
+    ) -> OrganizationMembership | None:
+        membership = require_org_access(user, organization_id)
+        if membership is None:
+            return None
+        if max((role_weight(role) for role in membership.roles), default=0) < role_weight(minimum_role):
+            raise HTTPException(status_code=403, detail="Organization admin access required.")
+        return membership
+
+    def serialize_member_record(membership: OrganizationMembership) -> dict[str, object]:
+        user = get_store().get_user(membership.user_id)
+        return {
+            "organization_id": membership.organization_id,
+            "user_id": membership.user_id,
+            "roles": [role.value for role in membership.roles],
+            "invited_by_user_id": membership.invited_by_user_id,
+            "email": user.email if user is not None else "",
+            "display_name": user.display_name if user is not None else membership.user_id,
+            "is_platform_admin": user.is_platform_admin if user is not None else False,
+        }
+
+    def sort_memberships(
+        memberships: list[OrganizationMembership],
+    ) -> list[OrganizationMembership]:
+        def membership_sort_key(membership: OrganizationMembership) -> tuple[int, str]:
+            highest_role = max((role_weight(role) for role in membership.roles), default=0)
+            user = get_store().get_user(membership.user_id)
+            email = user.email if user is not None else membership.user_id
+            return (-highest_role, email)
+
+        return sorted(memberships, key=membership_sort_key)
+
+    def serialize_invitation(invitation: OrganizationInvitation) -> dict[str, object]:
+        return {
+            "invitation_id": invitation.invitation_id,
+            "organization_id": invitation.organization_id,
+            "email": invitation.email,
+            "roles": [role.value for role in invitation.roles],
+            "invited_by_user_id": invitation.invited_by_user_id,
+            "expires_at": invitation.expires_at,
+            "accepted_by_user_id": invitation.accepted_by_user_id,
+        }
 
     def require_organization(organization_id: str) -> Organization:
         organization = get_store().get_organization(organization_id)
@@ -189,6 +354,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         if not provided_secret or not hmac.compare_digest(provided_secret, expected_secret):
             raise HTTPException(status_code=401, detail="Invalid workspace bootstrap secret.")
 
+    def require_local_password_auth() -> None:
+        if server_config.auth_provider.value != "local_password":
+            raise HTTPException(
+                status_code=503,
+                detail="Local password auth is not enabled for this environment.",
+            )
+
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
@@ -215,6 +387,425 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 "Migrate orchestration and workspace policy from the internal service.",
                 "Drive the Foundry-owned Coder template and workspace lifecycle from this API.",
             ],
+        }
+
+    @app.get("/", response_class=HTMLResponse)
+    def cloud_home(request: Request) -> RedirectResponse:
+        user = current_user(request)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        return RedirectResponse("/cloud", status_code=303)
+
+    @app.get("/login", response_class=HTMLResponse)
+    def login_page(request: Request, error: str = "") -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {
+                "request": request,
+                "title": "Foundry Cloud Login",
+                "error": error,
+                "auth_provider": server_config.auth_provider.value,
+            },
+        )
+
+    @app.post("/login", response_model=None)
+    async def login_submit(
+        request: Request,
+        email: str = Form(...),
+        password: str = Form(...),
+    ) -> HTMLResponse | RedirectResponse:
+        require_local_password_auth()
+        normalized_email = normalize_email(email)
+        user = get_store().get_user_by_email(normalized_email)
+        if (
+            user is None
+            or not user.active
+            or not user.password_salt
+            or not user.password_hash
+            or not verify_password(password, user.password_salt, user.password_hash)
+        ):
+            return templates.TemplateResponse(
+                request,
+                "login.html",
+                {
+                    "request": request,
+                    "title": "Foundry Cloud Login",
+                    "error": "Invalid email or password.",
+                    "auth_provider": server_config.auth_provider.value,
+                },
+                status_code=400,
+            )
+
+        return html_redirect("/cloud", session_token=create_user_session(user))
+
+    @app.post("/logout")
+    def logout_submit(request: Request) -> RedirectResponse:
+        token = request.cookies.get(session_cookie_name, "")
+        if token:
+            get_store().delete_session_by_token_hash(hash_token(token))
+        response = RedirectResponse("/login", status_code=303)
+        response.delete_cookie(session_cookie_name)
+        return response
+
+    @app.get("/signup", response_class=HTMLResponse)
+    def signup_page(request: Request, error: str = "") -> HTMLResponse:
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {
+                "request": request,
+                "title": "Create Foundry Organization",
+                "error": error,
+            },
+        )
+
+    @app.post("/signup", response_model=None)
+    async def signup_submit(
+        request: Request,
+        display_name: str = Form(...),
+        email: str = Form(...),
+        password: str = Form(...),
+        organization_name: str = Form(...),
+        organization_slug: str = Form(...),
+    ) -> HTMLResponse | RedirectResponse:
+        require_local_password_auth()
+        normalized_email = normalize_email(email)
+        if get_store().get_user_by_email(normalized_email) is not None:
+            return templates.TemplateResponse(
+                request,
+                "signup.html",
+                {
+                    "request": request,
+                    "title": "Create Foundry Organization",
+                    "error": "An account with that email already exists.",
+                },
+                status_code=400,
+            )
+        if get_store().get_organization_by_slug(organization_slug.strip()) is not None:
+            return templates.TemplateResponse(
+                request,
+                "signup.html",
+                {
+                    "request": request,
+                    "title": "Create Foundry Organization",
+                    "error": "That organization slug is already in use.",
+                },
+                status_code=400,
+            )
+
+        user = PlatformUser(
+            user_id=str(uuid.uuid4()),
+            email=normalized_email,
+            display_name=display_name.strip() or normalized_email,
+            password_salt=generate_password_salt(),
+            password_hash="",
+        )
+        user = PlatformUser(
+            user_id=user.user_id,
+            email=user.email,
+            display_name=user.display_name,
+            password_salt=user.password_salt,
+            password_hash=hash_password(password, user.password_salt),
+            is_platform_admin=False,
+        )
+        get_store().upsert_user(user)
+
+        organization = Organization(
+            organization_id=str(uuid.uuid4()),
+            slug=organization_slug.strip(),
+            display_name=organization_name.strip(),
+            created_by_user_id=user.user_id,
+            support_email=normalized_email,
+        )
+        membership = OrganizationMembership(
+            organization_id=organization.organization_id,
+            user_id=user.user_id,
+            roles=(
+                OrganizationRole.OWNER,
+                OrganizationRole.ADMIN,
+                OrganizationRole.BILLING_ADMIN,
+                OrganizationRole.RUNTIME_ADMIN,
+            ),
+        )
+        try:
+            get_store().create_organization(
+                organization=organization,
+                owner_membership=membership,
+                runtime_settings=default_runtime_settings(organization.organization_id),
+                workspace_pool=default_workspace_pool(organization.organization_id),
+            )
+        except sqlite3.IntegrityError:
+            return templates.TemplateResponse(
+                request,
+                "signup.html",
+                {
+                    "request": request,
+                    "title": "Create Foundry Organization",
+                    "error": "That organization slug is already in use.",
+                },
+                status_code=400,
+            )
+
+        return html_redirect(f"/cloud/organizations/{organization.organization_id}", session_token=create_user_session(user))
+
+    @app.get("/cloud", response_class=HTMLResponse)
+    def cloud_dashboard(request: Request) -> HTMLResponse:
+        user = require_current_user(request)
+        organizations = allowed_organizations_for_user(user)
+        coder_status: dict[str, object] | None = None
+        if server_config.coder_url and server_config.coder_api_token_present:
+            try:
+                coder_status = coder_status_api()
+            except HTTPException:
+                coder_status = None
+        return templates.TemplateResponse(
+            request,
+            "dashboard.html",
+            {
+                "request": request,
+                "title": "Foundry Cloud",
+                "current_user": serialize_user(user),
+                "organizations": [serialize_organization(item) for item in organizations],
+                "is_platform_admin": user.is_platform_admin,
+                "coder_status": coder_status,
+            },
+        )
+
+    @app.post("/cloud/organizations", response_model=None)
+    async def cloud_create_organization(
+        request: Request,
+        display_name: str = Form(...),
+        slug: str = Form(...),
+        support_email: str = Form(""),
+    ) -> HTMLResponse | RedirectResponse:
+        user = require_current_user(request)
+        organization = Organization(
+            organization_id=str(uuid.uuid4()),
+            slug=slug.strip(),
+            display_name=display_name.strip(),
+            created_by_user_id=user.user_id,
+            support_email=support_email.strip() or user.email,
+        )
+        if get_store().get_organization_by_slug(organization.slug) is not None:
+            organizations = allowed_organizations_for_user(user)
+            coder_status: dict[str, object] | None = None
+            if server_config.coder_url and server_config.coder_api_token_present:
+                try:
+                    coder_status = coder_status_api()
+                except HTTPException:
+                    coder_status = None
+            return templates.TemplateResponse(
+                request,
+                "dashboard.html",
+                {
+                    "request": request,
+                    "title": "Foundry Cloud",
+                    "current_user": serialize_user(user),
+                    "organizations": [serialize_organization(item) for item in organizations],
+                    "is_platform_admin": user.is_platform_admin,
+                    "coder_status": coder_status,
+                    "error": "That organization slug is already in use.",
+                },
+                status_code=409,
+            )
+        membership = OrganizationMembership(
+            organization_id=organization.organization_id,
+            user_id=user.user_id,
+            roles=(
+                OrganizationRole.OWNER,
+                OrganizationRole.ADMIN,
+                OrganizationRole.BILLING_ADMIN,
+                OrganizationRole.RUNTIME_ADMIN,
+            ),
+        )
+        get_store().create_organization(
+            organization=organization,
+            owner_membership=membership,
+            runtime_settings=default_runtime_settings(organization.organization_id),
+            workspace_pool=default_workspace_pool(organization.organization_id),
+        )
+        return RedirectResponse(f"/cloud/organizations/{organization.organization_id}", status_code=303)
+
+    @app.get("/cloud/organizations/{organization_id}", response_class=HTMLResponse)
+    def cloud_organization_detail(request: Request, organization_id: str) -> HTMLResponse:
+        user = require_current_user(request)
+        organization = require_organization(organization_id)
+        require_org_access(user, organization_id)
+        memberships = get_store().list_memberships(organization_id)
+        runtime_settings = get_store().get_runtime_settings(organization_id)
+        workspace_pool = get_store().get_workspace_pool(organization_id)
+        github_installation = get_store().get_github_installation(organization_id)
+        invitations = get_store().list_invitations(organization_id)
+        return templates.TemplateResponse(
+            request,
+            "organization_detail.html",
+            {
+                "request": request,
+                "title": f"{organization.display_name} · Foundry Cloud",
+                "current_user": serialize_user(user),
+                "organization": serialize_organization(organization),
+                "members": [
+                    serialize_member_record(item)
+                    for item in sort_memberships(memberships)
+                ],
+                "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
+                "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
+                "github_installation": serialize_github_installation(github_installation),
+                "invitations": [serialize_invitation(item) for item in invitations],
+                "is_platform_admin": user.is_platform_admin,
+            },
+        )
+
+    @app.post(
+        "/cloud/organizations/{organization_id}/invitations",
+        response_class=HTMLResponse,
+        response_model=None,
+    )
+    async def cloud_create_invitation(
+        request: Request,
+        organization_id: str,
+        email: str = Form(...),
+        role: str = Form(OrganizationRole.MEMBER.value),
+    ) -> HTMLResponse:
+        user = require_current_user(request)
+        organization = require_organization(organization_id)
+        require_org_role(user, organization_id, OrganizationRole.ADMIN)
+        raw_token = generate_session_token()
+        invitation = OrganizationInvitation(
+            invitation_id=str(uuid.uuid4()),
+            organization_id=organization_id,
+            email=normalize_email(email),
+            roles=(OrganizationRole(role),),
+            invited_by_user_id=user.user_id,
+            token_hash=hash_token(raw_token),
+            expires_at=utc_expiry(7),
+        )
+        get_store().create_invitation(invitation)
+        memberships = get_store().list_memberships(organization_id)
+        runtime_settings = get_store().get_runtime_settings(organization_id)
+        workspace_pool = get_store().get_workspace_pool(organization_id)
+        github_installation = get_store().get_github_installation(organization_id)
+        invitations = get_store().list_invitations(organization_id)
+        return templates.TemplateResponse(
+            request,
+            "organization_detail.html",
+            {
+                "request": request,
+                "title": f"{organization.display_name} · Foundry Cloud",
+                "current_user": serialize_user(user),
+                "organization": serialize_organization(organization),
+                "members": [
+                    serialize_member_record(item)
+                    for item in sort_memberships(memberships)
+                ],
+                "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
+                "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
+                "github_installation": serialize_github_installation(github_installation),
+                "invitations": [serialize_invitation(item) for item in invitations],
+                "invite_link": f"{server_config.public_base_url}/cloud/invitations/{raw_token}",
+                "is_platform_admin": user.is_platform_admin,
+            },
+        )
+
+    @app.get("/cloud/invitations/{token}", response_class=HTMLResponse)
+    def cloud_invitation_page(request: Request, token: str) -> HTMLResponse:
+        invitation = get_store().get_invitation_by_token_hash(hash_token(token))
+        if invitation is None:
+            raise HTTPException(status_code=404, detail="Invitation not found or expired.")
+        organization = require_organization(invitation.organization_id)
+        return templates.TemplateResponse(
+            request,
+            "accept_invitation.html",
+            {
+                "request": request,
+                "title": f"Join {organization.display_name}",
+                "organization": serialize_organization(organization),
+                "invitation": serialize_invitation(invitation),
+                "token": token,
+            },
+        )
+
+    @app.post("/cloud/invitations/{token}/accept", response_model=None)
+    async def cloud_accept_invitation(
+        request: Request,
+        token: str,
+        display_name: str = Form(...),
+        password: str = Form(...),
+    ) -> HTMLResponse | RedirectResponse:
+        require_local_password_auth()
+        invitation = get_store().get_invitation_by_token_hash(hash_token(token))
+        if invitation is None:
+            raise HTTPException(status_code=404, detail="Invitation not found or expired.")
+
+        user = get_store().get_user_by_email(invitation.email)
+        if user is None:
+            salt = generate_password_salt()
+            user = PlatformUser(
+                user_id=str(uuid.uuid4()),
+                email=invitation.email,
+                display_name=display_name.strip() or invitation.email,
+                password_salt=salt,
+                password_hash=hash_password(password, salt),
+            )
+            get_store().upsert_user(user)
+        else:
+            if not verify_password(password, user.password_salt, user.password_hash):
+                organization = require_organization(invitation.organization_id)
+                return templates.TemplateResponse(
+                    request,
+                    "accept_invitation.html",
+                    {
+                        "request": request,
+                        "title": f"Join {organization.display_name}",
+                        "organization": serialize_organization(organization),
+                        "invitation": serialize_invitation(invitation),
+                        "token": token,
+                        "error": "That password does not match the existing account for this email.",
+                    },
+                    status_code=400,
+                )
+
+        get_store().add_membership(
+            OrganizationMembership(
+                organization_id=invitation.organization_id,
+                user_id=user.user_id,
+                roles=invitation.roles,
+                invited_by_user_id=invitation.invited_by_user_id,
+            )
+        )
+        get_store().accept_invitation(invitation.invitation_id, user.user_id)
+        return html_redirect(f"/cloud/organizations/{invitation.organization_id}", session_token=create_user_session(user))
+
+    @app.get("/api/v1/cloud/me")
+    def cloud_me(request: Request) -> dict[str, object]:
+        user = require_current_user(request)
+        organizations = allowed_organizations_for_user(user)
+        return {
+            "user": serialize_user(user),
+            "organizations": [serialize_organization(item) for item in organizations],
+        }
+
+    @app.get("/api/v1/cloud/organizations")
+    def cloud_organizations_api(request: Request) -> list[dict[str, object]]:
+        user = require_current_user(request)
+        return [serialize_organization(item) for item in allowed_organizations_for_user(user)]
+
+    @app.get("/api/v1/cloud/organizations/{organization_id}")
+    def cloud_organization_api(request: Request, organization_id: str) -> dict[str, object]:
+        user = require_current_user(request)
+        organization = require_organization(organization_id)
+        require_org_access(user, organization_id)
+        return {
+            "organization": serialize_organization(organization),
+            "members": [
+                serialize_member_record(item)
+                for item in sort_memberships(get_store().list_memberships(organization_id))
+            ],
+            "runtime_settings": serialize_runtime_settings(get_store().get_runtime_settings(organization_id) or default_runtime_settings(organization_id)),
+            "workspace_pool": serialize_workspace_pool(get_store().get_workspace_pool(organization_id) or default_workspace_pool(organization_id)),
+            "github_installation": serialize_github_installation(get_store().get_github_installation(organization_id)),
+            "invitations": [serialize_invitation(item) for item in get_store().list_invitations(organization_id)],
         }
 
     @app.get("/api/v1/organizations")
@@ -386,7 +977,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
     @app.get("/api/v1/coder/status")
-    def coder_status() -> dict[str, object]:
+    def coder_status_api() -> dict[str, object]:
         client = require_coder_client()
         try:
             build_info = client.build_info()

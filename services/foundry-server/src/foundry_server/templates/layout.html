@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title }}</title>
+    <style>
+      :root {
+        --ink: #162129;
+        --muted: #59707d;
+        --line: #d4dde3;
+        --surface: #f3f0ea;
+        --card: #fffdfa;
+        --accent: #1f6f5f;
+        --accent-soft: #d9efe9;
+        --danger: #9d2f2f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, #fff7e5 0, transparent 28rem),
+          linear-gradient(180deg, #fbf7ef 0%, var(--surface) 100%);
+      }
+      a { color: var(--accent); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .shell {
+        width: min(1120px, calc(100vw - 2rem));
+        margin: 0 auto;
+        padding: 2rem 0 3rem;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 2rem;
+      }
+      .brand {
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .card, .hero {
+        background: color-mix(in srgb, var(--card) 92%, white 8%);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        box-shadow: 0 18px 50px rgba(15, 24, 34, 0.08);
+      }
+      .hero { padding: 2rem; margin-bottom: 1.5rem; }
+      .card { padding: 1.25rem; }
+      .grid {
+        display: grid;
+        gap: 1rem;
+      }
+      .grid.two {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      }
+      .grid.three {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+      h1, h2, h3, p { margin-top: 0; }
+      .eyebrow {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+      }
+      .muted { color: var(--muted); }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font-size: 0.82rem;
+      }
+      .badge.warn { background: #f8ead9; color: #93622a; }
+      .badge.danger { background: #f3dddd; color: var(--danger); }
+      form { display: grid; gap: 0.8rem; }
+      label { font-size: 0.92rem; font-weight: 600; }
+      input, select, button {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        padding: 0.8rem 0.9rem;
+        font: inherit;
+        background: white;
+        color: var(--ink);
+      }
+      button {
+        cursor: pointer;
+        background: var(--accent);
+        color: white;
+        border: none;
+        font-weight: 600;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--accent);
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, white 65%);
+      }
+      .inline-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .error {
+        padding: 0.8rem 0.95rem;
+        border-radius: 14px;
+        background: #f6e1e1;
+        color: var(--danger);
+      }
+      .table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table th, .table td {
+        text-align: left;
+        padding: 0.7rem 0;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      .table th { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.08em; }
+      .org-link {
+        display: block;
+        padding: 1rem;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.7);
+      }
+      .stack { display: grid; gap: 1rem; }
+      .split {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: 2fr 1fr;
+      }
+      @media (max-width: 920px) {
+        .split { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="topbar">
+        <div class="brand">Foundry Cloud</div>
+        {% if current_user %}
+          <div class="inline-actions">
+            <span class="muted">{{ current_user.display_name }} · {{ current_user.email }}</span>
+            {% if current_user.is_platform_admin %}
+              <span class="badge">Platform Admin</span>
+            {% endif %}
+            <form method="post" action="/logout" style="display:inline">
+              <button class="secondary" type="submit">Log out</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+      {% block content %}{% endblock %}
+    </div>
+  </body>
+</html>

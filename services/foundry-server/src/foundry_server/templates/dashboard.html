@@ -1,0 +1,69 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="hero">
+    <p class="eyebrow">Control Plane</p>
+    <h1>{{ "Platform directory" if is_platform_admin else "Your organizations" }}</h1>
+    <p class="muted">
+      Review org state, open admin workflows, and keep Cloud, GitHub, runtime, and workspace systems aligned.
+    </p>
+    {% if coder_status %}
+      <div class="inline-actions">
+        <span class="badge">Coder ready</span>
+        <span class="muted">{{ coder_status.build.version }} · {{ coder_status.workspace_count }} workspace{{ "" if coder_status.workspace_count == 1 else "s" }}</span>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if error %}
+    <div class="error" style="margin-bottom: 1rem;">{{ error }}</div>
+  {% endif %}
+
+  <div class="split">
+    <section class="stack">
+      <div class="card">
+        <p class="eyebrow">Organizations</p>
+        <div class="grid two">
+          {% for organization in organizations %}
+            <a class="org-link" href="/cloud/organizations/{{ organization.organization_id }}">
+              <strong>{{ organization.display_name }}</strong>
+              <p class="muted">{{ organization.slug }} · {{ organization.support_email }}</p>
+            </a>
+          {% else %}
+            <div class="card">
+              <p class="muted">No organizations yet. Create one from the panel on the right.</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <aside class="stack">
+      <div class="card">
+        <p class="eyebrow">Current user</p>
+        <h3>{{ current_user.display_name }}</h3>
+        <p class="muted">{{ current_user.email }}</p>
+        {% if current_user.is_platform_admin %}
+          <span class="badge">Platform Admin</span>
+        {% endif %}
+      </div>
+      <div class="card">
+        <p class="eyebrow">Create organization</p>
+        <form method="post" action="/cloud/organizations">
+          <label>
+            Organization name
+            <input type="text" name="display_name" required />
+          </label>
+          <label>
+            Slug
+            <input type="text" name="slug" placeholder="acme" required />
+          </label>
+          <label>
+            Support email
+            <input type="email" name="support_email" value="{{ current_user.email }}" />
+          </label>
+          <button type="submit">Create org</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+{% endblock %}

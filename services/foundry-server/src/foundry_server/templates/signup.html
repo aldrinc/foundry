@@ -1,0 +1,50 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="split">
+    <section class="hero">
+      <p class="eyebrow">Business Signup</p>
+      <h1>Create your Foundry organization</h1>
+      <p class="muted">
+        This creates your Cloud org and the initial owner account. Downstream tenant systems
+        stay visible from the admin surface as they are wired in.
+      </p>
+      <div class="card">
+        <h3>What happens next</h3>
+        <p class="muted">You’ll land in the admin console where you can invite teammates, connect GitHub, and review the environment checklist.</p>
+      </div>
+    </section>
+    <section class="card">
+      <p class="eyebrow">Setup</p>
+      <h2>New organization</h2>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/signup">
+        <label>
+          Your name
+          <input type="text" name="display_name" required />
+        </label>
+        <label>
+          Work email
+          <input type="email" name="email" autocomplete="email" required />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" autocomplete="new-password" required />
+        </label>
+        <label>
+          Organization name
+          <input type="text" name="organization_name" required />
+        </label>
+        <label>
+          Organization slug
+          <input type="text" name="organization_slug" placeholder="acme" required />
+        </label>
+        <button type="submit">Create organization</button>
+      </form>
+      <p class="muted">
+        Already have access? <a href="/login">Sign in</a>
+      </p>
+    </section>
+  </div>
+{% endblock %}

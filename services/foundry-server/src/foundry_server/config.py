@@ -16,6 +16,7 @@ class DeploymentEnvironment(StrEnum):
 
 class AuthProvider(StrEnum):
     OIDC = "oidc"
+    LOCAL_PASSWORD = "local_password"
 
 
 class WorkspaceTopology(StrEnum):
@@ -50,6 +51,9 @@ class AppConfig:
     oidc_issuer_url: str
     oidc_audience: str
     oidc_client_id: str
+    bootstrap_admin_email: str
+    bootstrap_admin_password: str
+    bootstrap_admin_password_present: bool
     github_app_name: str
     github_api_url: str
     github_app_id: str
@@ -68,6 +72,7 @@ class AppConfig:
     workspace_topology: WorkspaceTopology
     organization_workspace_pool_size: int
     organization_workspace_max_concurrency: int
+    session_max_age_days: int
 
     def public_summary(self) -> dict[str, object]:
         return {
@@ -82,6 +87,8 @@ class AppConfig:
             "oidc_configured": bool(
                 self.oidc_issuer_url and self.oidc_audience and self.oidc_client_id
             ),
+            "bootstrap_admin_email": self.bootstrap_admin_email,
+            "bootstrap_admin_password_present": self.bootstrap_admin_password_present,
             "github_app_name": self.github_app_name,
             "github_api_url": self.github_api_url,
             "github_app_configured": bool(
@@ -100,6 +107,7 @@ class AppConfig:
             "workspace_topology": self.workspace_topology.value,
             "organization_workspace_pool_size": self.organization_workspace_pool_size,
             "organization_workspace_max_concurrency": self.organization_workspace_max_concurrency,
+            "session_max_age_days": self.session_max_age_days,
         }
 
 
@@ -125,6 +133,11 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         oidc_issuer_url=source.get("FOUNDRY_OIDC_ISSUER_URL", ""),
         oidc_audience=source.get("FOUNDRY_OIDC_AUDIENCE", ""),
         oidc_client_id=source.get("FOUNDRY_OIDC_CLIENT_ID", ""),
+        bootstrap_admin_email=source.get("FOUNDRY_BOOTSTRAP_ADMIN_EMAIL", ""),
+        bootstrap_admin_password=source.get("FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD", ""),
+        bootstrap_admin_password_present=bool(
+            source.get("FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+        ),
         github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
         github_api_url=source.get("FOUNDRY_GITHUB_API_URL", "https://api.github.com"),
         github_app_id=source.get("FOUNDRY_GITHUB_APP_ID", ""),
@@ -162,4 +175,5 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         organization_workspace_max_concurrency=_env_int(
             source, "FOUNDRY_ORG_WORKSPACE_MAX_CONCURRENCY", 20
         ),
+        session_max_age_days=_env_int(source, "FOUNDRY_SESSION_MAX_AGE_DAYS", 14),
     )

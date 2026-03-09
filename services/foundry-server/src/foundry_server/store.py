@@ -2,21 +2,26 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from .domain import (
     AgentDefinition,
     GitHubInstallation,
+    OrganizationInvitation,
     Organization,
     OrganizationMembership,
     OrganizationRole,
     OrganizationRuntimeSettings,
     OrganizationWorkspacePool,
+    PlatformUser,
     RepoMirror,
     RuntimeCredentialOwnership,
     RuntimeHealth,
     RuntimeProvider,
     RuntimeProviderCredential,
+    UserSession,
     WorkspaceTenancy,
     WorkspaceTopology,
     WorktreeCheckoutStrategy,
@@ -83,6 +88,44 @@ class FoundryStore:
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
                 );
+
+                CREATE TABLE IF NOT EXISTS platform_users (
+                    user_id TEXT PRIMARY KEY,
+                    email TEXT NOT NULL UNIQUE,
+                    display_name TEXT NOT NULL,
+                    password_salt TEXT NOT NULL DEFAULT '',
+                    password_hash TEXT NOT NULL DEFAULT '',
+                    is_platform_admin INTEGER NOT NULL DEFAULT 0,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    last_login_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS user_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TEXT NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES platform_users (user_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS organization_invitations (
+                    invitation_id TEXT PRIMARY KEY,
+                    organization_id TEXT NOT NULL,
+                    email TEXT NOT NULL,
+                    roles_json TEXT NOT NULL,
+                    invited_by_user_id TEXT,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TEXT NOT NULL,
+                    accepted_at TEXT,
+                    accepted_by_user_id TEXT,
+                    FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
+                );
                 """
             )
 
@@ -97,6 +140,21 @@ class FoundryStore:
             ).fetchall()
         return [self._organization_from_row(row) for row in rows]
 
+    def list_organizations_for_user(self, user_id: str) -> list[Organization]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT o.organization_id, o.slug, o.display_name, o.created_by_user_id, o.support_email, o.self_host_mode
+                FROM organizations AS o
+                INNER JOIN organization_memberships AS m
+                    ON o.organization_id = m.organization_id
+                WHERE m.user_id = ?
+                ORDER BY o.created_at ASC, o.slug ASC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [self._organization_from_row(row) for row in rows]
+
     def get_organization(self, organization_id: str) -> Organization | None:
         with self._connect() as connection:
             row = connection.execute(
@@ -106,6 +164,18 @@ class FoundryStore:
                 WHERE organization_id = ?
                 """,
                 (organization_id,),
+            ).fetchone()
+        return self._organization_from_row(row) if row is not None else None
+
+    def get_organization_by_slug(self, slug: str) -> Organization | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT organization_id, slug, display_name, created_by_user_id, support_email, self_host_mode
+                FROM organizations
+                WHERE slug = ?
+                """,
+                (slug,),
             ).fetchone()
         return self._organization_from_row(row) if row is not None else None
 
@@ -156,6 +226,28 @@ class FoundryStore:
             self._upsert_runtime_settings(connection, runtime_settings)
             self._upsert_workspace_pool(connection, workspace_pool)
 
+    def add_membership(self, membership: OrganizationMembership) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO organization_memberships (
+                    organization_id,
+                    user_id,
+                    roles_json,
+                    invited_by_user_id
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT (organization_id, user_id) DO UPDATE SET
+                    roles_json = excluded.roles_json,
+                    invited_by_user_id = excluded.invited_by_user_id
+                """,
+                (
+                    membership.organization_id,
+                    membership.user_id,
+                    json.dumps([role.value for role in membership.roles]),
+                    membership.invited_by_user_id,
+                ),
+            )
+
     def list_memberships(self, organization_id: str) -> list[OrganizationMembership]:
         with self._connect() as connection:
             rows = connection.execute(
@@ -168,6 +260,18 @@ class FoundryStore:
                 (organization_id,),
             ).fetchall()
         return [self._membership_from_row(row) for row in rows]
+
+    def get_membership(self, organization_id: str, user_id: str) -> OrganizationMembership | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT organization_id, user_id, roles_json, invited_by_user_id
+                FROM organization_memberships
+                WHERE organization_id = ? AND user_id = ?
+                """,
+                (organization_id, user_id),
+            ).fetchone()
+        return self._membership_from_row(row) if row is not None else None
 
     def get_runtime_settings(self, organization_id: str) -> OrganizationRuntimeSettings | None:
         with self._connect() as connection:
@@ -238,10 +342,192 @@ class FoundryStore:
                 ),
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    def get_user(self, user_id: str) -> PlatformUser | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT user_id, email, display_name, password_salt, password_hash, is_platform_admin, active
+                FROM platform_users
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            ).fetchone()
+        return self._user_from_row(row) if row is not None else None
+
+    def get_user_by_email(self, email: str) -> PlatformUser | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT user_id, email, display_name, password_salt, password_hash, is_platform_admin, active
+                FROM platform_users
+                WHERE email = ?
+                """,
+                (email,),
+            ).fetchone()
+        return self._user_from_row(row) if row is not None else None
+
+    def upsert_user(self, user: PlatformUser) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO platform_users (
+                    user_id,
+                    email,
+                    display_name,
+                    password_salt,
+                    password_hash,
+                    is_platform_admin,
+                    active,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    email = excluded.email,
+                    display_name = excluded.display_name,
+                    password_salt = excluded.password_salt,
+                    password_hash = excluded.password_hash,
+                    is_platform_admin = excluded.is_platform_admin,
+                    active = excluded.active,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    user.user_id,
+                    user.email,
+                    user.display_name,
+                    user.password_salt,
+                    user.password_hash,
+                    int(user.is_platform_admin),
+                    int(user.active),
+                ),
+            )
+
+    def touch_user_login(self, user_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE platform_users
+                SET last_login_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+
+    def create_session(self, session: UserSession) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO user_sessions (
+                    session_id,
+                    user_id,
+                    token_hash,
+                    expires_at,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    session.session_id,
+                    session.user_id,
+                    session.token_hash,
+                    session.expires_at,
+                ),
+            )
+
+    def get_session_by_token_hash(self, token_hash: str) -> UserSession | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT session_id, user_id, token_hash, expires_at
+                FROM user_sessions
+                WHERE token_hash = ? AND expires_at > CURRENT_TIMESTAMP
+                """,
+                (token_hash,),
+            ).fetchone()
+        return self._session_from_row(row) if row is not None else None
+
+    def delete_session_by_token_hash(self, token_hash: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                "DELETE FROM user_sessions WHERE token_hash = ?",
+                (token_hash,),
+            )
+
+    def create_invitation(self, invitation: OrganizationInvitation) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO organization_invitations (
+                    invitation_id,
+                    organization_id,
+                    email,
+                    roles_json,
+                    invited_by_user_id,
+                    token_hash,
+                    expires_at,
+                    accepted_by_user_id,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (
+                    invitation.invitation_id,
+                    invitation.organization_id,
+                    invitation.email,
+                    json.dumps([role.value for role in invitation.roles]),
+                    invitation.invited_by_user_id,
+                    invitation.token_hash,
+                    invitation.expires_at,
+                    invitation.accepted_by_user_id,
+                ),
+            )
+
+    def list_invitations(self, organization_id: str) -> list[OrganizationInvitation]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT invitation_id, organization_id, email, roles_json, invited_by_user_id, token_hash, expires_at, accepted_by_user_id
+                FROM organization_invitations
+                WHERE organization_id = ?
+                ORDER BY created_at DESC
+                """,
+                (organization_id,),
+            ).fetchall()
+        return [self._invitation_from_row(row) for row in rows]
+
+    def get_invitation_by_token_hash(self, token_hash: str) -> OrganizationInvitation | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT invitation_id, organization_id, email, roles_json, invited_by_user_id, token_hash, expires_at, accepted_by_user_id
+                FROM organization_invitations
+                WHERE token_hash = ? AND accepted_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+                """,
+                (token_hash,),
+            ).fetchone()
+        return self._invitation_from_row(row) if row is not None else None
+
+    def accept_invitation(self, invitation_id: str, accepted_by_user_id: str) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE organization_invitations
+                SET accepted_at = CURRENT_TIMESTAMP,
+                    accepted_by_user_id = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE invitation_id = ?
+                """,
+                (accepted_by_user_id, invitation_id),
+            )
+
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
-        return connection
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def _upsert_runtime_settings(
         self,
@@ -430,4 +716,39 @@ class FoundryStore:
             installation_id=str(row["installation_id"]),
             account_login=str(row["account_login"]),
             account_type=str(row["account_type"]),
+        )
+
+    @staticmethod
+    def _user_from_row(row: sqlite3.Row) -> PlatformUser:
+        return PlatformUser(
+            user_id=str(row["user_id"]),
+            email=str(row["email"]),
+            display_name=str(row["display_name"]),
+            password_salt=str(row["password_salt"]),
+            password_hash=str(row["password_hash"]),
+            is_platform_admin=bool(row["is_platform_admin"]),
+            active=bool(row["active"]),
+        )
+
+    @staticmethod
+    def _session_from_row(row: sqlite3.Row) -> UserSession:
+        return UserSession(
+            session_id=str(row["session_id"]),
+            user_id=str(row["user_id"]),
+            token_hash=str(row["token_hash"]),
+            expires_at=str(row["expires_at"]),
+        )
+
+    @staticmethod
+    def _invitation_from_row(row: sqlite3.Row) -> OrganizationInvitation:
+        roles = tuple(OrganizationRole(role) for role in json.loads(str(row["roles_json"])))
+        return OrganizationInvitation(
+            invitation_id=str(row["invitation_id"]),
+            organization_id=str(row["organization_id"]),
+            email=str(row["email"]),
+            roles=roles,
+            invited_by_user_id=row["invited_by_user_id"],
+            token_hash=str(row["token_hash"]),
+            expires_at=str(row["expires_at"]),
+            accepted_by_user_id=row["accepted_by_user_id"],
         )

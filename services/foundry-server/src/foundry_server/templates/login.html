@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+  <div class="split">
+    <section class="hero">
+      <p class="eyebrow">Hosted Access</p>
+      <h1>Sign in to Foundry Cloud</h1>
+      <p class="muted">
+        Use Foundry Cloud to manage your organization, connect GitHub, review runtime health,
+        and launch the tenant app.
+      </p>
+      <div class="grid three">
+        <div class="card">
+          <h3>Organizations</h3>
+          <p class="muted">Manage membership, ownership, and org-level configuration from one place.</p>
+        </div>
+        <div class="card">
+          <h3>Runtime</h3>
+          <p class="muted">Review provider readiness and org-scoped agent defaults before users start work.</p>
+        </div>
+        <div class="card">
+          <h3>Infrastructure</h3>
+          <p class="muted">See the live Foundry-owned Coder control plane and downstream sync state.</p>
+        </div>
+      </div>
+    </section>
+    <section class="card">
+      <p class="eyebrow">Login</p>
+      <h2>Welcome back</h2>
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+      <form method="post" action="/login">
+        <label>
+          Email
+          <input type="email" name="email" autocomplete="email" required />
+        </label>
+        <label>
+          Password
+          <input type="password" name="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit">Sign in</button>
+      </form>
+      <p class="muted">
+        New customer org? <a href="/signup">Create your organization</a>
+      </p>
+    </section>
+  </div>
+{% endblock %}

@@ -30,7 +30,7 @@ if [[ -n "$disallowed_tracked_files" ]]; then
   exit 1
 fi
 
-heuristic_pattern='(?i)(BEGIN [A-Z ]+PRIVATE KEY|aws_access_key_id\s*[:=]\s*["'"'"']?[A-Z0-9]{16,}|aws_secret_access_key\s*[:=]\s*["'"'"']?[A-Za-z0-9/+=]{20,}|authorization\s*:\s*bearer\s+[A-Za-z0-9._-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}|ghp_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|(?:api|secret|client)[_-]?key\s*[:=]\s*["'"'"'][A-Za-z0-9/+=._-]{16,}["'"'"']|(?:api|auth|access|refresh|secret)[_-]?token\s*[:=]\s*["'"'"'][A-Za-z0-9/+=._-]{16,}["'"'"']|password\s*[:=]\s*["'"'"'][^"'"'"']{10,}["'"'"'])'
+heuristic_pattern='(?i)(BEGIN [A-Z ]+PRIVATE KEY|aws_access_key_id\s*[:=]\s*["'"'"']?[A-Z0-9]{16,}|aws_secret_access_key\s*[:=]\s*["'"'"']?[A-Za-z0-9/+=]{20,}|authorization\s*:\s*bearer\s+[A-Za-z0-9._-]{16,}|xox[baprs]-[A-Za-z0-9-]{10,}|ghp_[A-Za-z0-9]{20,}|glpat-[A-Za-z0-9_-]{20,}|\b(?:api|secret|client)[_-]?key\b\s*[:=]\s*["'"'"'][A-Za-z0-9/+=._-]{16,}["'"'"']|\b(?:api|auth|access|refresh|secret)[_-]?token\b\s*[:=]\s*["'"'"'][A-Za-z0-9/+=._-]{16,}["'"'"']|\bpassword\b\s*[:=]\s*["'"'"'][^"'"'"']{10,}["'"'"'])'
 heuristic_path_allowlist='^services/foundry-core/app/(analytics/tests/|corporate/tests/|templates/zerver/integrations/|tools/build-release-tarball$|web/(e2e-tests|tests)/|zerver/migrations/0209_user_profile_no_empty_password.py$|zerver/tests/|zerver/webhooks/[^/]+/tests\.py$)'
 
 heuristic_scan_files=()

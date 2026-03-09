@@ -1,0 +1,134 @@
+{% extends "layout.html" %}
+{% block content %}
+  <section class="hero">
+    <p class="eyebrow">Organization</p>
+    <div class="inline-actions" style="justify-content: space-between; align-items: flex-start;">
+      <div>
+        <h1>{{ organization.display_name }}</h1>
+        <p class="muted">{{ organization.slug }} · {{ organization.support_email }}</p>
+      </div>
+      <a href="/cloud">Back to Cloud</a>
+    </div>
+    <div class="grid three">
+      <div class="card">
+        <h3>GitHub</h3>
+        {% if github_installation %}
+          <span class="badge">Connected</span>
+          <p class="muted">{{ github_installation.account_login }} · installation {{ github_installation.installation_id }}</p>
+        {% else %}
+          <span class="badge warn">Pending</span>
+          <p class="muted">GitHub App not bound yet.</p>
+        {% endif %}
+      </div>
+      <div class="card">
+        <h3>Runtime</h3>
+        <span class="badge {{ 'warn' if runtime_settings.health != 'ready' else '' }}">{{ runtime_settings.health }}</span>
+        <p class="muted">{{ runtime_settings.default_provider }}{% if runtime_settings.default_model %} · {{ runtime_settings.default_model }}{% endif %}</p>
+      </div>
+      <div class="card">
+        <h3>Workspace policy</h3>
+        <p class="muted">Pool size {{ workspace_pool.pool_size }} · Max concurrent tasks {{ workspace_pool.max_concurrent_tasks }}</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="split">
+    <section class="stack">
+      <div class="card">
+        <p class="eyebrow">Members</p>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Roles</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in members %}
+              <tr>
+                <td>{{ member.display_name }}</td>
+                <td>{{ member.email or member.user_id }}</td>
+                <td>{{ member.roles | join(", ") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <p class="eyebrow">Pending invitations</p>
+        {% if invite_link %}
+          <div class="error" style="background:#e6f3ee;color:#1f6f5f;">
+            Copy this invite URL now: <a href="{{ invite_link }}">{{ invite_link }}</a>
+          </div>
+        {% endif %}
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Roles</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for invitation in invitations %}
+              <tr>
+                <td>{{ invitation.email }}</td>
+                <td>{{ invitation.roles | join(", ") }}</td>
+                <td>{{ "Accepted" if invitation.accepted_by_user_id else "Pending" }}</td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="3" class="muted">No invitations yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="stack">
+      <div class="card">
+        <p class="eyebrow">Invite teammate</p>
+        <form method="post" action="/cloud/organizations/{{ organization.organization_id }}/invitations">
+          <label>
+            Email
+            <input type="email" name="email" required />
+          </label>
+          <label>
+            Role
+            <select name="role">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              <option value="runtime_admin">Runtime admin</option>
+              <option value="billing_admin">Billing admin</option>
+            </select>
+          </label>
+          <button type="submit">Create invite</button>
+        </form>
+      </div>
+      <div class="card">
+        <p class="eyebrow">Checklist</p>
+        <div class="stack">
+          <div>
+            <strong>Cloud org ready</strong>
+            <p class="muted">The control-plane org and owner membership exist.</p>
+          </div>
+          <div>
+            <strong>GitHub binding</strong>
+            <p class="muted">{{ "Connected." if github_installation else "Still pending." }}</p>
+          </div>
+          <div>
+            <strong>Runtime setup</strong>
+            <p class="muted">{{ "Ready." if runtime_settings.health == "ready" else "Needs configuration." }}</p>
+          </div>
+          <div>
+            <strong>Tenant app and Coder org sync</strong>
+            <p class="muted">Scheduled for the next control-plane slice.</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+{% endblock %}

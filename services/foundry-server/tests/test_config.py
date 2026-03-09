@@ -39,7 +39,10 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_ENVIRONMENT": "staging",
                 "FOUNDRY_PORT": "9001",
                 "FOUNDRY_SELF_HOST_MODE": "true",
+                "FOUNDRY_AUTH_PROVIDER": "local_password",
                 "FOUNDRY_SUPPORT_EMAIL": "support@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "admin@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "local-password",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": "/tmp/foundry.pem",
                 "FOUNDRY_GITHUB_WEBHOOK_SECRET": "secret",
                 "FOUNDRY_CODER_URL": "https://coder.foundry.test",
@@ -48,13 +51,17 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_STRIPE_WEBHOOK_SECRET": "whsec_123",
                 "FOUNDRY_ORG_WORKSPACE_POOL_SIZE": "8",
                 "FOUNDRY_ORG_WORKSPACE_MAX_CONCURRENCY": "40",
+                "FOUNDRY_SESSION_MAX_AGE_DAYS": "30",
             }
         )
 
         self.assertEqual(config.environment, DeploymentEnvironment.STAGING)
         self.assertEqual(config.port, 9001)
         self.assertTrue(config.self_host_mode)
+        self.assertEqual(config.auth_provider, AuthProvider.LOCAL_PASSWORD)
         self.assertEqual(config.support_email, "support@foundry.test")
+        self.assertEqual(config.bootstrap_admin_email, "admin@foundry.test")
+        self.assertTrue(config.bootstrap_admin_password_present)
         self.assertTrue(config.github_app_private_key_present)
         self.assertTrue(config.github_webhook_secret_present)
         self.assertEqual(config.coder_url, "https://coder.foundry.test")
@@ -63,6 +70,7 @@ class ConfigTests(unittest.TestCase):
         self.assertTrue(config.stripe_webhook_secret_present)
         self.assertEqual(config.organization_workspace_pool_size, 8)
         self.assertEqual(config.organization_workspace_max_concurrency, 40)
+        self.assertEqual(config.session_max_age_days, 30)
 
     def test_process_environment_is_used_by_default(self) -> None:
         with mock.patch.dict(
