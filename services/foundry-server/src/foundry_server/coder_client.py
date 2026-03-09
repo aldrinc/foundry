@@ -73,6 +73,33 @@ class CoderClient:
             for item in payload
         ]
 
+    def list_organizations(self) -> list[dict[str, object]]:
+        payload = self._request_list("GET", "/api/v2/organizations")
+        return [
+            {
+                "id": str(item.get("id", "")),
+                "name": str(item.get("name", "")),
+                "display_name": str(item.get("display_name", "")),
+                "description": str(item.get("description", "")),
+                "is_default": bool(item.get("is_default", False)),
+            }
+            for item in payload
+        ]
+
+    def create_organization(self, name: str, display_name: str) -> dict[str, object]:
+        payload = self._request_dict(
+            "POST",
+            "/api/v2/organizations",
+            json_payload={"name": name, "display_name": display_name},
+        )
+        return {
+            "id": str(payload.get("id", "")),
+            "name": str(payload.get("name", "")),
+            "display_name": str(payload.get("display_name", "")),
+            "description": str(payload.get("description", "")),
+            "is_default": bool(payload.get("is_default", False)),
+        }
+
     def list_workspaces(self) -> list[dict[str, object]]:
         payload = self._request_dict("GET", "/api/v2/workspaces?q=")
         workspaces = payload.get("workspaces", [])
@@ -97,14 +124,20 @@ class CoderClient:
             for item in workspaces
         ]
 
-    def _request_payload(self, method: str, path: str) -> dict[str, Any] | list[dict[str, Any]]:
+    def _request_payload(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, object] | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         url = f"{self.base_url}{path}"
         headers = {
             "Coder-Session-Token": self.api_token,
             "Accept": "application/json",
         }
         with httpx.Client(timeout=20.0) as client:
-            response = client.request(method, url, headers=headers)
+            response = client.request(method, url, headers=headers, json=json_payload)
 
         if response.status_code >= 400:
             detail = response.text.strip() or "Coder API request failed."
@@ -128,8 +161,14 @@ class CoderClient:
             f"Unexpected Coder API response shape from {path}.",
         )
 
-    def _request_dict(self, method: str, path: str) -> dict[str, Any]:
-        data = self._request_payload(method, path)
+    def _request_dict(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_payload: dict[str, object] | None = None,
+    ) -> dict[str, Any]:
+        data = self._request_payload(method, path, json_payload=json_payload)
         if not isinstance(data, dict):
             raise CoderRequestError(
                 502,

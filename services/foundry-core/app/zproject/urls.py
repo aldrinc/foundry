@@ -66,6 +66,10 @@ from zerver.views.digest import digest_page
 from zerver.views.documentation import MarkdownDirectoryView, integrations_catalog, integrations_doc
 from zerver.views.drafts import create_drafts, delete_draft, edit_draft, fetch_drafts
 from zerver.views.events_register import events_register_backend
+from zerver.views.foundry_cloud import (
+    foundry_cloud_provision_tenant,
+    foundry_cloud_sync_tenant_member,
+)
 from zerver.views.health import health
 from zerver.views.home import accounts_accept_terms, desktop_home, doc_permalinks_view, home
 from zerver.views.invite import (
@@ -864,6 +868,11 @@ urls: list[URLPattern | URLResolver] = list(i18n_urls)
 
 # Include the dual-use patterns twice
 urls += [
+    path("api/v1/foundry/cloud/tenants/provision", foundry_cloud_provision_tenant),
+    path(
+        "api/v1/foundry/cloud/tenants/<str:realm_subdomain>/members/sync",
+        foundry_cloud_sync_tenant_member,
+    ),
     path("api/v1/", include(v1_api_and_json_patterns)),
     path("json/", include(v1_api_and_json_patterns)),
 ]

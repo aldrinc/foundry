@@ -8,6 +8,8 @@ from typing import Iterator
 
 from .domain import (
     AgentDefinition,
+    CoderOrganizationBinding,
+    CoreRealmBinding,
     GitHubInstallation,
     OrganizationInvitation,
     Organization,
@@ -16,6 +18,7 @@ from .domain import (
     OrganizationRuntimeSettings,
     OrganizationWorkspacePool,
     PlatformUser,
+    ProvisioningStatus,
     RepoMirror,
     RuntimeCredentialOwnership,
     RuntimeHealth,
@@ -85,6 +88,29 @@ class FoundryStore:
                     installation_id TEXT NOT NULL,
                     account_login TEXT NOT NULL,
                     account_type TEXT NOT NULL,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS foundry_core_realms (
+                    organization_id TEXT PRIMARY KEY,
+                    realm_subdomain TEXT NOT NULL UNIQUE,
+                    realm_url TEXT NOT NULL,
+                    owner_email TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS coder_organizations (
+                    organization_id TEXT PRIMARY KEY,
+                    coder_organization_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    display_name TEXT NOT NULL,
+                    template_name TEXT NOT NULL DEFAULT 'foundry-hetzner-workspace',
+                    status TEXT NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '',
                     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
                 );
@@ -339,6 +365,97 @@ class FoundryStore:
                     installation.installation_id,
                     installation.account_login,
                     installation.account_type,
+                ),
+            )
+
+    def get_core_realm_binding(self, organization_id: str) -> CoreRealmBinding | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT organization_id, realm_subdomain, realm_url, owner_email, status, detail
+                FROM foundry_core_realms
+                WHERE organization_id = ?
+                """,
+                (organization_id,),
+            ).fetchone()
+        return self._core_realm_binding_from_row(row) if row is not None else None
+
+    def put_core_realm_binding(self, binding: CoreRealmBinding) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO foundry_core_realms (
+                    organization_id,
+                    realm_subdomain,
+                    realm_url,
+                    owner_email,
+                    status,
+                    detail,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (organization_id) DO UPDATE SET
+                    realm_subdomain = excluded.realm_subdomain,
+                    realm_url = excluded.realm_url,
+                    owner_email = excluded.owner_email,
+                    status = excluded.status,
+                    detail = excluded.detail,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    binding.organization_id,
+                    binding.realm_subdomain,
+                    binding.realm_url,
+                    binding.owner_email,
+                    binding.status.value,
+                    binding.detail,
+                ),
+            )
+
+    def get_coder_organization_binding(
+        self, organization_id: str
+    ) -> CoderOrganizationBinding | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT organization_id, coder_organization_id, name, display_name, template_name, status, detail
+                FROM coder_organizations
+                WHERE organization_id = ?
+                """,
+                (organization_id,),
+            ).fetchone()
+        return self._coder_organization_binding_from_row(row) if row is not None else None
+
+    def put_coder_organization_binding(self, binding: CoderOrganizationBinding) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO coder_organizations (
+                    organization_id,
+                    coder_organization_id,
+                    name,
+                    display_name,
+                    template_name,
+                    status,
+                    detail,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (organization_id) DO UPDATE SET
+                    coder_organization_id = excluded.coder_organization_id,
+                    name = excluded.name,
+                    display_name = excluded.display_name,
+                    template_name = excluded.template_name,
+                    status = excluded.status,
+                    detail = excluded.detail,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    binding.organization_id,
+                    binding.coder_organization_id,
+                    binding.name,
+                    binding.display_name,
+                    binding.template_name,
+                    binding.status.value,
+                    binding.detail,
                 ),
             )
 
@@ -716,6 +833,31 @@ class FoundryStore:
             installation_id=str(row["installation_id"]),
             account_login=str(row["account_login"]),
             account_type=str(row["account_type"]),
+        )
+
+    @staticmethod
+    def _core_realm_binding_from_row(row: sqlite3.Row) -> CoreRealmBinding:
+        return CoreRealmBinding(
+            organization_id=str(row["organization_id"]),
+            realm_subdomain=str(row["realm_subdomain"]),
+            realm_url=str(row["realm_url"]),
+            owner_email=str(row["owner_email"]),
+            status=ProvisioningStatus(str(row["status"])),
+            detail=str(row["detail"]),
+        )
+
+    @staticmethod
+    def _coder_organization_binding_from_row(
+        row: sqlite3.Row,
+    ) -> CoderOrganizationBinding:
+        return CoderOrganizationBinding(
+            organization_id=str(row["organization_id"]),
+            coder_organization_id=str(row["coder_organization_id"]),
+            name=str(row["name"]),
+            display_name=str(row["display_name"]),
+            template_name=str(row["template_name"]),
+            status=ProvisioningStatus(str(row["status"])),
+            detail=str(row["detail"]),
         )
 
     @staticmethod

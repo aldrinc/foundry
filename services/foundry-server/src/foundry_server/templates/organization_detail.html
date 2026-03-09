@@ -7,9 +7,33 @@
         <h1>{{ organization.display_name }}</h1>
         <p class="muted">{{ organization.slug }} · {{ organization.support_email }}</p>
       </div>
-      <a href="/cloud">Back to Cloud</a>
+      <div class="inline-actions">
+        {% if core_binding and core_binding.realm_url %}
+          <a href="{{ core_binding.realm_url }}">Launch tenant app</a>
+        {% endif %}
+        <a href="/cloud">Back to Cloud</a>
+      </div>
     </div>
     <div class="grid three">
+      <div class="card">
+        <h3>Tenant app</h3>
+        {% if core_binding %}
+          <span class="badge {{ 'warn' if core_binding.status != 'ready' else '' }}">{{ core_binding.status }}</span>
+          <p class="muted">
+            {% if core_binding.realm_url %}
+              <a href="{{ core_binding.realm_url }}">{{ core_binding.realm_subdomain }}</a>
+            {% else %}
+              {{ core_binding.realm_subdomain }}
+            {% endif %}
+          </p>
+          {% if core_binding.detail %}
+            <p class="muted">{{ core_binding.detail }}</p>
+          {% endif %}
+        {% else %}
+          <span class="badge warn">pending</span>
+          <p class="muted">Tenant realm not provisioned yet.</p>
+        {% endif %}
+      </div>
       <div class="card">
         <h3>GitHub</h3>
         {% if github_installation %}
@@ -28,6 +52,19 @@
       <div class="card">
         <h3>Workspace policy</h3>
         <p class="muted">Pool size {{ workspace_pool.pool_size }} · Max concurrent tasks {{ workspace_pool.max_concurrent_tasks }}</p>
+      </div>
+      <div class="card">
+        <h3>Coder org</h3>
+        {% if coder_binding %}
+          <span class="badge {{ 'warn' if coder_binding.status != 'ready' else '' }}">{{ coder_binding.status }}</span>
+          <p class="muted">{{ coder_binding.display_name or coder_binding.name }}</p>
+          {% if coder_binding.detail %}
+            <p class="muted">{{ coder_binding.detail }}</p>
+          {% endif %}
+        {% else %}
+          <span class="badge warn">pending</span>
+          <p class="muted">Coder org sync has not run yet.</p>
+        {% endif %}
       </div>
     </div>
   </section>
@@ -90,6 +127,16 @@
 
     <aside class="stack">
       <div class="card">
+        <p class="eyebrow">Provisioning</p>
+        <form method="post" action="/cloud/organizations/{{ organization.organization_id }}/provision">
+          <label>
+            Owner password
+            <input type="password" name="owner_password" placeholder="Only needed if the tenant owner has not been bootstrapped yet" />
+          </label>
+          <button type="submit">Retry tenant provisioning</button>
+        </form>
+      </div>
+      <div class="card">
         <p class="eyebrow">Invite teammate</p>
         <form method="post" action="/cloud/organizations/{{ organization.organization_id }}/invitations">
           <label>
@@ -116,6 +163,18 @@
             <p class="muted">The control-plane org and owner membership exist.</p>
           </div>
           <div>
+            <strong>Tenant app</strong>
+            <p class="muted">
+              {% if core_binding and core_binding.status == "ready" %}
+                Realm ready at {{ core_binding.realm_subdomain }}.
+              {% elif core_binding %}
+                {{ core_binding.detail }}
+              {% else %}
+                Pending first provision.
+              {% endif %}
+            </p>
+          </div>
+          <div>
             <strong>GitHub binding</strong>
             <p class="muted">{{ "Connected." if github_installation else "Still pending." }}</p>
           </div>
@@ -124,8 +183,16 @@
             <p class="muted">{{ "Ready." if runtime_settings.health == "ready" else "Needs configuration." }}</p>
           </div>
           <div>
-            <strong>Tenant app and Coder org sync</strong>
-            <p class="muted">Scheduled for the next control-plane slice.</p>
+            <strong>Coder org</strong>
+            <p class="muted">
+              {% if coder_binding and coder_binding.status == "ready" %}
+                Dedicated Coder org ready.
+              {% elif coder_binding %}
+                {{ coder_binding.detail }}
+              {% else %}
+                Pending first sync.
+              {% endif %}
+            </p>
           </div>
         </div>
       </div>

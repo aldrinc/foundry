@@ -43,6 +43,8 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_SUPPORT_EMAIL": "support@foundry.test",
                 "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "admin@foundry.test",
                 "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "local-password",
+                "FOUNDRY_CORE_URL": "https://core.foundry.test",
+                "FOUNDRY_CORE_BOOTSTRAP_SECRET": "core-secret",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": "/tmp/foundry.pem",
                 "FOUNDRY_GITHUB_WEBHOOK_SECRET": "secret",
                 "FOUNDRY_CODER_URL": "https://coder.foundry.test",
@@ -62,6 +64,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.support_email, "support@foundry.test")
         self.assertEqual(config.bootstrap_admin_email, "admin@foundry.test")
         self.assertTrue(config.bootstrap_admin_password_present)
+        self.assertEqual(config.core_url, "https://core.foundry.test")
+        self.assertTrue(config.core_bootstrap_secret_present)
         self.assertTrue(config.github_app_private_key_present)
         self.assertTrue(config.github_webhook_secret_present)
         self.assertEqual(config.coder_url, "https://coder.foundry.test")

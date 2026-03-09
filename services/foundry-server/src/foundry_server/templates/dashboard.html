@@ -61,6 +61,10 @@
             Support email
             <input type="email" name="support_email" value="{{ current_user.email }}" />
           </label>
+          <label>
+            Owner password
+            <input type="password" name="owner_password" placeholder="Required to bootstrap the initial tenant user" />
+          </label>
           <button type="submit">Create org</button>
         </form>
       </div>

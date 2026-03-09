@@ -54,6 +54,9 @@ class AppConfig:
     bootstrap_admin_email: str
     bootstrap_admin_password: str
     bootstrap_admin_password_present: bool
+    core_url: str
+    core_bootstrap_secret: str
+    core_bootstrap_secret_present: bool
     github_app_name: str
     github_api_url: str
     github_app_id: str
@@ -89,6 +92,8 @@ class AppConfig:
             ),
             "bootstrap_admin_email": self.bootstrap_admin_email,
             "bootstrap_admin_password_present": self.bootstrap_admin_password_present,
+            "core_url": self.core_url,
+            "core_bootstrap_secret_present": self.core_bootstrap_secret_present,
             "github_app_name": self.github_app_name,
             "github_api_url": self.github_api_url,
             "github_app_configured": bool(
@@ -137,6 +142,11 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         bootstrap_admin_password=source.get("FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD", ""),
         bootstrap_admin_password_present=bool(
             source.get("FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD", "").strip()
+        ),
+        core_url=source.get("FOUNDRY_CORE_URL", "").rstrip("/"),
+        core_bootstrap_secret=source.get("FOUNDRY_CORE_BOOTSTRAP_SECRET", ""),
+        core_bootstrap_secret_present=bool(
+            source.get("FOUNDRY_CORE_BOOTSTRAP_SECRET", "").strip()
         ),
         github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
         github_api_url=source.get("FOUNDRY_GITHUB_API_URL", "https://api.github.com"),

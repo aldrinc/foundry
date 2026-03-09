@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import socketserver
 import sys
 import tempfile
@@ -52,6 +53,82 @@ class _ControlPlaneGitHubApiHandler(BaseHTTPRequestHandler):
                         "account": {"login": "aldrinc", "type": "User"},
                     }
                 ]
+            )
+            return
+
+        self.send_error(404)
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        return
+
+
+class _ControlPlaneCoreApiHandler(BaseHTTPRequestHandler):
+    tenant_members: dict[str, list[dict[str, object]]] = {}
+
+    def _write_json(self, payload: dict[str, object] | list[dict[str, object]]) -> None:
+        encoded = json.dumps(payload).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def do_POST(self) -> None:  # noqa: N802
+        length = int(self.headers.get("Content-Length", "0"))
+        payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+
+        if self.path == "/api/v1/foundry/cloud/tenants/provision":
+            realm_subdomain = str(payload["realm_subdomain"])
+            owner_email = str(payload["owner_email"])
+            owner_name = str(payload["owner_full_name"])
+            members = self.tenant_members.setdefault(realm_subdomain, [])
+            if not any(item["email"] == owner_email for item in members):
+                members.append({"email": owner_email, "full_name": owner_name, "role": payload["role"]})
+            self._write_json(
+                {
+                    "result": "success",
+                    "realm": {
+                        "id": 1,
+                        "string_id": realm_subdomain,
+                        "name": payload["realm_name"],
+                        "url": f"https://{realm_subdomain}.core-dev.foundry.test",
+                    },
+                    "owner": {
+                        "user_id": 10,
+                        "email": owner_email,
+                        "full_name": owner_name,
+                        "role": payload["role"],
+                    },
+                    "realm_created": True,
+                    "owner_created": True,
+                }
+            )
+            return
+
+        if self.path.startswith("/api/v1/foundry/cloud/tenants/") and self.path.endswith("/members/sync"):
+            realm_subdomain = self.path.split("/")[6]
+            email = str(payload["email"])
+            members = self.tenant_members.setdefault(realm_subdomain, [])
+            if not any(item["email"] == email for item in members):
+                members.append(
+                    {"email": email, "full_name": payload["full_name"], "role": payload["role"]}
+                )
+            self._write_json(
+                {
+                    "result": "success",
+                    "member": {
+                        "user_id": len(members),
+                        "email": email,
+                        "full_name": payload["full_name"],
+                        "role": payload["role"],
+                    },
+                    "created": True,
+                    "realm": {
+                        "id": 1,
+                        "string_id": realm_subdomain,
+                        "url": f"https://{realm_subdomain}.core-dev.foundry.test",
+                    },
+                }
             )
             return
 
@@ -126,6 +203,34 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if self.path == "/api/v2/organizations":
+            self._write_json(
+                [
+                    {
+                        "id": "org-default",
+                        "name": "coder",
+                        "display_name": "Coder",
+                        "description": "Builtin default organization.",
+                        "is_default": True,
+                    }
+                ]
+            )
+            return
+
+        self.send_error(404)
+
+    def do_POST(self) -> None:  # noqa: N802
+        if self.path == "/api/v2/organizations":
+            encoded = json.dumps(
+                {"message": "Multiple Organizations is a Premium feature. Contact sales!"}
+            ).encode("utf-8")
+            self.send_response(403)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
         self.send_error(404)
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A003
@@ -133,6 +238,11 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
 
 
 class _ThreadingControlPlaneGitHubApiServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+class _ThreadingControlPlaneCoreApiServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
@@ -162,6 +272,7 @@ class ControlPlaneTests(unittest.TestCase):
         database_handle = tempfile.NamedTemporaryFile("wb", delete=False)
         database_handle.close()
         self.addCleanup(lambda: Path(database_handle.name).unlink(missing_ok=True))
+        _ControlPlaneCoreApiHandler.tenant_members = {}
 
         server = _ThreadingControlPlaneGitHubApiServer(
             ("127.0.0.1", 0),
@@ -172,6 +283,16 @@ class ControlPlaneTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         self.addCleanup(server.server_close)
         self.addCleanup(lambda: thread.join(timeout=5))
+
+        core_server = _ThreadingControlPlaneCoreApiServer(
+            ("127.0.0.1", 0),
+            _ControlPlaneCoreApiHandler,
+        )
+        core_thread = threading.Thread(target=core_server.serve_forever, daemon=True)
+        core_thread.start()
+        self.addCleanup(core_server.shutdown)
+        self.addCleanup(core_server.server_close)
+        self.addCleanup(lambda: core_thread.join(timeout=5))
 
         coder_server = _ThreadingControlPlaneCoderApiServer(
             ("127.0.0.1", 0),
@@ -186,6 +307,11 @@ class ControlPlaneTests(unittest.TestCase):
         config = load_config(
             {
                 "FOUNDRY_DATABASE_PATH": database_handle.name,
+                "FOUNDRY_AUTH_PROVIDER": "local_password",
+                "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "platform-admin@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "bootstrap-password",
+                "FOUNDRY_CORE_URL": f"http://127.0.0.1:{core_server.server_address[1]}",
+                "FOUNDRY_CORE_BOOTSTRAP_SECRET": "core-bootstrap-secret",
                 "FOUNDRY_GITHUB_APP_ID": "3048941",
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
@@ -217,6 +343,33 @@ class ControlPlaneTests(unittest.TestCase):
             list_response = client.get("/api/v1/organizations")
             self.assertEqual(list_response.status_code, 200)
             self.assertEqual(list_response.json()[0]["slug"], "acme")
+
+    def test_signup_provisions_core_binding_and_records_coder_block(self) -> None:
+        with self._create_client() as client:
+            signup_response = client.post(
+                "/signup",
+                data={
+                    "display_name": "Owner",
+                    "email": "owner@example.com",
+                    "password": "owner-password",
+                    "organization_name": "Acme",
+                    "organization_slug": "acme",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(signup_response.status_code, 303)
+            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+
+            detail_response = client.get(f"/api/v1/cloud/organizations/{organization_id}")
+            self.assertEqual(detail_response.status_code, 200)
+            payload = detail_response.json()
+            self.assertEqual(payload["core_binding"]["status"], "ready")
+            self.assertEqual(
+                payload["core_binding"]["realm_url"],
+                "https://acme.core-dev.foundry.test",
+            )
+            self.assertEqual(payload["coder_binding"]["status"], "blocked")
+            self.assertIn("Premium feature", payload["coder_binding"]["detail"])
 
     def test_runtime_settings_round_trip(self) -> None:
         with self._create_client() as client:
@@ -292,6 +445,49 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(installation_response.status_code, 200)
             self.assertEqual(installation_response.json()["installation_id"], "115185467")
+
+    def test_invitation_acceptance_syncs_member_to_core_realm(self) -> None:
+        with self._create_client() as client:
+            signup_response = client.post(
+                "/signup",
+                data={
+                    "display_name": "Owner",
+                    "email": "owner@example.com",
+                    "password": "owner-password",
+                    "organization_name": "Acme",
+                    "organization_slug": "acme-team",
+                },
+                follow_redirects=False,
+            )
+            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+
+            invitation_response = client.post(
+                f"/cloud/organizations/{organization_id}/invitations",
+                data={"email": "teammate@example.com", "role": "member"},
+            )
+            self.assertEqual(invitation_response.status_code, 200)
+            invitation_match = re.search(
+                r"https?://[^\"']+/cloud/invitations/([A-Za-z0-9_-]+)",
+                invitation_response.text,
+            )
+            self.assertIsNotNone(invitation_match)
+            token = invitation_match.group(1)
+
+            accept_response = client.post(
+                f"/cloud/invitations/{token}/accept",
+                data={
+                    "display_name": "Teammate",
+                    "password": "teammate-password",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(accept_response.status_code, 303)
+            self.assertTrue(
+                any(
+                    item["email"] == "teammate@example.com"
+                    for item in _ControlPlaneCoreApiHandler.tenant_members["acme-team"]
+                )
+            )
 
     def test_coder_status_and_inventory_endpoints(self) -> None:
         with self._create_client() as client:

@@ -16,9 +16,16 @@ from fastapi.templating import Jinja2Templates
 
 from .coder_client import CoderClient, CoderConfigurationError, CoderRequestError
 from .config import AppConfig, load_config
+from .core_client import (
+    FoundryCoreClient,
+    FoundryCoreConfigurationError,
+    FoundryCoreRequestError,
+)
 from .decisions import LAUNCH_DECISIONS
 from .domain import (
     AgentDefinition,
+    CoderOrganizationBinding,
+    CoreRealmBinding,
     GitHubInstallation,
     OrganizationInvitation,
     Organization,
@@ -27,6 +34,7 @@ from .domain import (
     OrganizationRuntimeSettings,
     OrganizationWorkspacePool,
     PlatformUser,
+    ProvisioningStatus,
     RuntimeCredentialOwnership,
     RuntimeHealth,
     RuntimeProvider,
@@ -101,6 +109,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             app.state.coder_client = client
         return client
 
+    def get_core_client() -> FoundryCoreClient:
+        client = getattr(app.state, "core_client", None)
+        if client is None:
+            client = FoundryCoreClient.from_config(server_config)
+            app.state.core_client = client
+        return client
+
     def require_github_app_client() -> GitHubAppClient:
         try:
             return get_github_app_client()
@@ -111,6 +126,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         try:
             return get_coder_client()
         except CoderConfigurationError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def require_core_client() -> FoundryCoreClient:
+        try:
+            return get_core_client()
+        except FoundryCoreConfigurationError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     def get_store() -> FoundryStore:
@@ -342,6 +363,193 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "account_type": installation.account_type,
         }
 
+    def serialize_core_binding(binding: CoreRealmBinding | None) -> dict[str, object] | None:
+        if binding is None:
+            return None
+        return {
+            "organization_id": binding.organization_id,
+            "realm_subdomain": binding.realm_subdomain,
+            "realm_url": binding.realm_url,
+            "owner_email": binding.owner_email,
+            "status": binding.status.value,
+            "detail": binding.detail,
+        }
+
+    def serialize_coder_binding(
+        binding: CoderOrganizationBinding | None,
+    ) -> dict[str, object] | None:
+        if binding is None:
+            return None
+        return {
+            "organization_id": binding.organization_id,
+            "coder_organization_id": binding.coder_organization_id,
+            "name": binding.name,
+            "display_name": binding.display_name,
+            "template_name": binding.template_name,
+            "status": binding.status.value,
+            "detail": binding.detail,
+        }
+
+    def organization_primary_role(membership: OrganizationMembership | None) -> str:
+        if membership is None:
+            return OrganizationRole.OWNER.value
+        highest = max(membership.roles, key=role_weight)
+        return highest.value
+
+    def sync_core_binding(
+        *,
+        organization: Organization,
+        owner: PlatformUser,
+        password: str | None,
+        membership: OrganizationMembership | None,
+    ) -> CoreRealmBinding | None:
+        if not server_config.core_url or not server_config.core_bootstrap_secret_present:
+            return None
+        current = get_store().get_core_realm_binding(organization.organization_id)
+        if not password and current is None:
+            binding = CoreRealmBinding(
+                organization_id=organization.organization_id,
+                realm_subdomain=organization.slug,
+                realm_url="",
+                owner_email=owner.email,
+                status=ProvisioningStatus.PENDING,
+                detail="Owner password is required to bootstrap the initial tenant user.",
+            )
+            get_store().put_core_realm_binding(binding)
+            return binding
+        try:
+            payload = require_core_client().provision_realm(
+                organization_id=organization.organization_id,
+                realm_subdomain=organization.slug,
+                realm_name=organization.display_name,
+                owner_email=owner.email,
+                owner_full_name=owner.display_name,
+                owner_password=password,
+                role=organization_primary_role(membership),
+            )
+        except FoundryCoreRequestError as exc:
+            binding = CoreRealmBinding(
+                organization_id=organization.organization_id,
+                realm_subdomain=current.realm_subdomain if current else organization.slug,
+                realm_url=current.realm_url if current else "",
+                owner_email=owner.email,
+                status=ProvisioningStatus.ERROR,
+                detail=exc.detail,
+            )
+            get_store().put_core_realm_binding(binding)
+            return binding
+
+        realm = payload.get("realm", {})
+        if not isinstance(realm, dict):
+            realm = {}
+        binding = CoreRealmBinding(
+            organization_id=organization.organization_id,
+            realm_subdomain=str(realm.get("string_id", organization.slug)),
+            realm_url=str(realm.get("url", "")),
+            owner_email=owner.email,
+            status=ProvisioningStatus.READY,
+            detail="Realm provisioned and owner synced.",
+        )
+        get_store().put_core_realm_binding(binding)
+        return binding
+
+    def sync_member_to_core(
+        *,
+        organization: Organization,
+        user: PlatformUser,
+        password: str,
+        membership: OrganizationMembership | None,
+    ) -> None:
+        if not server_config.core_url or not server_config.core_bootstrap_secret_present:
+            return
+        binding = get_store().get_core_realm_binding(organization.organization_id)
+        if binding is None or binding.status != ProvisioningStatus.READY:
+            return
+        try:
+            require_core_client().sync_member(
+                realm_subdomain=binding.realm_subdomain,
+                email=user.email,
+                full_name=user.display_name,
+                password=password,
+                role=organization_primary_role(membership),
+            )
+        except FoundryCoreRequestError:
+            return
+
+    def sync_coder_binding(organization: Organization) -> CoderOrganizationBinding | None:
+        if not server_config.coder_url or not server_config.coder_api_token_present:
+            return None
+        try:
+            client = require_coder_client()
+            organizations = client.list_organizations()
+        except CoderRequestError as exc:
+            binding = CoderOrganizationBinding(
+                organization_id=organization.organization_id,
+                coder_organization_id="",
+                name=organization.slug,
+                display_name=organization.display_name,
+                status=ProvisioningStatus.ERROR,
+                detail=exc.detail,
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        existing = next(
+            (item for item in organizations if item["name"] == organization.slug),
+            None,
+        )
+        if existing is not None:
+            binding = CoderOrganizationBinding(
+                organization_id=organization.organization_id,
+                coder_organization_id=str(existing["id"]),
+                name=str(existing["name"]),
+                display_name=str(existing["display_name"] or organization.display_name),
+                status=ProvisioningStatus.READY,
+                detail="Coder organization already exists.",
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        try:
+            created = client.create_organization(organization.slug, organization.display_name)
+            binding = CoderOrganizationBinding(
+                organization_id=organization.organization_id,
+                coder_organization_id=str(created["id"]),
+                name=str(created["name"]),
+                display_name=str(created["display_name"] or organization.display_name),
+                status=ProvisioningStatus.READY,
+                detail="Coder organization provisioned.",
+            )
+        except CoderRequestError as exc:
+            status = ProvisioningStatus.BLOCKED if exc.status_code == 403 else ProvisioningStatus.ERROR
+            binding = CoderOrganizationBinding(
+                organization_id=organization.organization_id,
+                coder_organization_id="",
+                name=organization.slug,
+                display_name=organization.display_name,
+                status=status,
+                detail=exc.detail,
+            )
+        get_store().put_coder_organization_binding(binding)
+        return binding
+
+    def sync_organization_bindings(
+        *,
+        organization: Organization,
+        owner: PlatformUser,
+        password: str | None,
+        membership: OrganizationMembership | None,
+    ) -> tuple[CoreRealmBinding | None, CoderOrganizationBinding | None]:
+        return (
+            sync_core_binding(
+                organization=organization,
+                owner=owner,
+                password=password,
+                membership=membership,
+            ),
+            sync_coder_binding(organization),
+        )
+
     def require_workspace_bootstrap_secret(
         provided_secret: str | None,
     ) -> None:
@@ -547,6 +755,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 status_code=400,
             )
 
+        sync_organization_bindings(
+            organization=organization,
+            owner=user,
+            password=password,
+            membership=membership,
+        )
         return html_redirect(f"/cloud/organizations/{organization.organization_id}", session_token=create_user_session(user))
 
     @app.get("/cloud", response_class=HTMLResponse)
@@ -578,6 +792,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         display_name: str = Form(...),
         slug: str = Form(...),
         support_email: str = Form(""),
+        owner_password: str = Form(""),
     ) -> HTMLResponse | RedirectResponse:
         user = require_current_user(request)
         organization = Organization(
@@ -625,6 +840,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             runtime_settings=default_runtime_settings(organization.organization_id),
             workspace_pool=default_workspace_pool(organization.organization_id),
         )
+        sync_organization_bindings(
+            organization=organization,
+            owner=user,
+            password=owner_password.strip() or None,
+            membership=membership,
+        )
         return RedirectResponse(f"/cloud/organizations/{organization.organization_id}", status_code=303)
 
     @app.get("/cloud/organizations/{organization_id}", response_class=HTMLResponse)
@@ -636,6 +857,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         runtime_settings = get_store().get_runtime_settings(organization_id)
         workspace_pool = get_store().get_workspace_pool(organization_id)
         github_installation = get_store().get_github_installation(organization_id)
+        core_binding = get_store().get_core_realm_binding(organization_id)
+        coder_binding = get_store().get_coder_organization_binding(organization_id)
         invitations = get_store().list_invitations(organization_id)
         return templates.TemplateResponse(
             request,
@@ -652,10 +875,29 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
                 "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
                 "github_installation": serialize_github_installation(github_installation),
+                "core_binding": serialize_core_binding(core_binding),
+                "coder_binding": serialize_coder_binding(coder_binding),
                 "invitations": [serialize_invitation(item) for item in invitations],
                 "is_platform_admin": user.is_platform_admin,
             },
         )
+
+    @app.post("/cloud/organizations/{organization_id}/provision", response_model=None)
+    async def cloud_provision_organization(
+        request: Request,
+        organization_id: str,
+        owner_password: str = Form(""),
+    ) -> RedirectResponse:
+        user = require_current_user(request)
+        organization = require_organization(organization_id)
+        membership = require_org_role(user, organization_id, OrganizationRole.ADMIN)
+        sync_organization_bindings(
+            organization=organization,
+            owner=user,
+            password=owner_password.strip() or None,
+            membership=membership,
+        )
+        return RedirectResponse(f"/cloud/organizations/{organization_id}", status_code=303)
 
     @app.post(
         "/cloud/organizations/{organization_id}/invitations",
@@ -686,6 +928,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         runtime_settings = get_store().get_runtime_settings(organization_id)
         workspace_pool = get_store().get_workspace_pool(organization_id)
         github_installation = get_store().get_github_installation(organization_id)
+        core_binding = get_store().get_core_realm_binding(organization_id)
+        coder_binding = get_store().get_coder_organization_binding(organization_id)
         invitations = get_store().list_invitations(organization_id)
         return templates.TemplateResponse(
             request,
@@ -702,6 +946,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
                 "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
                 "github_installation": serialize_github_installation(github_installation),
+                "core_binding": serialize_core_binding(core_binding),
+                "coder_binding": serialize_coder_binding(coder_binding),
                 "invitations": [serialize_invitation(item) for item in invitations],
                 "invite_link": f"{server_config.public_base_url}/cloud/invitations/{raw_token}",
                 "is_platform_admin": user.is_platform_admin,
@@ -775,6 +1021,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             )
         )
         get_store().accept_invitation(invitation.invitation_id, user.user_id)
+        organization = require_organization(invitation.organization_id)
+        sync_member_to_core(
+            organization=organization,
+            user=user,
+            password=password,
+            membership=get_store().get_membership(invitation.organization_id, user.user_id),
+        )
         return html_redirect(f"/cloud/organizations/{invitation.organization_id}", session_token=create_user_session(user))
 
     @app.get("/api/v1/cloud/me")
@@ -805,6 +1058,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "runtime_settings": serialize_runtime_settings(get_store().get_runtime_settings(organization_id) or default_runtime_settings(organization_id)),
             "workspace_pool": serialize_workspace_pool(get_store().get_workspace_pool(organization_id) or default_workspace_pool(organization_id)),
             "github_installation": serialize_github_installation(get_store().get_github_installation(organization_id)),
+            "core_binding": serialize_core_binding(get_store().get_core_realm_binding(organization_id)),
+            "coder_binding": serialize_coder_binding(get_store().get_coder_organization_binding(organization_id)),
             "invitations": [serialize_invitation(item) for item in get_store().list_invitations(organization_id)],
         }
 
@@ -876,6 +1131,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
             "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
             "github_installation": serialize_github_installation(github_installation),
+            "core_binding": serialize_core_binding(get_store().get_core_realm_binding(organization_id)),
+            "coder_binding": serialize_coder_binding(get_store().get_coder_organization_binding(organization_id)),
         }
 
     @app.get("/api/v1/organizations/{organization_id}/runtime")
