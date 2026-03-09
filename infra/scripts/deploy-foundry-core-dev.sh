@@ -122,7 +122,12 @@ WantedBy=multi-user.target
 UNITFILE
 
 systemctl daemon-reload
-systemctl enable --now foundry-core-dev
+systemctl enable foundry-core-dev >/dev/null
+if systemctl is-active --quiet foundry-core-dev; then
+  systemctl restart foundry-core-dev
+else
+  systemctl start foundry-core-dev
+fi
 for attempt in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:9991/health >/dev/null; then
     exit 0
