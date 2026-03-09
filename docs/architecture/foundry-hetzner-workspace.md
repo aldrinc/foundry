@@ -34,6 +34,8 @@ be published for live use until the Foundry project baseline exists.
 The Foundry-owned template now lives at:
 
 - `infra/coder-templates/foundry-hetzner-workspace/`
+- `infra/terraform/modules/foundry-workspace-baseline/`
+- `infra/terraform/environments/dev/workspace-baseline/`
 
 This template intentionally removes the Meridian-specific assumptions that were
 present in the earlier workspace template:
@@ -54,6 +56,9 @@ That baseline should define at least:
 2. any required private network and firewall rules
 3. any public ingress or support services the workspaces depend on
 4. the routing model for Foundry service access
+
+The new Terraform baseline scaffold is limited to those prerequisites. It does
+not create the full Foundry app stack yet.
 
 ## Recommendation
 

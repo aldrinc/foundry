@@ -71,6 +71,13 @@ resource "hcloud_server" "runner" {
   ssh_keys    = var.ssh_key_ids
   labels      = local.labels
 
+  dynamic "network" {
+    for_each = var.private_network_id == null ? [] : [var.private_network_id]
+    content {
+      network_id = network.value
+    }
+  }
+
   user_data = templatefile("${path.module}/cloud-init.yml.tftpl", {
     volume_id                  = hcloud_volume.home.id
     agent_init_script_b64      = base64encode(coder_agent.runner.init_script)
@@ -92,4 +99,11 @@ resource "hcloud_volume_attachment" "home" {
   volume_id = hcloud_volume.home.id
   server_id = hcloud_server.runner[0].id
   automount = false
+}
+
+resource "hcloud_firewall_attachment" "runner" {
+  for_each = data.coder_workspace.me.start_count == 0 ? toset([]) : toset(var.firewall_ids)
+
+  firewall_id = each.value
+  server_ids  = [hcloud_server.runner[0].id]
 }

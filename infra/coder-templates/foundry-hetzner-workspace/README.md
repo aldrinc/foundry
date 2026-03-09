@@ -29,6 +29,8 @@ NetBird endpoints, or project-specific SSH key IDs.
 
 ## Optional template variables
 
+- `private_network_id`
+- `firewall_ids`
 - `netbird_setup_key`
 - `netbird_management_url`
 - `extra_hosts_json`
@@ -52,7 +54,9 @@ NetBird endpoints, or project-specific SSH key IDs.
 2. Create any SSH keys that should be injected into workspace VMs.
 3. Decide whether workspaces will reach Foundry services over public URLs or a
    private mesh such as NetBird.
-4. Only then publish this template into Coder with the Foundry Hetzner token.
+4. Feed the Terraform outputs for `private_network_id`, `firewall_ids`, and
+   `ssh_key_ids` into the Coder template configuration.
+5. Only then publish this template into Coder with the Foundry Hetzner token.
 
 Until that baseline exists, this template is a safe source-of-truth artifact in
 the repo, not something to use for live workspace creation.

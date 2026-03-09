@@ -34,6 +34,18 @@ variable "ssh_key_ids" {
   default     = []
 }
 
+variable "private_network_id" {
+  description = "Optional Hetzner private network ID for workspace attachment"
+  type        = number
+  default     = null
+}
+
+variable "firewall_ids" {
+  description = "Optional Hetzner firewall IDs to attach to the workspace VM"
+  type        = list(number)
+  default     = []
+}
+
 variable "runner_daemon_download_url" {
   description = "HTTPS URL for the Foundry runner daemon binary"
   type        = string
