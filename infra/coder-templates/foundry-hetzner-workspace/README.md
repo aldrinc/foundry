@@ -26,6 +26,8 @@ NetBird endpoints, or project-specific SSH key IDs.
 - `server_type`
 - `volume_size_gb`
 - `runner_daemon_download_url`
+- `foundry_server_url`
+- `workspace_bootstrap_secret`
 
 ## Optional template variables
 
@@ -60,3 +62,11 @@ NetBird endpoints, or project-specific SSH key IDs.
 
 Until that baseline exists, this template is a safe source-of-truth artifact in
 the repo, not something to use for live workspace creation.
+
+## Private GitHub repo bootstrap
+
+When `foundry_server_url` and `workspace_bootstrap_secret` are configured, the
+workspace bootstrap requests a short-lived GitHub installation token from
+`foundry-server` and uses `GIT_ASKPASS` for clone/fetch operations. The GitHub
+App private key stays on the Foundry server host and is not embedded into the
+workspace template.

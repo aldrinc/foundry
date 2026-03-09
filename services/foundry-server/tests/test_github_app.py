@@ -199,6 +199,41 @@ class GitHubAppTests(unittest.TestCase):
         self.assertEqual(payload["installation"]["account_login"], "aldrinc")
         self.assertEqual(payload["installation"]["permissions"]["contents"], "write")
 
+    def test_clone_token_endpoint_requires_bootstrap_secret(self) -> None:
+        private_key_path = self._write_private_key()
+        server = _ThreadingGitHubApiServer(("127.0.0.1", 0), _GitHubApiHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(server.shutdown)
+        self.addCleanup(server.server_close)
+        self.addCleanup(lambda: thread.join(timeout=5))
+
+        config = load_config(
+            {
+                "FOUNDRY_GITHUB_APP_ID": "3048941",
+                "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
+                "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
+                "FOUNDRY_GITHUB_API_URL": f"http://127.0.0.1:{server.server_address[1]}",
+                "FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET": "bootstrap-secret",
+            }
+        )
+
+        app = create_app(config)
+        with TestClient(app) as client:
+            unauthorized = client.post("/api/v1/github/repositories/aldrinc/foundry/clone-token")
+            authorized = client.post(
+                "/api/v1/github/repositories/aldrinc/foundry/clone-token",
+                headers={"X-Foundry-Workspace-Bootstrap-Secret": "bootstrap-secret"},
+            )
+
+        self.assertEqual(unauthorized.status_code, 401)
+        self.assertEqual(authorized.status_code, 200)
+        payload = authorized.json()
+        self.assertEqual(payload["repository"], "aldrinc/foundry")
+        self.assertEqual(payload["installation_id"], 987654)
+        self.assertEqual(payload["permissions"]["contents"], "write")
+        self.assertEqual(payload["token"], "ghs_fake")
+
 
 if __name__ == "__main__":
     unittest.main()

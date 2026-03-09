@@ -76,7 +76,8 @@ Only after that should we create a test workspace in Coder.
 The first smoke workspace now provisions successfully into the Foundry Hetzner
 project and the Coder agent connects cleanly.
 
-The remaining blocker on that path is repository bootstrap for private GitHub
-repositories. A test workspace against the private `aldrinc/foundry` repo came
-up correctly, but the bootstrap clone failed until GitHub App credentials are
-available inside the workspace creation path.
+That private-repo bootstrap path now uses a Foundry server broker endpoint. The
+workspace requests a short-lived GitHub installation token from
+`foundry-server` using a shared bootstrap secret, then clones with
+`GIT_ASKPASS`. This keeps the GitHub App private key on the Foundry server host
+instead of copying it into the workspace template.

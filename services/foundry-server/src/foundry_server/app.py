@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 
 from fastapi import FastAPI
 from fastapi import Header, HTTPException, Request
@@ -35,6 +36,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             return get_github_app_client()
         except GitHubAppConfigurationError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def require_workspace_bootstrap_secret(
+        provided_secret: str | None,
+    ) -> None:
+        expected_secret = server_config.workspace_bootstrap_secret
+        if not expected_secret:
+            raise HTTPException(
+                status_code=503,
+                detail="Workspace bootstrap secret is not configured.",
+            )
+        if not provided_secret or not hmac.compare_digest(provided_secret, expected_secret):
+            raise HTTPException(status_code=401, detail="Invalid workspace bootstrap secret.")
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -85,6 +98,19 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         client = require_github_app_client()
         try:
             return client.describe_repository_binding(owner, repo)
+        except GitHubAppRequestError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    @app.post("/api/v1/github/repositories/{owner}/{repo}/clone-token")
+    def github_repository_clone_token(
+        owner: str,
+        repo: str,
+        x_foundry_workspace_bootstrap_secret: str | None = Header(default=None),
+    ) -> dict[str, object]:
+        require_workspace_bootstrap_secret(x_foundry_workspace_bootstrap_secret)
+        client = require_github_app_client()
+        try:
+            return client.create_repository_clone_token(owner, repo)
         except GitHubAppRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 

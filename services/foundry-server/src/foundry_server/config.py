@@ -57,6 +57,8 @@ class AppConfig:
     github_app_private_key_present: bool
     github_webhook_secret: str
     github_webhook_secret_present: bool
+    workspace_bootstrap_secret: str
+    workspace_bootstrap_secret_present: bool
     stripe_secret_key_present: bool
     stripe_webhook_secret_present: bool
     workspace_topology: WorkspaceTopology
@@ -85,6 +87,7 @@ class AppConfig:
             ),
             "github_app_private_key_present": self.github_app_private_key_present,
             "github_webhook_secret_present": self.github_webhook_secret_present,
+            "workspace_bootstrap_secret_present": self.workspace_bootstrap_secret_present,
             "stripe_configured": self.stripe_secret_key_present,
             "stripe_webhook_secret_present": self.stripe_webhook_secret_present,
             "workspace_topology": self.workspace_topology.value,
@@ -122,6 +125,10 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         github_webhook_secret=source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", ""),
         github_webhook_secret_present=bool(
             source.get("FOUNDRY_GITHUB_WEBHOOK_SECRET", "").strip()
+        ),
+        workspace_bootstrap_secret=source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", ""),
+        workspace_bootstrap_secret_present=bool(
+            source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", "").strip()
         ),
         stripe_secret_key_present=bool(
             source.get("FOUNDRY_STRIPE_SECRET_KEY", "").strip()

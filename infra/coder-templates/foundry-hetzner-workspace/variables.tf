@@ -52,6 +52,19 @@ variable "runner_daemon_download_url" {
   default     = ""
 }
 
+variable "foundry_server_url" {
+  description = "Foundry server base URL used for workspace bootstrap token exchange"
+  type        = string
+  default     = ""
+}
+
+variable "workspace_bootstrap_secret" {
+  description = "Shared secret used by workspace bootstrap to request short-lived repo clone tokens"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 variable "netbird_setup_key" {
   description = "Optional NetBird setup key for private workspace routing"
   type        = string

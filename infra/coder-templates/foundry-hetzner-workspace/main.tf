@@ -87,6 +87,8 @@ resource "hcloud_server" "runner" {
     repo_id                    = data.coder_parameter.repo_id.value
     repo_url                   = data.coder_parameter.repo_url.value
     runner_daemon_download_url = var.runner_daemon_download_url
+    foundry_server_url         = var.foundry_server_url
+    workspace_bootstrap_secret = var.workspace_bootstrap_secret
     netbird_setup_key          = var.netbird_setup_key
     netbird_management_url     = var.netbird_management_url
     extra_hosts_json           = var.extra_hosts_json

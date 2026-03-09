@@ -104,16 +104,8 @@ class GitHubAppClient:
 
     def describe_repository_binding(self, owner: str, repo: str) -> dict[str, object]:
         app = self._request_dict("GET", "/app")
-        try:
-            installation = self._request_dict("GET", f"/repos/{owner}/{repo}/installation")
-        except GitHubAppRequestError as exc:
-            if exc.status_code == 404:
-                raise GitHubAppRequestError(
-                    404,
-                    f"GitHub App is not installed for {owner}/{repo}.",
-                ) from exc
-            raise
-        access_token = self._request_dict("POST", f"/app/installations/{installation['id']}/access_tokens")
+        installation = self._get_repository_installation(owner, repo)
+        access_token = self._create_installation_access_token(str(installation["id"]))
         permissions = access_token.get("permissions") or installation.get("permissions") or {}
         repositories = access_token.get("repositories") or []
         return {
@@ -133,6 +125,24 @@ class GitHubAppClient:
                 "token_expires_at": access_token.get("expires_at", ""),
                 "repository_count": len(repositories),
             },
+        }
+
+    def create_repository_clone_token(self, owner: str, repo: str) -> dict[str, object]:
+        installation = self._get_repository_installation(owner, repo)
+        access_token = self._create_installation_access_token(str(installation["id"]))
+        token = str(access_token.get("token", "")).strip()
+        if not token:
+            raise GitHubAppRequestError(
+                502,
+                f"GitHub access token response for {owner}/{repo} did not include a token.",
+            )
+
+        return {
+            "repository": f"{owner}/{repo}",
+            "installation_id": installation["id"],
+            "token": token,
+            "token_expires_at": access_token.get("expires_at", ""),
+            "permissions": access_token.get("permissions") or installation.get("permissions") or {},
         }
 
     def verify_webhook(self, payload: bytes, signature_header: str | None) -> bool:
@@ -182,8 +192,25 @@ class GitHubAppClient:
             raise GitHubAppRequestError(
                 502,
                 f"Unexpected GitHub API response shape from {path}.",
-            )
+        )
         return data
+
+    def _get_repository_installation(self, owner: str, repo: str) -> dict[str, Any]:
+        try:
+            return self._request_dict("GET", f"/repos/{owner}/{repo}/installation")
+        except GitHubAppRequestError as exc:
+            if exc.status_code == 404:
+                raise GitHubAppRequestError(
+                    404,
+                    f"GitHub App is not installed for {owner}/{repo}.",
+                ) from exc
+            raise
+
+    def _create_installation_access_token(self, installation_id: str) -> dict[str, Any]:
+        return self._request_dict(
+            "POST",
+            f"/app/installations/{installation_id}/access_tokens",
+        )
 
     def _request_list(self, method: str, path: str) -> list[dict[str, Any]]:
         data = self._request_payload(method, path)

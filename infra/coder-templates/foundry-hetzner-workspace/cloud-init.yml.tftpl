@@ -103,6 +103,59 @@ write_files:
         done
       fi
 
+      FOUNDRY_SERVER_URL='${foundry_server_url}'
+      WORKSPACE_BOOTSTRAP_SECRET='${workspace_bootstrap_secret}'
+
+      request_repo_clone_token() {
+        local repo_identity="$1"
+        local owner repo token_url response
+        if [[ -z "$FOUNDRY_SERVER_URL" || -z "$WORKSPACE_BOOTSTRAP_SECRET" ]]; then
+          return 1
+        fi
+        if [[ ! "$repo_identity" =~ ^[^/]+/[^/]+$ ]]; then
+          return 1
+        fi
+
+        owner="$${repo_identity%%/*}"
+        repo="$${repo_identity#*/}"
+        token_url="$${FOUNDRY_SERVER_URL%/}/api/v1/github/repositories/$${owner}/$${repo}/clone-token"
+        response="$(curl -fsS --retry 5 --retry-delay 2 \
+          -X POST \
+          -H "X-Foundry-Workspace-Bootstrap-Secret: $${WORKSPACE_BOOTSTRAP_SECRET}" \
+          "$token_url")" || return 1
+
+        echo "$response" | jq -r '.token // empty'
+      }
+
+      git_with_optional_token() {
+        local token="$1"
+        shift
+        if [[ -z "$token" ]]; then
+          timeout 180 "$@"
+          return $?
+        fi
+
+        local askpass_script
+        askpass_script="$(mktemp /tmp/foundry-git-askpass.XXXXXX)"
+        printf '%s\n' \
+          '#!/usr/bin/env bash' \
+          'case "$1" in' \
+          '  *Username*) printf '\''%s\n'\'' "x-access-token" ;;' \
+          '  *) printf '\''%s\n'\'' "$${GITHUB_BOOTSTRAP_TOKEN}" ;;' \
+          'esac' \
+          > "$askpass_script"
+        chmod 700 "$askpass_script"
+
+        timeout 180 env \
+          GITHUB_BOOTSTRAP_TOKEN="$token" \
+          GIT_ASKPASS="$askpass_script" \
+          GIT_TERMINAL_PROMPT=0 \
+          "$@"
+        local status=$?
+        rm -f "$askpass_script"
+        return $status
+      }
+
       REPO_URL="${repo_url}"
       REPO_ID="${repo_id}"
       if [[ -n "$REPO_URL" ]]; then
@@ -121,10 +174,15 @@ write_files:
         mkdir -p "$REPO_ROOT"
 
         if [[ ! -d "$REPO_BASE/.git" ]]; then
+          repo_clone_token=""
+          if [[ -n "$REPO_ID" ]]; then
+            repo_clone_token="$(request_repo_clone_token "$REPO_ID" || true)"
+          fi
+
           clone_ok=0
           for attempt in $(seq 1 5); do
             rm -rf "$REPO_BASE"
-            if timeout 180 git clone "$REPO_URL" "$REPO_BASE"; then
+            if git_with_optional_token "$repo_clone_token" git clone "$REPO_URL" "$REPO_BASE"; then
               clone_ok=1
               break
             fi
@@ -141,13 +199,18 @@ write_files:
               "- repo_id: ${repo_id}" \
               "- repo_url: ${repo_url}" \
               "" \
-              "Run this manually after adding credentials:" \
+              "Bootstrap uses Foundry short-lived GitHub tokens when available." \
+              "If this is a private repo, verify Foundry server access and retry:" \
               "  git clone '${repo_url}' '$REPO_BASE'" \
               > "$REPO_ROOT/CLONE_FAILED.txt"
           fi
         else
           git -C "$REPO_BASE" remote set-url origin "$REPO_URL" || true
-          timeout 180 git -C "$REPO_BASE" fetch --all --prune || true
+          repo_clone_token=""
+          if [[ -n "$REPO_ID" ]]; then
+            repo_clone_token="$(request_repo_clone_token "$REPO_ID" || true)"
+          fi
+          git_with_optional_token "$repo_clone_token" git -C "$REPO_BASE" fetch --all --prune || true
           rm -f "$REPO_ROOT/CLONE_FAILED.txt"
           git config --system --add safe.directory "$REPO_BASE" || true
         fi
