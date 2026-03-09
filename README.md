@@ -30,7 +30,7 @@ Foundry uses a mixed repo-hygiene setup:
 
 - `pre-commit` runs fast local checks for secrets, file hygiene, docs, typos, Biome formatting, Solid ESLint, and Rust formatting.
 - `.githooks/pre-push` keeps the existing publish-safety secret scan and adds the heavier TypeScript, Rust lint, and Rust compile checks.
-- The current CI workflow file lives in [`.forgejo/workflows/ci.yml`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/.forgejo/workflows/ci.yml) and is expected to migrate to GitHub-hosted automation before public release.
+- The current CI workflow file lives in [`.github/workflows/ci.yml`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/.github/workflows/ci.yml) and runs on GitHub Actions.
 
 Install the local hooks once per clone:
 

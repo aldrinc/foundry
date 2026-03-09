@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "test": "bun test packages/app/src",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "check:rust": "cd packages/desktop/src-tauri && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",

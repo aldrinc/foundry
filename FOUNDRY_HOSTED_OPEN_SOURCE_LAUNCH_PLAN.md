@@ -598,6 +598,7 @@ Make the desktop app downloadable and maintainable as a public product.
 
 ### Tasks
 
+- Finish the GitHub-native automation migration by keeping CI and future release publishing under `.github/workflows`.
 - Treat macOS, Windows, and Linux as first-class release targets for v1.
 - Build public CI/CD for:
   - desktop bundles
