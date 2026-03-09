@@ -28,7 +28,7 @@ The imported core application server snapshot lives under [`services/foundry-cor
 
 Foundry uses a mixed repo-hygiene setup:
 
-- `pre-commit` runs fast local checks for secrets, file hygiene, docs, typos, Biome formatting, Solid ESLint, and Rust formatting.
+- `pre-commit` runs fast local checks for secrets, file hygiene, typos, Solid ESLint, and Rust formatting. Biome and `mdformat` remain available as manual cleanup hooks while the imported core snapshot is still being standardized.
 - `.githooks/pre-push` keeps the existing publish-safety secret scan and adds the heavier TypeScript, Rust lint, and Rust compile checks.
 - The current CI workflow file lives in [`.github/workflows/ci.yml`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/.github/workflows/ci.yml) and runs on GitHub Actions.
 

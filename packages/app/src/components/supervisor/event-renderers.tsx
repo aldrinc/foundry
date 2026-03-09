@@ -1,4 +1,4 @@
-import { Show, Switch, Match, createSignal } from "solid-js"
+import { For, Match, Show, Switch, createSignal } from "solid-js"
 import type { SupervisorEvent, JsonValue } from "@zulip/desktop/bindings"
 
 // ── Main event dispatcher ──
@@ -139,13 +139,15 @@ function DispatchEvent(props: { event: SupervisorEvent }) {
       </Show>
       <Show when={tasks().length > 0}>
         <div class="space-y-1">
-          {tasks().map(task => (
-            <div class="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
-              <span class="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] shrink-0" />
-              <span class="truncate">{extractString(task, "title") || "Task"}</span>
-              <span class="text-[var(--text-tertiary)]">{extractString(task, "assigned_role") || ""}</span>
-            </div>
-          ))}
+          <For each={tasks()}>
+            {(task) => (
+              <div class="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
+                <span class="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] shrink-0" />
+                <span class="truncate">{extractString(task, "title") || "Task"}</span>
+                <span class="text-[var(--text-tertiary)]">{extractString(task, "assigned_role") || ""}</span>
+              </div>
+            )}
+          </For>
         </div>
       </Show>
     </div>

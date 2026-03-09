@@ -9,12 +9,17 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "test": "bun test packages/app/src",
+    "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "check:rust": "cd packages/desktop/src-tauri && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",
     "test:e2e": "turbo test:e2e"
   },
   "devDependencies": {
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-solid": "^0.14.5",
+    "globals": "^17.4.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }

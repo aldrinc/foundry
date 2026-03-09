@@ -1,3 +1,4 @@
+import { For } from "solid-js"
 import type { JSX } from "solid-js"
 
 interface FormatAction {
@@ -140,18 +141,20 @@ export function FormatToolbar(props: {
 
   return (
     <div class="flex items-center gap-0.5" data-component="format-toolbar">
-      {FORMAT_ACTIONS.map(action => (
-        <button
-          class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-          onClick={(e) => {
-            e.preventDefault()
-            applyFormat(action)
-          }}
-          title={action.shortcut ? `${action.label} (${action.shortcut})` : action.label}
-        >
-          {action.icon}
-        </button>
-      ))}
+      <For each={FORMAT_ACTIONS}>
+        {(action) => (
+          <button
+            class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+            onClick={(e) => {
+              e.preventDefault()
+              applyFormat(action)
+            }}
+            title={action.shortcut ? `${action.label} (${action.shortcut})` : action.label}
+          >
+            {action.icon}
+          </button>
+        )}
+      </For>
     </div>
   )
 }

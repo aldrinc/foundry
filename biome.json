@@ -12,7 +12,21 @@
       "!packages/desktop/dist",
       "!packages/desktop/src-tauri/target",
       "!packages/desktop/src-tauri/gen",
-      "!packages/desktop/src/bindings.ts"
+      "!packages/desktop/src/bindings.ts",
+      "!packages/desktop/src/styles.css",
+      "!packages/app/src/**/*.d.ts",
+      "!packages/app/src/**/*.d.ts.map",
+      "!packages/app/src/**/*.js",
+      "!packages/app/src/**/*.jsx",
+      "!packages/desktop/src/**/*.d.ts",
+      "!packages/desktop/src/**/*.d.ts.map",
+      "!packages/desktop/src/**/*.js",
+      "!packages/desktop/src/**/*.jsx",
+      "!packages/ui/src/**/*.d.ts",
+      "!packages/ui/src/**/*.d.ts.map",
+      "!packages/ui/src/**/*.js",
+      "!packages/ui/src/**/*.jsx",
+      "!services/foundry-core/app/**"
     ]
   },
   "formatter": {

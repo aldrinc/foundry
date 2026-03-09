@@ -1,4 +1,8 @@
-exclude: ^packages/desktop/src/bindings\.ts$
+exclude: |
+  (?x)^(
+    packages/desktop/src/bindings\.ts|
+    packages/(app|desktop|ui)/src/.*\.(d\.ts(\.map)?|js|jsx)$
+  )$
 
 repos:
   - repo: https://github.com/gitleaks/gitleaks
@@ -18,10 +22,13 @@ repos:
       - id: check-symlinks
       - id: destroyed-symlinks
       - id: check-json
+        exclude: ^services/foundry-core/app/
       - id: check-toml
       - id: check-yaml
       - id: end-of-file-fixer
+        exclude: ^services/foundry-core/app/
       - id: trailing-whitespace
+        exclude: ^services/foundry-core/app/
       - id: no-commit-to-branch
         args: ["--branch", "main"]
 
@@ -29,16 +36,21 @@ repos:
     rev: v2.4.6
     hooks:
       - id: biome-check
+        stages: [manual]
+        exclude: ^(services/foundry-core/app/|packages/desktop/src/styles\.css$)
 
   - repo: https://github.com/crate-ci/typos
     rev: v1.9.0
     hooks:
       - id: typos
+        exclude: ^services/foundry-core/app/
 
   - repo: https://github.com/executablebooks/mdformat
     rev: 1.0.0
     hooks:
       - id: mdformat
+        stages: [manual]
+        exclude: ^services/foundry-core/app/
 
   - repo: local
     hooks:
