@@ -57,6 +57,7 @@ That means the monorepo currently contains:
 - desktop client code
 - imported core application server code
 - control-plane scaffold code
+- infrastructure template source for Foundry workspace provisioning
 - architecture docs
 
 ## Initial directory map
@@ -71,6 +72,8 @@ That means the monorepo currently contains:
   - typed domain model modules
 - `services/foundry-server/tests/`
   - basic tests for decision and config defaults
+- `infra/coder-templates/foundry-hetzner-workspace/`
+  - Foundry-owned Coder workspace template without Meridian defaults
 
 ## Domain model intent
 
@@ -128,3 +131,5 @@ This choice reduces per-repo infrastructure sprawl while preserving task-level i
 4. Add GitHub App installation and repository binding endpoints.
 5. Define billing tables and Stripe webhook handling.
 6. Start migrating orchestration contracts into the new service boundary.
+7. Provision the Foundry Hetzner project baseline via Terraform before enabling
+   any live Foundry Coder workspace template.

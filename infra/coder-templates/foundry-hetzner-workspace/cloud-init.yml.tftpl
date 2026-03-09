@@ -1,0 +1,189 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+
+write_files:
+  - path: /opt/coder/init
+    permissions: "0755"
+    owner: root:root
+    encoding: b64
+    content: ${agent_init_script_b64}
+  - path: /etc/systemd/system/coder-agent.service
+    permissions: "0644"
+    owner: root:root
+    content: |
+      [Unit]
+      Description=Coder Agent
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=simple
+      ExecStart=/opt/coder/init
+      Environment=CODER_AGENT_TOKEN=${coder_agent_token}
+      Restart=always
+      RestartSec=10
+      TimeoutStopSec=90
+      KillMode=process
+      OOMScoreAdjust=-900
+      SyslogIdentifier=coder-agent
+
+      [Install]
+      WantedBy=multi-user.target
+  - path: /opt/coder/bootstrap.sh
+    permissions: "0755"
+    owner: root:root
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      DEVICE="/dev/disk/by-id/scsi-0HC_Volume_${volume_id}"
+      MOUNT_POINT="/home/coder"
+
+      mkdir -p "$MOUNT_POINT"
+
+      for i in $(seq 1 60); do
+        if [[ -b "$DEVICE" ]]; then
+          break
+        fi
+        sleep 2
+      done
+
+      if [[ ! -b "$DEVICE" ]]; then
+        echo "Volume device not found: $DEVICE" >&2
+        exit 1
+      fi
+
+      if ! blkid "$DEVICE" >/dev/null 2>&1; then
+        mkfs.ext4 -F "$DEVICE"
+      fi
+
+      if ! grep -q "$DEVICE" /etc/fstab; then
+        echo "$DEVICE $MOUNT_POINT ext4 defaults,nofail 0 2" >> /etc/fstab
+      fi
+
+      mount -a
+      mkdir -p /home/coder/repos /home/coder/repos/.tmp /home/coder/logs
+      chown -R 1000:1000 /home/coder || true
+
+      systemctl daemon-reload
+      systemctl enable --now coder-agent
+
+      NETBIRD_SETUP_KEY="${netbird_setup_key}"
+      NETBIRD_MANAGEMENT_URL="${netbird_management_url}"
+      if [[ -n "$NETBIRD_SETUP_KEY" && -n "$NETBIRD_MANAGEMENT_URL" ]]; then
+        if ! command -v netbird >/dev/null 2>&1; then
+          timeout 180 env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a bash -c 'curl -fsSL https://pkgs.netbird.io/install.sh | bash' || true
+        fi
+
+        if command -v netbird >/dev/null 2>&1; then
+          NB_HOSTNAME="${workspace_owner}-${workspace_name}"
+          NB_HOSTNAME="$(echo "$NB_HOSTNAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]+/-/g; s/^-+//; s/-+$//')"
+          timeout 180 netbird up --management-url "$NETBIRD_MANAGEMENT_URL" --setup-key "$NETBIRD_SETUP_KEY" --hostname "$NB_HOSTNAME" || true
+        fi
+      fi
+
+      EXTRA_HOSTS_JSON='${extra_hosts_json}'
+      if [[ -n "$EXTRA_HOSTS_JSON" && "$EXTRA_HOSTS_JSON" != "[]" ]]; then
+        echo "$EXTRA_HOSTS_JSON" | jq -cr '.[]?' | while read -r mapping; do
+          ip="$(echo "$mapping" | jq -r '.ip // empty')"
+          hosts="$(echo "$mapping" | jq -r '(.hosts // []) | join(\" \")')"
+          if [[ -n "$ip" && -n "$hosts" ]]; then
+            line="$ip $hosts"
+            if ! grep -Fxq "$line" /etc/hosts; then
+              echo "$line" >> /etc/hosts
+            fi
+          fi
+        done
+      fi
+
+      REPO_URL="${repo_url}"
+      REPO_ID="${repo_id}"
+      if [[ -n "$REPO_URL" ]]; then
+        export GIT_TERMINAL_PROMPT=0
+        if [[ -n "$REPO_ID" ]]; then
+          REPO_SLUG="$(echo "$REPO_ID" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+        else
+          REPO_SLUG="$(basename "$REPO_URL" .git | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')"
+        fi
+        if [[ -z "$REPO_SLUG" ]]; then
+          REPO_SLUG="repo"
+        fi
+
+        REPO_ROOT="/home/coder/repos/$REPO_SLUG"
+        REPO_BASE="$REPO_ROOT/base"
+        mkdir -p "$REPO_ROOT"
+
+        if [[ ! -d "$REPO_BASE/.git" ]]; then
+          clone_ok=0
+          for attempt in $(seq 1 5); do
+            rm -rf "$REPO_BASE"
+            if timeout 180 git clone "$REPO_URL" "$REPO_BASE"; then
+              clone_ok=1
+              break
+            fi
+            sleep $((attempt * 3))
+          done
+
+          if [[ "$clone_ok" -eq 1 ]]; then
+            rm -f "$REPO_ROOT/CLONE_FAILED.txt"
+            git config --system --add safe.directory "$REPO_BASE" || true
+          else
+            mkdir -p "$REPO_BASE"
+            printf '%s\n' \
+              "Repository bootstrap failed for:" \
+              "- repo_id: ${repo_id}" \
+              "- repo_url: ${repo_url}" \
+              "" \
+              "Run this manually after adding credentials:" \
+              "  git clone '${repo_url}' '$REPO_BASE'" \
+              > "$REPO_ROOT/CLONE_FAILED.txt"
+          fi
+        else
+          git -C "$REPO_BASE" remote set-url origin "$REPO_URL" || true
+          timeout 180 git -C "$REPO_BASE" fetch --all --prune || true
+          rm -f "$REPO_ROOT/CLONE_FAILED.txt"
+          git config --system --add safe.directory "$REPO_BASE" || true
+        fi
+
+        chown -R 1000:1000 "$REPO_ROOT" || true
+      fi
+
+      if [[ -n "${runner_daemon_download_url}" ]]; then
+        curl -fsSL "${runner_daemon_download_url}" -o /usr/local/bin/runner-daemon
+        chmod +x /usr/local/bin/runner-daemon
+
+        printf '%s\n' \
+          '[Unit]' \
+          'Description=Workspace Runner Daemon' \
+          'After=network-online.target' \
+          'Wants=network-online.target' \
+          '' \
+          '[Service]' \
+          'Type=simple' \
+          'ExecStart=/usr/local/bin/runner-daemon' \
+          'Restart=always' \
+          'RestartSec=2' \
+          'Environment=WORKSPACE_OWNER=${workspace_owner}' \
+          'Environment=WORKSPACE_NAME=${workspace_name}' \
+          'Environment=WORKSPACE_REPO_ID=${repo_id}' \
+          'Environment=WORKSPACE_REPO_URL=${repo_url}' \
+          '' \
+          '[Install]' \
+          'WantedBy=multi-user.target' \
+          > /etc/systemd/system/runner-daemon.service
+
+        systemctl daemon-reload
+        systemctl enable --now runner-daemon
+      fi
+
+      systemctl daemon-reload
+
+runcmd:
+  - bash /opt/coder/bootstrap.sh
