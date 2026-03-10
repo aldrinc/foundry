@@ -1,7 +1,6 @@
 # Foundry Coder Template: Hetzner Workspace
 
-This template is the Foundry-owned replacement for the old Meridian Hetzner
-workspace template.
+This template is the Foundry-owned Hetzner workspace template for Coder.
 
 It keeps the same basic lifecycle model:
 
@@ -11,13 +10,13 @@ It keeps the same basic lifecycle model:
 
 ## Why this template exists
 
-The previous Meridian template had two problems that block public Foundry use:
+The previous internal template had two problems that block public Foundry use:
 
-- it was wired to a Meridian-owned Hetzner project
-- it relied on Meridian-specific defaults and hardcoded SSH key IDs
+- it was wired to a single private Hetzner project
+- it relied on environment-specific defaults and hardcoded SSH key IDs
 
-This version removes those assumptions. It does not embed any Meridian hostnames,
-NetBird endpoints, or project-specific SSH key IDs.
+This version removes those assumptions. It does not embed organization-specific
+hostnames, NetBird endpoints, or project-specific SSH key IDs.
 
 ## Required template variables
 
@@ -66,7 +65,8 @@ the repo, not something to use for live workspace creation.
 ## Private GitHub repo bootstrap
 
 When `foundry_server_url` and `workspace_bootstrap_secret` are configured, the
-workspace bootstrap requests a short-lived GitHub installation token from
-`foundry-server` and uses `GIT_ASKPASS` for clone/fetch operations. The GitHub
-App private key stays on the Foundry server host and is not embedded into the
-workspace template.
+workspace template derives a repo-scoped bootstrap token and passes only that
+derived token to the guest VM. The workspace bootstrap then requests a
+short-lived GitHub installation token from `foundry-server` and uses
+`GIT_ASKPASS` for clone/fetch operations. The shared bootstrap secret and the
+GitHub App private key stay off the guest VM.

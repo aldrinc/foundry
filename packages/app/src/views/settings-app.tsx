@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js"
 import { useSettings } from "../context/settings"
 import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { SettingToggle, SettingRow } from "./settings-general"
 
 export function SettingsApp() {

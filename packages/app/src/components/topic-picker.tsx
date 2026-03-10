@@ -1,6 +1,6 @@
 import { createSignal, For, Show, onMount } from "solid-js"
-import { commands } from "@zulip/desktop/bindings"
-import type { Topic } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { Topic } from "@foundry/desktop/bindings"
 import { useOrg } from "../context/org"
 
 export function TopicPicker(props: {

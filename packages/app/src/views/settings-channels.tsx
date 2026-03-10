@@ -1,7 +1,7 @@
 import { createSignal, createMemo, For, Show } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { SettingRow } from "./settings-general"
 
 export function SettingsChannels() {

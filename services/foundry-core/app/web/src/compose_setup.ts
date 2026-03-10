@@ -26,7 +26,7 @@ import {$t, $t_html} from "./i18n.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_view from "./message_view.ts";
 import * as message_viewport from "./message_viewport.ts";
-import * as meridian_supervisor_sidebar from "./meridian_supervisor_sidebar.ts";
+import * as foundry_supervisor_sidebar from "./foundry_supervisor_sidebar.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as onboarding_steps from "./onboarding_steps.ts";
 import {page_params} from "./page_params.ts";
@@ -571,11 +571,11 @@ export function initialize(): void {
 
     $("body").on(
         "click",
-        ".compose_control_button_container:not(.disabled) .meridian-open-ai",
+        ".compose_control_button_container:not(.disabled) .foundry-open-ai",
         (e) => {
             e.preventDefault();
             e.stopPropagation();
-            meridian_supervisor_sidebar.open_for_current_topic();
+            foundry_supervisor_sidebar.open_for_current_topic();
         },
     );
 

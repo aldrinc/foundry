@@ -937,6 +937,20 @@ export const commands = {
         }
     },
     /**
+     * Play the bundled desktop notification sound from the native layer.
+     */
+    async playNotificationSound() {
+        try {
+            return { status: "ok", data: await TAURI_INVOKE("play_notification_sound") };
+        }
+        catch (e) {
+            if (e instanceof Error)
+                throw e;
+            else
+                return { status: "error", error: e };
+        }
+    },
+    /**
      * Get app config value as JSON string (caller parses)
      */
     async getConfig(key) {

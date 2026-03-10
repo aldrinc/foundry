@@ -2,7 +2,7 @@ import { For, Show, createMemo } from "solid-js"
 import { useZulipSync, type UnreadItem } from "../context/zulip-sync"
 import { useNavigation } from "../context/navigation"
 import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 
 /**
  * Inbox view — shows unread conversations grouped by stream/topic and direct message thread.

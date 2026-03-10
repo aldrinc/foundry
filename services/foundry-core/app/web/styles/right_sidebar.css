@@ -9,18 +9,18 @@
     }
 }
 
-body.meridian-supervisor-ai-open {
+body.foundry-supervisor-ai-open {
     --right-sidebar-width: clamp(36rem, 44vw, 44rem);
     --right-sidebar-max-width: clamp(36rem, 44vw, 44rem);
 }
 
-body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
+body.foundry-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     --right-sidebar-width: clamp(36rem, 45vw, 45rem);
     --right-sidebar-max-width: clamp(36rem, 45vw, 45rem);
 }
 
 @media (width < 1200px) {
-    body.meridian-supervisor-ai-open {
+    body.foundry-supervisor-ai-open {
         --right-sidebar-width: min(92vw, 32rem);
         --right-sidebar-max-width: min(92vw, 32rem);
     }
@@ -69,7 +69,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-panel {
+.foundry-supervisor-panel {
     display: none;
     flex-direction: column;
     height: calc(100vh - 150px);
@@ -83,7 +83,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-sidebar-empty {
+.foundry-supervisor-sidebar-empty {
     padding: 16px 12px;
     border: 1px dashed var(--color-border-input);
     border-radius: 8px;
@@ -92,14 +92,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     margin-top: 8px;
 }
 
-#meridian-supervisor-sidebar-root {
+#foundry-supervisor-sidebar-root {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
 }
 
-.meridian-supervisor-sidebar-shell {
+.foundry-supervisor-sidebar-shell {
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -108,20 +108,20 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     min-height: 0;
 }
 
-.meridian-supervisor-sidebar-header {
+.foundry-supervisor-sidebar-header {
     border: 1px solid var(--color-border-input);
     border-radius: 10px;
     padding: 8px 10px;
     background: var(--color-background-input);
 }
 
-.meridian-supervisor-sidebar-header-row {
+.foundry-supervisor-sidebar-header-row {
     display: flex;
     align-items: center;
     gap: 6px;
 }
 
-.meridian-supervisor-sidebar-title {
+.foundry-supervisor-sidebar-title {
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.05em;
@@ -130,7 +130,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     flex-shrink: 0;
 }
 
-.meridian-supervisor-sidebar-topic {
+.foundry-supervisor-sidebar-topic {
     margin-top: 3px;
     font-size: 0.73rem;
     color: var(--color-text-default);
@@ -140,7 +140,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     white-space: nowrap;
 }
 
-.meridian-supervisor-sidebar-status-badge {
+.foundry-supervisor-sidebar-status-badge {
     font-size: 0.65rem;
     font-family: var(--font-monospace);
     color: var(--color-text-default);
@@ -152,11 +152,11 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     flex: 1 1 auto;
 }
 
-.meridian-supervisor-sidebar-header-actions {
+.foundry-supervisor-sidebar-header-actions {
     margin-left: auto;
 }
 
-.meridian-supervisor-sidebar-warning {
+.foundry-supervisor-sidebar-warning {
     border: 1px solid var(--color-border-danger-banner);
     background: var(--color-background-modal);
     color: var(--color-text-danger-banner);
@@ -165,7 +165,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     font-size: 0.75rem;
 }
 
-.meridian-supervisor-sidebar-timeline {
+.foundry-supervisor-sidebar-timeline {
     border: 1px solid var(--color-border-input);
     border-radius: 10px;
     background: #fff;
@@ -178,7 +178,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     flex: 1 1 auto;
 }
 
-.meridian-supervisor-event {
+.foundry-supervisor-event {
     border: none;
     border-radius: 0;
     padding: 8px 2px;
@@ -217,7 +217,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-event-header {
+.foundry-supervisor-event-header {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -225,7 +225,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     margin-bottom: 4px;
 }
 
-.meridian-supervisor-event-author {
+.foundry-supervisor-event-author {
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -233,24 +233,24 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     color: var(--color-text-default);
 }
 
-.meridian-supervisor-event-meta {
+.foundry-supervisor-event-meta {
     font-size: 0.7rem;
     color: var(--color-text-default);
     opacity: 0.7;
     font-family: var(--font-monospace);
 }
 
-.meridian-supervisor-content {
+.foundry-supervisor-content {
     font-size: 0.9rem;
     line-height: 1.42;
     color: var(--color-text-default);
 }
 
-.meridian-supervisor-trace-collapse {
+.foundry-supervisor-trace-collapse {
     margin-top: 4px;
 }
 
-.meridian-supervisor-trace-collapse > summary {
+.foundry-supervisor-trace-collapse > summary {
     list-style: none;
     cursor: pointer;
     font-size: 0.68rem;
@@ -260,17 +260,17 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     padding: 2px 0;
 }
 
-.meridian-supervisor-trace-collapse > summary::-webkit-details-marker {
+.foundry-supervisor-trace-collapse > summary::-webkit-details-marker {
     display: none;
 }
 
 /* Chevron icons handle disclosure indicator */
 
-.meridian-supervisor-trace-collapse[open] > summary {
+.foundry-supervisor-trace-collapse[open] > summary {
     opacity: 0.35;
 }
 
-.meridian-supervisor-traces {
+.foundry-supervisor-traces {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
@@ -278,7 +278,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     padding: 4px 0;
 }
 
-.meridian-supervisor-trace-badge {
+.foundry-supervisor-trace-badge {
     border: 1px solid var(--color-border-input);
     border-radius: 4px;
     background: var(--color-background-input);
@@ -289,42 +289,42 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     opacity: 0.7;
 }
 
-.meridian-supervisor-trace-label {
+.foundry-supervisor-trace-label {
     font-weight: 600;
 }
 
-.meridian-supervisor-tool-list {
+.foundry-supervisor-tool-list {
     display: grid;
     gap: 8px;
     margin-top: 8px;
 }
 
-.meridian-supervisor-tool-card {
+.foundry-supervisor-tool-card {
     border: 1px solid var(--color-border-input);
     border-radius: 8px;
     background: var(--color-background-input);
     padding: 8px;
 }
 
-.meridian-supervisor-tool-title {
+.foundry-supervisor-tool-title {
     font-size: 0.76rem;
     font-weight: 700;
     font-family: var(--font-monospace);
     color: var(--color-text-default);
 }
 
-.meridian-supervisor-tool-subtitle {
+.foundry-supervisor-tool-subtitle {
     margin-top: 2px;
     font-size: 0.72rem;
     color: var(--color-text-default);
     opacity: 0.8;
 }
 
-.meridian-supervisor-event-details {
+.foundry-supervisor-event-details {
     margin-top: 8px;
 }
 
-.meridian-supervisor-event-details summary {
+.foundry-supervisor-event-details summary {
     list-style: none;
     cursor: pointer;
     font-size: 0.75rem;
@@ -334,11 +334,11 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     gap: 2px;
 }
 
-.meridian-supervisor-event-details summary::-webkit-details-marker {
+.foundry-supervisor-event-details summary::-webkit-details-marker {
     display: none;
 }
 
-.meridian-supervisor-event-details-body {
+.foundry-supervisor-event-details-body {
     margin-top: 6px;
     max-height: 240px;
     overflow: auto;
@@ -349,7 +349,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     padding: 8px;
 }
 
-.meridian-supervisor-live-row {
+.foundry-supervisor-live-row {
     border: none;
     border-bottom: none;
     background: transparent;
@@ -357,37 +357,37 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     opacity: 1;
 }
 
-.meridian-supervisor-live-body {
+.foundry-supervisor-live-body {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 0.82rem;
     color: var(--color-text-default);
 
-    &.is-thinking .meridian-supervisor-live-dot {
+    &.is-thinking .foundry-supervisor-live-dot {
         background: hsl(250deg 60% 58%);
         box-shadow: 0 0 0 0 hsl(250deg 60% 58% / 40%);
-        animation: meridian-supervisor-pulse 1.6s ease-out infinite;
+        animation: foundry-supervisor-pulse 1.6s ease-out infinite;
     }
 
-    &.is-thinking .meridian-supervisor-live-text {
+    &.is-thinking .foundry-supervisor-live-text {
         font-style: italic;
         opacity: 0.75;
     }
 
-    &.is-working .meridian-supervisor-live-dot {
+    &.is-working .foundry-supervisor-live-dot {
         background: hsl(250deg 60% 58%);
         box-shadow: 0 0 0 0 hsl(250deg 60% 58% / 40%);
-        animation: meridian-supervisor-pulse 1.2s ease-out infinite;
+        animation: foundry-supervisor-pulse 1.2s ease-out infinite;
     }
 
-    &.is-working .meridian-supervisor-live-text {
+    &.is-working .foundry-supervisor-live-text {
         font-style: italic;
         opacity: 0.7;
     }
 }
 
-.meridian-supervisor-live-text {
+.foundry-supervisor-live-text {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -396,7 +396,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     font-size: 0.8rem;
 }
 
-.meridian-supervisor-live-meta {
+.foundry-supervisor-live-meta {
     font-size: 0.65rem;
     font-family: var(--font-monospace);
     text-transform: uppercase;
@@ -405,17 +405,17 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     flex-shrink: 0;
 }
 
-.meridian-supervisor-live-dot {
+.foundry-supervisor-live-dot {
     width: 8px;
     height: 8px;
     border-radius: 999px;
     flex-shrink: 0;
     background: var(--color-text-success-banner);
     box-shadow: 0 0 0 0 var(--color-text-success-banner);
-    animation: meridian-supervisor-pulse 1.8s ease-out infinite;
+    animation: foundry-supervisor-pulse 1.8s ease-out infinite;
 }
 
-.meridian-supervisor-live-shimmer {
+.foundry-supervisor-live-shimmer {
     height: 2px;
     margin-top: 6px;
     border-radius: 1px;
@@ -428,10 +428,10 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
         transparent 100%
     );
     background-size: 200% 100%;
-    animation: meridian-supervisor-shimmer 1.8s ease-in-out infinite;
+    animation: foundry-supervisor-shimmer 1.8s ease-in-out infinite;
 }
 
-@keyframes meridian-supervisor-pulse {
+@keyframes foundry-supervisor-pulse {
     0% {
         box-shadow: 0 0 0 0 hsl(250deg 60% 58% / 40%);
     }
@@ -445,7 +445,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-@keyframes meridian-supervisor-shimmer {
+@keyframes foundry-supervisor-shimmer {
     0% {
         background-position: 200% 0;
     }
@@ -455,7 +455,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-sidebar-composer {
+.foundry-supervisor-sidebar-composer {
     border: 1px solid var(--color-border-input);
     border-radius: 12px;
     background: #fff;
@@ -465,7 +465,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     flex-direction: column;
 }
 
-.meridian-supervisor-sidebar-input {
+.foundry-supervisor-sidebar-input {
     width: 100%;
     min-height: 28px;
     max-height: 120px;
@@ -489,14 +489,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-composer-attachments {
+.foundry-supervisor-composer-attachments {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     padding: 6px 0 2px;
 }
 
-.meridian-supervisor-attachment-chip {
+.foundry-supervisor-attachment-chip {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -509,21 +509,21 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     max-width: 200px;
 }
 
-.meridian-supervisor-attachment-name {
+.foundry-supervisor-attachment-name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: 600;
 }
 
-.meridian-supervisor-attachment-size {
+.foundry-supervisor-attachment-size {
     opacity: 0.5;
     flex-shrink: 0;
     font-family: var(--font-monospace);
     font-size: 0.65rem;
 }
 
-.meridian-supervisor-attachment-remove {
+.foundry-supervisor-attachment-remove {
     border: none;
     background: none;
     color: var(--color-text-default);
@@ -539,7 +539,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-composer-actions {
+.foundry-supervisor-composer-actions {
     display: flex;
     justify-content: flex-end;
     align-items: center;
@@ -547,7 +547,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     margin-top: 2px;
 }
 
-.meridian-supervisor-composer-attach {
+.foundry-supervisor-composer-attach {
     width: 32px;
     height: 32px;
     border-radius: 8px;
@@ -568,7 +568,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-composer-send {
+.foundry-supervisor-composer-send {
     width: 32px;
     height: 32px;
     border-radius: 8px;
@@ -599,14 +599,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 
 /* --- Task Status Dashboard --- */
 
-.meridian-supervisor-task-dashboard {
+.foundry-supervisor-task-dashboard {
     border: 1px solid var(--color-border-input);
     border-radius: 10px;
     background: var(--color-background-input);
     overflow: hidden;
 }
 
-.meridian-task-dashboard-collapse > summary {
+.foundry-task-dashboard-collapse > summary {
     list-style: none;
     cursor: pointer;
     display: flex;
@@ -618,23 +618,23 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     color: var(--color-text-default);
 }
 
-.meridian-task-dashboard-collapse > summary::-webkit-details-marker {
+.foundry-task-dashboard-collapse > summary::-webkit-details-marker {
     display: none;
 }
 
-.meridian-task-dashboard-title {
+.foundry-task-dashboard-title {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: 0.68rem;
 }
 
-.meridian-task-dashboard-counts {
+.foundry-task-dashboard-counts {
     font-size: 0.65rem;
     opacity: 0.55;
 }
 
-.meridian-task-dashboard-overall {
+.foundry-task-dashboard-overall {
     margin-left: auto;
     font-size: 0.6rem;
     padding: 1px 6px;
@@ -644,30 +644,30 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     letter-spacing: 0.02em;
 }
 
-.meridian-task-dashboard-overall.completed {
+.foundry-task-dashboard-overall.completed {
     color: var(--color-text-success-banner);
     background: hsl(142deg 40% 93%);
 }
 
-.meridian-task-dashboard-overall.failed {
+.foundry-task-dashboard-overall.failed {
     color: var(--color-text-danger-banner);
     background: hsl(0deg 40% 94%);
 }
 
-.meridian-task-dashboard-overall.working {
+.foundry-task-dashboard-overall.working {
     color: hsl(250deg 60% 52%);
     background: hsl(250deg 30% 95%);
 }
 
-.meridian-task-dashboard-overall.idle {
+.foundry-task-dashboard-overall.idle {
     opacity: 0.5;
 }
 
-.meridian-task-dashboard-body {
+.foundry-task-dashboard-body {
     padding: 0 10px 8px;
 }
 
-.meridian-task-progress-bar {
+.foundry-task-progress-bar {
     height: 3px;
     background: hsl(0deg 0% 90%);
     border-radius: 2px;
@@ -675,14 +675,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     overflow: hidden;
 }
 
-.meridian-task-progress-fill {
+.foundry-task-progress-fill {
     height: 100%;
     background: var(--color-text-success-banner);
     border-radius: 2px;
     transition: width 0.3s ease;
 }
 
-.meridian-task-row {
+.foundry-task-row {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -691,39 +691,39 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     color: var(--color-text-default);
 }
 
-.meridian-task-dot {
+.foundry-task-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
     flex-shrink: 0;
 }
 
-.meridian-task-dot.is-task-completed {
+.foundry-task-dot.is-task-completed {
     background: var(--color-text-success-banner);
 }
 
-.meridian-task-dot.is-task-failed {
+.foundry-task-dot.is-task-failed {
     background: var(--color-text-danger-banner);
 }
 
-.meridian-task-dot.is-task-working {
+.foundry-task-dot.is-task-working {
     background: hsl(250deg 60% 58%);
-    animation: meridian-supervisor-pulse 1.6s ease-out infinite;
+    animation: foundry-supervisor-pulse 1.6s ease-out infinite;
 }
 
-.meridian-task-dot.is-task-pr {
+.foundry-task-dot.is-task-pr {
     background: hsl(200deg 60% 50%);
 }
 
-.meridian-task-dot.is-task-blocked {
+.foundry-task-dot.is-task-blocked {
     background: hsl(30deg 70% 50%);
 }
 
-.meridian-task-dot.is-task-queued {
+.foundry-task-dot.is-task-queued {
     background: hsl(0deg 0% 75%);
 }
 
-.meridian-task-label {
+.foundry-task-label {
     font-family: var(--font-monospace);
     font-size: 0.68rem;
     overflow: hidden;
@@ -733,7 +733,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     min-width: 0;
 }
 
-.meridian-task-status-text {
+.foundry-task-status-text {
     font-size: 0.63rem;
     opacity: 0.6;
     font-family: var(--font-monospace);
@@ -742,13 +742,13 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 
 /* --- Worker Lifecycle Cards --- */
 
-.meridian-supervisor-lifecycle-card {
+.foundry-supervisor-lifecycle-card {
     padding: 3px 2px;
     margin-bottom: 1px;
     border-bottom: none;
 }
 
-.meridian-lifecycle-row {
+.foundry-lifecycle-row {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -757,34 +757,34 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     color: var(--color-text-default);
 }
 
-.meridian-lifecycle-icon {
+.foundry-lifecycle-icon {
     width: 14px;
     text-align: center;
     flex-shrink: 0;
     font-size: 0.75rem;
 }
 
-.meridian-lifecycle-icon.is-lc-completed {
+.foundry-lifecycle-icon.is-lc-completed {
     color: var(--color-text-success-banner);
 }
 
-.meridian-lifecycle-icon.is-lc-failed {
+.foundry-lifecycle-icon.is-lc-failed {
     color: var(--color-text-danger-banner);
 }
 
-.meridian-lifecycle-icon.is-lc-working {
+.foundry-lifecycle-icon.is-lc-working {
     color: hsl(250deg 60% 58%);
 }
 
-.meridian-lifecycle-icon.is-lc-blocked {
+.foundry-lifecycle-icon.is-lc-blocked {
     color: hsl(30deg 70% 50%);
 }
 
-.meridian-lifecycle-icon.is-lc-info {
+.foundry-lifecycle-icon.is-lc-info {
     opacity: 0.45;
 }
 
-.meridian-lifecycle-label {
+.foundry-lifecycle-label {
     font-size: 0.72rem;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -793,18 +793,18 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     min-width: 0;
 }
 
-.meridian-lifecycle-time {
+.foundry-lifecycle-time {
     font-size: 0.6rem;
     opacity: 0.35;
     flex-shrink: 0;
 }
 
-.meridian-lifecycle-details {
+.foundry-lifecycle-details {
     margin-top: 2px;
     margin-left: 20px;
 }
 
-.meridian-lifecycle-details-toggle {
+.foundry-lifecycle-details-toggle {
     list-style: none;
     cursor: pointer;
     font-size: 0.65rem;
@@ -814,11 +814,11 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     gap: 2px;
 }
 
-.meridian-lifecycle-details-toggle::-webkit-details-marker {
+.foundry-lifecycle-details-toggle::-webkit-details-marker {
     display: none;
 }
 
-.meridian-lifecycle-details-body {
+.foundry-lifecycle-details-body {
     padding: 4px 0 4px 8px;
     border-left: 1px solid var(--color-border-input);
     margin-top: 2px;
@@ -829,12 +829,12 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 
 /* --- Shell Output Cards (auto-collapsed code-heavy messages) --- */
 
-.meridian-supervisor-shell-output-card {
+.foundry-supervisor-shell-output-card {
     padding: 2px 0;
     margin-bottom: 2px;
 }
 
-.meridian-supervisor-shell-output-card .meridian-supervisor-tool-icon.meridian-shell-icon {
+.foundry-supervisor-shell-output-card .foundry-supervisor-tool-icon.foundry-shell-icon {
     font-family: var(--font-monospace);
     font-weight: 700;
     font-size: 0.82rem;
@@ -843,11 +843,11 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 }
 
 /* Inside shell output cards, tighten spacing between code blocks */
-.meridian-supervisor-shell-output-card .meridian-supervisor-tool-body .meridian-markdown-code {
+.foundry-supervisor-shell-output-card .foundry-supervisor-tool-body .foundry-markdown-code {
     margin: 2px 0;
 }
 
-.meridian-supervisor-shell-output-card .meridian-supervisor-tool-body .rendered_markdown > p {
+.foundry-supervisor-shell-output-card .foundry-supervisor-tool-body .rendered_markdown > p {
     margin: 4px 0 2px;
     font-size: 0.76rem;
     opacity: 0.65;
@@ -855,15 +855,15 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 }
 
 /* Hide Zulip-native copy buttons in the supervisor timeline (CSS fallback) */
-.meridian-supervisor-sidebar-timeline .code_external_link,
-.meridian-supervisor-sidebar-timeline .copy_codeblock {
+.foundry-supervisor-sidebar-timeline .code_external_link,
+.foundry-supervisor-sidebar-timeline .copy_codeblock {
     display: none !important;
 }
 
 /* --- Code block enhancements (OpenCode-style) --- */
 
 /* Compact, horizontally-scrolling code blocks in the supervisor timeline */
-.meridian-supervisor-sidebar-timeline .rendered_markdown pre {
+.foundry-supervisor-sidebar-timeline .rendered_markdown pre {
     max-height: 200px;
     overflow-x: auto;
     overflow-y: auto;
@@ -878,33 +878,33 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 }
 
 /* Inside tool/shell cards, make code blocks even more compact */
-.meridian-supervisor-tool-body .rendered_markdown pre {
+.foundry-supervisor-tool-body .rendered_markdown pre {
     max-height: 160px;
     padding: 6px 8px;
     font-size: 0.7rem;
     margin: 2px 0;
 }
 
-.meridian-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar {
+.foundry-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar {
     height: 6px;
     width: 6px;
 }
 
-.meridian-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar-thumb {
+.foundry-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar-thumb {
     background-color: hsl(0deg 0% 0% / 15%);
     border-radius: 10px;
 }
 
-.meridian-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar-track {
+.foundry-supervisor-sidebar-timeline .rendered_markdown pre::-webkit-scrollbar-track {
     background-color: hsl(0deg 0% 0% / 3%);
 }
 
-.meridian-terminal-prompt {
+.foundry-terminal-prompt {
     color: hsl(210deg 60% 45%);
     font-weight: 600;
 }
 
-.meridian-markdown-code {
+.foundry-markdown-code {
     position: relative;
     border-radius: 6px;
     overflow: hidden;
@@ -912,7 +912,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     max-width: 100%;
 }
 
-.meridian-code-lang-label {
+.foundry-code-lang-label {
     position: absolute;
     top: 0;
     left: 0;
@@ -929,7 +929,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     z-index: 1;
 }
 
-.meridian-markdown-copy {
+.foundry-markdown-copy {
     position: absolute;
     top: 4px;
     right: 4px;
@@ -953,26 +953,26 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-markdown-code:hover .meridian-markdown-copy,
-.meridian-markdown-copy:focus {
+.foundry-markdown-code:hover .foundry-markdown-copy,
+.foundry-markdown-copy:focus {
     opacity: 1;
 }
 
 /* --- Collapsible tool cards (OpenCode-style) --- */
 
-.meridian-supervisor-tool-collapse {
+.foundry-supervisor-tool-collapse {
     margin-bottom: 8px;
 }
 
-.meridian-supervisor-tool-collapse > summary {
+.foundry-supervisor-tool-collapse > summary {
     list-style: none;
 }
 
-.meridian-supervisor-tool-collapse > summary::-webkit-details-marker {
+.foundry-supervisor-tool-collapse > summary::-webkit-details-marker {
     display: none;
 }
 
-.meridian-supervisor-tool-trigger {
+.foundry-supervisor-tool-trigger {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -989,7 +989,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     }
 }
 
-.meridian-supervisor-tool-icon {
+.foundry-supervisor-tool-icon {
     font-size: 0.82rem;
     width: 16px;
     text-align: center;
@@ -997,7 +997,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     opacity: 0.7;
 }
 
-.meridian-supervisor-tool-name {
+.foundry-supervisor-tool-name {
     font-weight: 600;
     font-family: var(--font-monospace);
     font-size: 0.74rem;
@@ -1006,14 +1006,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     white-space: nowrap;
 }
 
-.meridian-supervisor-tool-status {
+.foundry-supervisor-tool-status {
     margin-left: auto;
     font-size: 0.68rem;
     opacity: 0.6;
     flex-shrink: 0;
 }
 
-.meridian-supervisor-tool-body {
+.foundry-supervisor-tool-body {
     padding: 8px 8px 8px 10px;
     margin-top: 4px;
     margin-left: 8px;
@@ -1024,7 +1024,7 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
 
 /* --- Chevron disclosure icons for collapsible sections --- */
 
-.meridian-collapse-chevron {
+.foundry-collapse-chevron {
     font-size: 0.6em;
     opacity: 0.5;
     transition: transform 0.12s ease;
@@ -1032,14 +1032,14 @@ body.meridian-supervisor-ai-open #teamchat-root.teamchat-shell-root {
     display: inline-block;
 }
 
-details[open] > summary .meridian-collapse-chevron,
-details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chevron {
+details[open] > summary .foundry-collapse-chevron,
+details[open] > summary.foundry-supervisor-tool-trigger .foundry-collapse-chevron {
     transform: rotate(90deg);
 }
 
 /* --- Thinking block opacity (OpenCode-style) --- */
 
-.meridian-supervisor-event.is-thinking {
+.foundry-supervisor-event.is-thinking {
     border: none;
     border-left: none;
     background: none;
@@ -1049,11 +1049,11 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
     opacity: 0.55;
 }
 
-.meridian-supervisor-thinking-collapse {
+.foundry-supervisor-thinking-collapse {
     margin: 0;
 }
 
-.meridian-supervisor-thinking-collapse > summary {
+.foundry-supervisor-thinking-collapse > summary {
     list-style: none;
     cursor: pointer;
     font-size: 0.75rem;
@@ -1063,13 +1063,13 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
     padding: 2px 0;
 }
 
-.meridian-supervisor-thinking-collapse > summary::-webkit-details-marker {
+.foundry-supervisor-thinking-collapse > summary::-webkit-details-marker {
     display: none;
 }
 
 /* Chevron icons handle thinking disclosure */
 
-.meridian-supervisor-thinking-body {
+.foundry-supervisor-thinking-body {
     padding: 4px 0 4px 12px;
     border-left: 1px solid var(--color-border-input);
     margin-top: 2px;
@@ -1078,7 +1078,7 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
 
 /* --- Turn grouping separators --- */
 
-.meridian-supervisor-event.is-user {
+.foundry-supervisor-event.is-user {
     margin-top: 16px;
 
     &:first-child {
@@ -1086,7 +1086,7 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
     }
 }
 
-.meridian-supervisor-turn-separator {
+.foundry-supervisor-turn-separator {
     border: none;
     border-top: 1px solid var(--color-border-input);
     margin: 14px 0 10px;
@@ -1095,11 +1095,11 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
 
 /* --- Collapsible intermediate steps --- */
 
-.meridian-supervisor-steps-group {
+.foundry-supervisor-steps-group {
     margin: 6px 0;
 }
 
-.meridian-supervisor-steps-group > summary {
+.foundry-supervisor-steps-group > summary {
     font-size: 0.73rem;
     color: var(--color-text-default);
     opacity: 0.6;
@@ -1109,19 +1109,19 @@ details[open] > summary.meridian-supervisor-tool-trigger .meridian-collapse-chev
     font-family: var(--font-monospace);
 }
 
-.meridian-supervisor-steps-group > summary::-webkit-details-marker {
+.foundry-supervisor-steps-group > summary::-webkit-details-marker {
     display: none;
 }
 
 /* Chevron icons handle steps disclosure */
 
-.meridian-supervisor-steps-group[open] > summary {
+.foundry-supervisor-steps-group[open] > summary {
     opacity: 0.45;
 }
 
 /* --- Scroll-to-bottom button --- */
 
-.meridian-supervisor-scroll-bottom {
+.foundry-supervisor-scroll-bottom {
     position: sticky;
     bottom: 8px;
     display: block;

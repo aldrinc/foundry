@@ -17,8 +17,8 @@
     "declaration": true,
     "declarationMap": true,
     "paths": {
-      "@zulip/ui/*": ["../ui/src/*"],
-      "@zulip/desktop/*": ["../desktop/src/*"]
+      "@foundry/ui/*": ["../ui/src/*"],
+      "@foundry/desktop/*": ["../desktop/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "../desktop/src/**/*.ts"],

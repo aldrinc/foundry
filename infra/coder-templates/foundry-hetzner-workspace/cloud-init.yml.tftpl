@@ -14,6 +14,15 @@ write_files:
     owner: root:root
     encoding: b64
     content: ${agent_init_script_b64}
+  - path: /etc/foundry-bootstrap.env
+    permissions: "0600"
+    owner: root:root
+    content: |
+      CODER_AGENT_TOKEN='${coder_agent_token}'
+      FOUNDRY_SERVER_URL='${foundry_server_url}'
+      WORKSPACE_BOOTSTRAP_TOKEN='${workspace_bootstrap_token}'
+      NETBIRD_SETUP_KEY='${netbird_setup_key}'
+      NETBIRD_MANAGEMENT_URL='${netbird_management_url}'
   - path: /etc/systemd/system/coder-agent.service
     permissions: "0644"
     owner: root:root
@@ -26,7 +35,7 @@ write_files:
       [Service]
       Type=simple
       ExecStart=/opt/coder/init
-      Environment=CODER_AGENT_TOKEN=${coder_agent_token}
+      EnvironmentFile=-/etc/foundry-bootstrap.env
       Restart=always
       RestartSec=10
       TimeoutStopSec=90
@@ -37,11 +46,20 @@ write_files:
       [Install]
       WantedBy=multi-user.target
   - path: /opt/coder/bootstrap.sh
-    permissions: "0755"
+    permissions: "0700"
     owner: root:root
     content: |
       #!/usr/bin/env bash
       set -euo pipefail
+
+      if [[ -f /etc/foundry-bootstrap.env ]]; then
+        # shellcheck disable=SC1091
+        source /etc/foundry-bootstrap.env
+      fi
+      : "${NETBIRD_SETUP_KEY:=}"
+      : "${NETBIRD_MANAGEMENT_URL:=}"
+      : "${FOUNDRY_SERVER_URL:=}"
+      : "${WORKSPACE_BOOTSTRAP_TOKEN:=}"
 
       DEVICE="/dev/disk/by-id/scsi-0HC_Volume_${volume_id}"
       MOUNT_POINT="/home/coder"
@@ -75,8 +93,6 @@ write_files:
       systemctl daemon-reload
       systemctl enable --now coder-agent
 
-      NETBIRD_SETUP_KEY="${netbird_setup_key}"
-      NETBIRD_MANAGEMENT_URL="${netbird_management_url}"
       if [[ -n "$NETBIRD_SETUP_KEY" && -n "$NETBIRD_MANAGEMENT_URL" ]]; then
         if ! command -v netbird >/dev/null 2>&1; then
           timeout 180 env DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a bash -c 'curl -fsSL https://pkgs.netbird.io/install.sh | bash' || true
@@ -103,13 +119,10 @@ write_files:
         done
       fi
 
-      FOUNDRY_SERVER_URL='${foundry_server_url}'
-      WORKSPACE_BOOTSTRAP_SECRET='${workspace_bootstrap_secret}'
-
       request_repo_clone_token() {
         local repo_identity="$1"
         local owner repo token_url response
-        if [[ -z "$FOUNDRY_SERVER_URL" || -z "$WORKSPACE_BOOTSTRAP_SECRET" ]]; then
+        if [[ -z "$FOUNDRY_SERVER_URL" || -z "$WORKSPACE_BOOTSTRAP_TOKEN" ]]; then
           return 1
         fi
         if [[ ! "$repo_identity" =~ ^[^/]+/[^/]+$ ]]; then
@@ -121,7 +134,7 @@ write_files:
         token_url="$${FOUNDRY_SERVER_URL%/}/api/v1/github/repositories/$${owner}/$${repo}/clone-token"
         response="$(curl -fsS --retry 5 --retry-delay 2 \
           -X POST \
-          -H "X-Foundry-Workspace-Bootstrap-Secret: $${WORKSPACE_BOOTSTRAP_SECRET}" \
+          -H "X-Foundry-Workspace-Bootstrap-Token: $${WORKSPACE_BOOTSTRAP_TOKEN}" \
           "$token_url")" || return 1
 
         echo "$response" | jq -r '.token // empty'

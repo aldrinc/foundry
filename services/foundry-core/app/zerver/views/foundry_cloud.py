@@ -18,6 +18,8 @@ from zerver.lib.response import json_success
 from zerver.models import Realm, UserProfile
 from zerver.models.realms import get_realm
 
+FOUNDRY_CLOUD_ROOT_REALM_KEY = "__root__"
+
 
 def _bootstrap_secret() -> str:
     return os.getenv("FOUNDRY_CLOUD_BOOTSTRAP_SECRET", "").strip()
@@ -49,6 +51,16 @@ def _role_from_value(value: str) -> int:
     if normalized in {"admin", "runtime_admin", "billing_admin"}:
         return UserProfile.ROLE_REALM_ADMIN
     return UserProfile.ROLE_MEMBER
+
+
+def _get_target_realm(realm_key: str) -> Realm:
+    normalized_key = realm_key.strip().lower()
+    if normalized_key == FOUNDRY_CLOUD_ROOT_REALM_KEY:
+        realm = Realm.objects.filter(string_id=Realm.SUBDOMAIN_FOR_ROOT_DOMAIN).first()
+        if realm is None:
+            raise JsonableError("Foundry Cloud root realm is not configured on this server.")
+        return realm
+    return get_realm(normalized_key)
 
 
 def _ensure_user(
@@ -110,7 +122,10 @@ def foundry_cloud_provision_tenant(request: HttpRequest) -> HttpResponse:
             "realm_subdomain, realm_name, owner_email, and owner_full_name are required."
         )
 
-    realm = Realm.objects.filter(string_id=realm_subdomain).first()
+    if realm_subdomain == FOUNDRY_CLOUD_ROOT_REALM_KEY:
+        realm = _get_target_realm(realm_subdomain)
+    else:
+        realm = Realm.objects.filter(string_id=realm_subdomain).first()
     realm_created = False
     if realm is None:
         try:
@@ -170,7 +185,7 @@ def foundry_cloud_sync_tenant_member(request: HttpRequest, realm_subdomain: str)
     if not email or not full_name:
         raise JsonableError("email and full_name are required.")
 
-    realm = get_realm(realm_subdomain)
+    realm = _get_target_realm(realm_subdomain)
     user, user_created = _ensure_user(
         realm=realm,
         email=email,

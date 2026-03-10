@@ -263,8 +263,8 @@ mod tests {
     fn sanitize_handles_ip_based_org_ids() {
         // Real-world org_id derived from sslip.io-style URLs
         assert_eq!(
-            sanitize_event_id("zulip-dev-live.5.161.60.86.sslip.io"),
-            "zulip-dev-live_5_161_60_86_sslip_io"
+            sanitize_event_id("chat-dev.203.0.113.10.sslip.io"),
+            "chat-dev_203_0_113_10_sslip_io"
         );
     }
 
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn sanitized_supervisor_event_names_are_valid_for_tauri() {
         // Tauri only allows: alphanumeric, `-`, `/`, `:`, `_`
-        let org_id = "zulip-dev-live.5.161.60.86.sslip.io";
+        let org_id = "chat-dev.203.0.113.10.sslip.io";
         let event_id = sanitize_event_id(org_id);
 
         let event_names = [

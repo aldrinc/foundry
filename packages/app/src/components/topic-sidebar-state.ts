@@ -1,4 +1,4 @@
-import type { Topic } from "@zulip/desktop/bindings"
+import type { Topic } from "@foundry/desktop/bindings"
 import type { UnreadItem } from "../context/unread-state"
 
 export const RESOLVED_TOPIC_PREFIX = "✔ "

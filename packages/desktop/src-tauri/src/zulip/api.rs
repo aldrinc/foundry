@@ -169,32 +169,49 @@ impl ZulipClient {
 
     /// POST /api/v1/register — Register event queue and get initial state
     pub async fn register_queue(&self) -> Result<RegisterResponse, String> {
-        self.register_queue_with(
-            &[
-                "message",
-                "typing",
-                "presence",
-                "reaction",
-                "subscription",
-                "update_message",
-                "delete_message",
-                "update_message_flags",
-                "realm",
-                "realm_domains",
-                "realm_user",
-                "user_topic",
-                "heartbeat",
-            ],
-            &[
-                "subscription",
-                "realm",
-                "realm_domains",
-                "realm_user",
-                "recent_private_conversations",
-                "user_topic",
-            ],
-        )
-        .await
+        let mut response: RegisterResponse = self
+            .register_queue_with(
+                &[
+                    "message",
+                    "typing",
+                    "presence",
+                    "reaction",
+                    "subscription",
+                    "update_message",
+                    "delete_message",
+                    "update_message_flags",
+                    "realm",
+                    "realm_domains",
+                    "realm_user",
+                    "user_topic",
+                    "heartbeat",
+                ],
+                &[
+                    "subscription",
+                    "realm",
+                    "realm_domains",
+                    "realm_user",
+                    "recent_private_conversations",
+                    "user_topic",
+                ],
+            )
+            .await?;
+
+        if response.realm_users.is_empty() {
+            match self.get_users().await {
+                Ok(users) => {
+                    response.realm_users = users;
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        error = %error,
+                        "Register queue returned no realm users and fallback user fetch failed"
+                    );
+                }
+            }
+        }
+
+        Ok(response)
     }
 
     /// DELETE /api/v1/events — Delete a previously-registered event queue.
@@ -1593,21 +1610,21 @@ mod tests {
     #[test]
     fn resolves_relative_realm_media_urls() {
         let resolved = resolve_realm_media_url(
-            "https://zulip.meridian.cv",
+            "https://chat.example.invalid",
             "/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
         )
         .unwrap();
 
         assert_eq!(
             resolved.as_str(),
-            "https://zulip.meridian.cv/user_uploads/thumbnail/3/5b/file.png/840x560.webp"
+            "https://chat.example.invalid/user_uploads/thumbnail/3/5b/file.png/840x560.webp"
         );
     }
 
     #[test]
     fn rejects_cross_origin_media_urls() {
         let error = resolve_realm_media_url(
-            "https://zulip.meridian.cv",
+            "https://chat.example.invalid",
             "https://example.com/user_uploads/file.png",
         )
         .unwrap_err();

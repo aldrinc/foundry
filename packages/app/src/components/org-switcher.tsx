@@ -1,6 +1,6 @@
 import { createSignal, For, Show, onMount } from "solid-js"
-import { commands } from "@zulip/desktop/bindings"
-import type { SavedServerStatus } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { SavedServerStatus } from "@foundry/desktop/bindings"
 
 export function OrgSwitcher(props: {
   currentOrgId: string

@@ -743,6 +743,17 @@ async setUnreadBadgeCount(count: number | null) : Promise<Result<null, string>> 
 }
 },
 /**
+ * Play the bundled desktop notification sound from the native layer.
+ */
+async playNotificationSound() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("play_notification_sound") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Get app config value as JSON string (caller parses)
  */
 async getConfig(key: string) : Promise<Result<string | null, string>> {
@@ -957,19 +968,19 @@ export type FetchApiKeyResult = { api_key: string; email: string; user_id?: numb
  */
 export type FoundryProviderAuth = { provider: string; display_name?: string; auth_modes?: string[]; oauth_configured?: boolean; connected?: boolean; default_model?: string | null; credential?: FoundryProviderCredential | null; credential_status?: string | null }
 /**
- * A connected provider credential preview returned by Meridian
+ * A connected provider credential preview returned by the provider auth API
  */
 export type FoundryProviderCredential = { auth_mode?: string | null; label?: string | null; status?: string | null; created_at?: string | null; updated_at?: string | null }
 /**
- * Response from POST /json/meridian/providers/connect or /disconnect
+ * Response from POST /json/foundry/providers/connect or /disconnect
  */
 export type FoundryProviderCredentialResponse = { provider: string; credential?: FoundryProviderCredential | null }
 /**
- * Response from POST /json/meridian/providers/oauth/start
+ * Response from POST /json/foundry/providers/oauth/start
  */
 export type FoundryProviderOauthStartResponse = { provider: string; authorize_url?: string | null; state?: string | null; expires_at?: string | null; redirect_uri?: string | null }
 /**
- * Response from GET /json/meridian/providers/auth
+ * Response from GET /json/foundry/providers/auth
  */
 export type FoundryProvidersResponse = { providers?: FoundryProviderAuth[] }
 /**

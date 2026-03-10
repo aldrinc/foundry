@@ -2,7 +2,7 @@ import { createSignal, createEffect, For, Show, onMount } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useNavigation } from "../context/navigation"
 import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { MessageItem } from "../components/message-item"
 import type { Message } from "../context/zulip-sync"
 

@@ -70,3 +70,77 @@ class FoundryCloudProvisioningTest(ZulipTestCase):
         realm = get_realm("acme-sync")
         teammate = UserProfile.objects.get(realm=realm, delivery_email="teammate@acme.test")
         self.assertEqual(teammate.role, UserProfile.ROLE_MEMBER)
+
+    @patch("zerver.views.foundry_cloud._bootstrap_secret", return_value="core-secret")
+    def test_provision_tenant_reuses_root_realm(self, mock_secret: object) -> None:
+        root_realm = get_realm("zulip")
+        root_realm.string_id = ""
+        root_realm.save(update_fields=["string_id"])
+
+        result = self.client_post(
+            "/api/v1/foundry/cloud/tenants/provision",
+            info=json.dumps(
+                {
+                    "organization_id": "org-1",
+                    "realm_subdomain": "__root__",
+                    "realm_name": "Foundry Root",
+                    "owner_email": "root-owner@acme.test",
+                    "owner_full_name": "Root Owner",
+                    "owner_password": "owner-password",
+                    "role": "owner",
+                }
+            ),
+            content_type="application/json",
+            headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
+        )
+        self.assert_json_success(result)
+        payload = self.json_response(result)
+
+        root_realm.refresh_from_db()
+        self.assertEqual(payload["realm"]["id"], root_realm.id)
+        self.assertEqual(payload["realm"]["string_id"], "")
+        self.assertEqual(payload["realm_created"], False)
+        owner = UserProfile.objects.get(realm=root_realm, delivery_email="root-owner@acme.test")
+        self.assertEqual(owner.role, UserProfile.ROLE_REALM_OWNER)
+
+    @patch("zerver.views.foundry_cloud._bootstrap_secret", return_value="core-secret")
+    def test_sync_member_adds_member_to_root_realm(self, mock_secret: object) -> None:
+        root_realm = get_realm("zulip")
+        root_realm.string_id = ""
+        root_realm.save(update_fields=["string_id"])
+
+        self.client_post(
+            "/api/v1/foundry/cloud/tenants/provision",
+            info=json.dumps(
+                {
+                    "organization_id": "org-1",
+                    "realm_subdomain": "__root__",
+                    "realm_name": "Foundry Root",
+                    "owner_email": "root-owner@acme.test",
+                    "owner_full_name": "Root Owner",
+                    "owner_password": "owner-password",
+                    "role": "owner",
+                }
+            ),
+            content_type="application/json",
+            headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
+        )
+
+        result = self.client_post(
+            "/api/v1/foundry/cloud/tenants/__root__/members/sync",
+            info=json.dumps(
+                {
+                    "email": "root-teammate@acme.test",
+                    "full_name": "Root Teammate",
+                    "password": "teammate-password",
+                    "role": "member",
+                }
+            ),
+            content_type="application/json",
+            headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
+        )
+        self.assert_json_success(result)
+
+        root_realm.refresh_from_db()
+        teammate = UserProfile.objects.get(realm=root_realm, delivery_email="root-teammate@acme.test")
+        self.assertEqual(teammate.role, UserProfile.ROLE_MEMBER)

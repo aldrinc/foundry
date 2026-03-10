@@ -28,8 +28,8 @@ import {
   markManualLogout,
   shouldSkipAutoLogin,
 } from "./manual-logout"
-import { commands } from "@zulip/desktop/bindings"
-import type { LoginResult, Subscription, User, Message, SavedServerStatus } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { LoginResult, Subscription, User, Message, SavedServerStatus } from "@foundry/desktop/bindings"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
@@ -273,6 +273,13 @@ function AppShell(props: {
       props.loginResult.unread_msgs,
       props.loginResult.recent_private_conversations,
     )
+
+    if ((props.loginResult.users || []).length <= 1) {
+      void commands.getUsers(props.loginResult.org_id).then((result) => {
+        if (result.status !== "ok" || result.data.length <= 1) return
+        sync.replaceUsers(result.data)
+      }).catch(() => {})
+    }
 
     void commands.getSavedServerStatuses().then((result) => {
       if (result.status !== "ok") return

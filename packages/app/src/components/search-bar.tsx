@@ -2,7 +2,7 @@ import { createSignal, Show, For } from "solid-js"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
 import { useZulipSync } from "../context/zulip-sync"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import type { Message } from "../context/zulip-sync"
 
 export function SearchBar(props: { onClose?: () => void }) {

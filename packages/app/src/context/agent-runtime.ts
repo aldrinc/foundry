@@ -1,4 +1,4 @@
-import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
 
 export interface DelegateAgentRuntimeShape {
   id: string

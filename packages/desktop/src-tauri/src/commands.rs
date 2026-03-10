@@ -603,13 +603,13 @@ mod tests {
 
     #[test]
     fn recognizes_zulip_mobile_flow_callbacks() {
-        let url = Url::parse("zulip://login?realm=https%3A%2F%2Fzulip.meridian.cv").unwrap();
+        let url = Url::parse("zulip://login?realm=https%3A%2F%2Fchat.example.invalid").unwrap();
         assert!(is_sso_callback_url(&url));
     }
 
     #[test]
     fn recognizes_foundry_mobile_flow_callbacks() {
-        let url = Url::parse("foundry://login?realm=https%3A%2F%2Fzulip.meridian.cv").unwrap();
+        let url = Url::parse("foundry://login?realm=https%3A%2F%2Fchat.example.invalid").unwrap();
         assert!(is_sso_callback_url(&url));
     }
 

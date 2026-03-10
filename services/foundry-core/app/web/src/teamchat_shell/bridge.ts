@@ -6,7 +6,7 @@ import * as teamchat_sidebar_actions from "./actions/sidebar.ts";
 import * as teamchat_composer_adapter from "./adapters/composer.ts";
 import * as teamchat_conversation_adapter from "./adapters/conversation.ts";
 import * as teamchat_events_adapter from "./adapters/events.ts";
-import * as teamchat_meridian_adapter from "./adapters/meridian.ts";
+import * as teamchat_foundry_adapter from "./adapters/foundry.ts";
 import * as teamchat_message_adapter from "./adapters/messages.ts";
 import * as teamchat_sidebar_adapter from "./adapters/sidebar.ts";
 import * as teamchat_events from "./events.ts";
@@ -23,7 +23,7 @@ export type TeamchatBridge = {
         get_message_feed_model: typeof teamchat_message_adapter.get_message_feed_model;
         get_sidebar_model: typeof teamchat_sidebar_adapter.get_sidebar_model;
         get_composer_model: typeof teamchat_composer_adapter.get_composer_model;
-        get_meridian_state: typeof teamchat_meridian_adapter.get_meridian_state;
+        get_foundry_state: typeof teamchat_foundry_adapter.get_foundry_state;
     };
     actions: {
         navigation: typeof teamchat_navigation_actions;
@@ -31,9 +31,9 @@ export type TeamchatBridge = {
         composer: typeof teamchat_composer_actions;
         sidebar: typeof teamchat_sidebar_actions;
         overlays: typeof teamchat_overlay_actions;
-        meridian: {
-            launch_create_task_modal_for_topic: typeof teamchat_meridian_adapter.launch_create_task_modal_for_topic;
-            open_task_from_topic_list: typeof teamchat_meridian_adapter.open_task_from_topic_list;
+        foundry: {
+            launch_create_task_modal_for_topic: typeof teamchat_foundry_adapter.launch_create_task_modal_for_topic;
+            open_task_from_topic_list: typeof teamchat_foundry_adapter.open_task_from_topic_list;
         };
     };
     events: {
@@ -66,7 +66,7 @@ function create_bridge(): TeamchatBridge {
             get_message_feed_model: teamchat_message_adapter.get_message_feed_model,
             get_sidebar_model: teamchat_sidebar_adapter.get_sidebar_model,
             get_composer_model: teamchat_composer_adapter.get_composer_model,
-            get_meridian_state: teamchat_meridian_adapter.get_meridian_state,
+            get_foundry_state: teamchat_foundry_adapter.get_foundry_state,
         },
         actions: {
             navigation: teamchat_navigation_actions,
@@ -74,10 +74,10 @@ function create_bridge(): TeamchatBridge {
             composer: teamchat_composer_actions,
             sidebar: teamchat_sidebar_actions,
             overlays: teamchat_overlay_actions,
-            meridian: {
+            foundry: {
                 launch_create_task_modal_for_topic:
-                    teamchat_meridian_adapter.launch_create_task_modal_for_topic,
-                open_task_from_topic_list: teamchat_meridian_adapter.open_task_from_topic_list,
+                    teamchat_foundry_adapter.launch_create_task_modal_for_topic,
+                open_task_from_topic_list: teamchat_foundry_adapter.open_task_from_topic_list,
             },
         },
         events: {

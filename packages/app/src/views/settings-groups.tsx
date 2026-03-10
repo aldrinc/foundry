@@ -1,7 +1,7 @@
 import { createSignal, createMemo, onMount, For, Show } from "solid-js"
 import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
-import type { UserGroup } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { UserGroup } from "@foundry/desktop/bindings"
 
 export function SettingsGroups() {
   const org = useOrg()

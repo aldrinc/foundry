@@ -52,7 +52,7 @@ class _ControlPlaneGitHubApiHandler(BaseHTTPRequestHandler):
                     {
                         "id": 115185467,
                         "repository_selection": "selected",
-                        "account": {"login": "aldrinc", "type": "User"},
+                        "account": {"login": "example-org", "type": "Organization"},
                     }
                 ]
             )
@@ -66,6 +66,22 @@ class _ControlPlaneGitHubApiHandler(BaseHTTPRequestHandler):
 
 class _ControlPlaneCoreApiHandler(BaseHTTPRequestHandler):
     tenant_members: dict[str, list[dict[str, object]]] = {}
+
+    @staticmethod
+    def _realm_payload(realm_subdomain: str, realm_name: str) -> dict[str, object]:
+        if realm_subdomain == "__root__":
+            return {
+                "id": 1,
+                "string_id": "",
+                "name": realm_name,
+                "url": "https://core-dev.foundry.test",
+            }
+        return {
+            "id": 1,
+            "string_id": realm_subdomain,
+            "name": realm_name,
+            "url": f"https://{realm_subdomain}.core-dev.foundry.test",
+        }
 
     def _write_json(self, payload: dict[str, object] | list[dict[str, object]]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
@@ -89,12 +105,7 @@ class _ControlPlaneCoreApiHandler(BaseHTTPRequestHandler):
             self._write_json(
                 {
                     "result": "success",
-                    "realm": {
-                        "id": 1,
-                        "string_id": realm_subdomain,
-                        "name": payload["realm_name"],
-                        "url": f"https://{realm_subdomain}.core-dev.foundry.test",
-                    },
+                    "realm": self._realm_payload(realm_subdomain, str(payload["realm_name"])),
                     "owner": {
                         "user_id": 10,
                         "email": owner_email,
@@ -125,11 +136,7 @@ class _ControlPlaneCoreApiHandler(BaseHTTPRequestHandler):
                         "role": payload["role"],
                     },
                     "created": True,
-                    "realm": {
-                        "id": 1,
-                        "string_id": realm_subdomain,
-                        "url": f"https://{realm_subdomain}.core-dev.foundry.test",
-                    },
+                    "realm": self._realm_payload(realm_subdomain, ""),
                 }
             )
             return
@@ -380,7 +387,7 @@ class ControlPlaneTests(unittest.TestCase):
         self.addCleanup(lambda: Path(handle.name).unlink(missing_ok=True))
         return Path(handle.name)
 
-    def _create_client(self) -> TestClient:
+    def _create_client(self, *, core_realm_key_override: str = "") -> TestClient:
         private_key_path = self._write_private_key()
         database_handle = tempfile.NamedTemporaryFile("wb", delete=False)
         database_handle.close()
@@ -568,6 +575,7 @@ raise SystemExit(0)
                 "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "bootstrap-password",
                 "FOUNDRY_CORE_URL": f"http://127.0.0.1:{core_server.server_address[1]}",
                 "FOUNDRY_CORE_BOOTSTRAP_SECRET": "core-bootstrap-secret",
+                "FOUNDRY_CORE_REALM_KEY_OVERRIDE": core_realm_key_override,
                 "FOUNDRY_GITHUB_APP_ID": "3048941",
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
@@ -594,14 +602,49 @@ raise SystemExit(0)
         self.addCleanup(lambda: os.environ.pop("FAKE_CODER_PROVISIONERS", None))
         return TestClient(create_app(config))
 
+    def _login_admin(self, client: TestClient) -> None:
+        response = client.post(
+            "/login",
+            data={
+                "email": "platform-admin@foundry.test",
+                "password": "bootstrap-password",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+
+    def _signup_owner(
+        self,
+        client: TestClient,
+        *,
+        display_name: str = "Owner",
+        email: str = "owner@example.com",
+        password: str = "owner-password",
+        organization_name: str = "Acme",
+        organization_slug: str = "acme",
+    ) -> str:
+        signup_response = client.post(
+            "/signup",
+            data={
+                "display_name": display_name,
+                "email": email,
+                "password": password,
+                "organization_name": organization_name,
+                "organization_slug": organization_slug,
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(signup_response.status_code, 303)
+        return signup_response.headers["location"].rsplit("/", 1)[-1]
+
     def test_create_organization_initializes_defaults(self) -> None:
         with self._create_client() as client:
+            self._login_admin(client)
             response = client.post(
                 "/api/v1/organizations",
                 json={
                     "slug": "acme",
                     "display_name": "Acme",
-                    "created_by_user_id": "user-1",
                 },
             )
             self.assertEqual(response.status_code, 200)
@@ -615,21 +658,14 @@ raise SystemExit(0)
             self.assertEqual(list_response.status_code, 200)
             self.assertEqual(list_response.json()[0]["slug"], "acme")
 
+    def test_control_plane_api_requires_session(self) -> None:
+        with self._create_client() as client:
+            self.assertEqual(client.get("/api/v1/organizations").status_code, 401)
+            self.assertEqual(client.get("/api/v1/coder/status").status_code, 401)
+
     def test_signup_provisions_core_binding_and_records_coder_block(self) -> None:
         with self._create_client() as client:
-            signup_response = client.post(
-                "/signup",
-                data={
-                    "display_name": "Owner",
-                    "email": "owner@example.com",
-                    "password": "owner-password",
-                    "organization_name": "Acme",
-                    "organization_slug": "acme",
-                },
-                follow_redirects=False,
-            )
-            self.assertEqual(signup_response.status_code, 303)
-            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+            organization_id = self._signup_owner(client)
 
             detail_response = client.get(f"/api/v1/cloud/organizations/{organization_id}")
             self.assertEqual(detail_response.status_code, 200)
@@ -642,22 +678,25 @@ raise SystemExit(0)
             self.assertEqual(payload["coder_binding"]["status"], "blocked")
             self.assertIn("Premium feature", payload["coder_binding"]["detail"])
 
+    def test_signup_uses_core_realm_key_override(self) -> None:
+        with self._create_client(core_realm_key_override="__root__") as client:
+            organization_id = self._signup_owner(
+                client,
+                organization_name="Foundry Root",
+                organization_slug="foundry-root",
+            )
+
+            detail_response = client.get(f"/api/v1/cloud/organizations/{organization_id}")
+            self.assertEqual(detail_response.status_code, 200)
+            payload = detail_response.json()
+            self.assertEqual(payload["organization"]["slug"], "foundry-root")
+            self.assertEqual(payload["core_binding"]["realm_subdomain"], "__root__")
+            self.assertEqual(payload["core_binding"]["realm_url"], "https://core-dev.foundry.test")
+
     def test_signup_provisions_coder_binding_when_coder_allows_org_creation(self) -> None:
         with self._create_client() as client:
             _ControlPlaneCoderApiHandler.create_status_code = 201
-            signup_response = client.post(
-                "/signup",
-                data={
-                    "display_name": "Owner",
-                    "email": "owner@example.com",
-                    "password": "owner-password",
-                    "organization_name": "Acme",
-                    "organization_slug": "acme",
-                },
-                follow_redirects=False,
-            )
-            self.assertEqual(signup_response.status_code, 303)
-            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+            organization_id = self._signup_owner(client)
 
             detail_response = client.get(f"/api/v1/cloud/organizations/{organization_id}")
             self.assertEqual(detail_response.status_code, 200)
@@ -672,15 +711,11 @@ raise SystemExit(0)
 
     def test_runtime_settings_round_trip(self) -> None:
         with self._create_client() as client:
-            create_response = client.post(
-                "/api/v1/organizations",
-                json={
-                    "slug": "foundry",
-                    "display_name": "Foundry",
-                    "created_by_user_id": "user-1",
-                },
+            organization_id = self._signup_owner(
+                client,
+                organization_name="Foundry",
+                organization_slug="foundry",
             )
-            organization_id = create_response.json()["organization"]["organization_id"]
 
             update_response = client.put(
                 f"/api/v1/organizations/{organization_id}/runtime",
@@ -723,21 +758,18 @@ raise SystemExit(0)
 
     def test_bind_github_installation_to_organization(self) -> None:
         with self._create_client() as client:
-            create_response = client.post(
-                "/api/v1/organizations",
-                json={
-                    "slug": "aldrinc",
-                    "display_name": "Aldrinc",
-                    "created_by_user_id": "user-1",
-                },
+            organization_id = self._signup_owner(
+                client,
+                organization_name="Example Org",
+                organization_slug="example-org",
+                email="example-owner@example.com",
             )
-            organization_id = create_response.json()["organization"]["organization_id"]
 
             bind_response = client.post(
                 f"/api/v1/organizations/{organization_id}/github/installations/115185467/bind"
             )
             self.assertEqual(bind_response.status_code, 200)
-            self.assertEqual(bind_response.json()["account_login"], "aldrinc")
+            self.assertEqual(bind_response.json()["account_login"], "example-org")
 
             installation_response = client.get(
                 f"/api/v1/organizations/{organization_id}/github/installation"
@@ -747,18 +779,10 @@ raise SystemExit(0)
 
     def test_invitation_acceptance_syncs_member_to_core_realm(self) -> None:
         with self._create_client() as client:
-            signup_response = client.post(
-                "/signup",
-                data={
-                    "display_name": "Owner",
-                    "email": "owner@example.com",
-                    "password": "owner-password",
-                    "organization_name": "Acme",
-                    "organization_slug": "acme-team",
-                },
-                follow_redirects=False,
+            organization_id = self._signup_owner(
+                client,
+                organization_slug="acme-team",
             )
-            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
 
             invitation_response = client.post(
                 f"/cloud/organizations/{organization_id}/invitations",
@@ -790,6 +814,7 @@ raise SystemExit(0)
 
     def test_coder_status_and_inventory_endpoints(self) -> None:
         with self._create_client() as client:
+            self._login_admin(client)
             status_response = client.get("/api/v1/coder/status")
             self.assertEqual(status_response.status_code, 200)
             self.assertEqual(status_response.json()["build"]["version"], "v2.31.3+test")

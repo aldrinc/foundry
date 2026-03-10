@@ -8,7 +8,7 @@ import render_left_sidebar_topic_actions_popover from "../templates/popovers/lef
 import * as clipboard_handler from "./clipboard_handler.ts";
 import * as confirm_dialog from "./confirm_dialog.ts";
 import {$t_html} from "./i18n.ts";
-import * as meridian_tasks_ui from "./meridian_tasks_ui.ts";
+import * as foundry_tasks_ui from "./foundry_tasks_ui.ts";
 import * as message_delete from "./message_delete.ts";
 import * as message_edit from "./message_edit.ts";
 import * as message_summary from "./message_summary.ts";
@@ -169,8 +169,8 @@ export function initialize(): void {
                     );
                 });
 
-                $popper.one("click", ".sidebar-popover-open-meridian-supervisor", () => {
-                    meridian_tasks_ui.open_supervisor_view_for_topic(stream_id, topic_name);
+                $popper.one("click", ".sidebar-popover-open-foundry-supervisor", () => {
+                    foundry_tasks_ui.open_supervisor_view_for_topic(stream_id, topic_name);
                     popover_menus.hide_current_popover_if_visible(instance);
                 });
 

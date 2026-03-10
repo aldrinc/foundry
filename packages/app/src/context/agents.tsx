@@ -1,7 +1,7 @@
 import { createContext, useContext, type JSX, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { commands } from "@zulip/desktop/bindings"
-import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
   isProviderConnected,

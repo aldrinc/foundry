@@ -2,8 +2,8 @@ import { createSignal, onMount, Show } from "solid-js"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
 import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
-import type { RealmSettingsSnapshot } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { RealmSettingsSnapshot } from "@foundry/desktop/bindings"
 
 export function SettingsOrgProfile() {
   const org = useOrg()

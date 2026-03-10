@@ -1,8 +1,8 @@
 import { createSignal, createMemo, onMount, For, Show } from "solid-js"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
-import { commands } from "@zulip/desktop/bindings"
-import type { RealmSettingsSnapshot, UserGroup, GroupSettingValue, GroupPermissionSetting, RealmDomain } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { RealmSettingsSnapshot, UserGroup, GroupSettingValue, GroupPermissionSetting, RealmDomain } from "@foundry/desktop/bindings"
 import { SettingRow, SettingToggle } from "./settings-general"
 
 /** Human-readable labels for realm permission keys */

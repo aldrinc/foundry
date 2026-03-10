@@ -3,9 +3,10 @@ import type { Message, Reaction } from "../context/zulip-sync"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { MessageActions } from "./message-actions"
 import {
+  hydrateMessageImageCarousels,
   hydrateAuthenticatedMessageImages,
   resolveMessageUrl,
   resolveRealmUrlFromSavedServers,
@@ -135,8 +136,12 @@ export function MessageItem(props: {
   createEffect(() => {
     if (!contentEl) return
     contentEl.innerHTML = sanitizeMessageHtml(props.message.content, serverUrl())
-    const cleanup = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
-    onCleanup(cleanup)
+    const cleanupCarousel = hydrateMessageImageCarousels(contentEl)
+    const cleanupImages = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
+    onCleanup(() => {
+      cleanupImages()
+      cleanupCarousel()
+    })
   })
 
   return (

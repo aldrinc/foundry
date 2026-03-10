@@ -42,3 +42,11 @@ __pycache__/
 *.tfstate.*
 *.tfvars
 *.tfvars.json
+
+services/foundry-core/.zulip-dev-uuid
+services/foundry-server/src/*.egg-info/
+
+docs/architecture/foundry-auth-admin-multitenant-plan.md
+docs/architecture/foundry-priority-inbox-assistant-plan.md
+docs/architecture/foundry-priority-inbox-prototype-technical-plan.md
+docs/architecture/foundry-priority-inbox-skill-validation-plan.md

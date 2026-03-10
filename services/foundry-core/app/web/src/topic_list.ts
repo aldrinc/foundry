@@ -753,8 +753,8 @@ export function initialize({
     $("#stream_filters").on("click", ".topic-box", (e) => {
         const $target = $(e.target);
         if (
-            $target.closest(".meridian-topic-task-link").length > 0 ||
-            $target.closest(".meridian-topic-task-item").length > 0
+            $target.closest(".foundry-topic-task-link").length > 0 ||
+            $target.closest(".foundry-topic-task-item").length > 0
         ) {
             return;
         }

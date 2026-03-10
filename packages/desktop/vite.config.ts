@@ -10,9 +10,9 @@ export default defineConfig({
   clearScreen: false,
   resolve: {
     alias: {
-      "@zulip/app": path.resolve(__dirname, "../app/src"),
-      "@zulip/ui": path.resolve(__dirname, "../ui/src"),
-      "@zulip/desktop": path.resolve(__dirname, "./src"),
+      "@foundry/app": path.resolve(__dirname, "../app/src"),
+      "@foundry/ui": path.resolve(__dirname, "../ui/src"),
+      "@foundry/desktop": path.resolve(__dirname, "./src"),
     },
     // Prefer workspace TypeScript sources over stale generated .js artifacts.
     extensions: [".ts", ".tsx", ".mjs", ".js", ".jsx", ".json"],

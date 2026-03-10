@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import hmac
 import sqlite3
 import uuid
@@ -202,6 +203,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             raise HTTPException(status_code=401, detail="Authentication required.")
         return user
 
+    def require_platform_admin(request: Request) -> PlatformUser:
+        user = require_current_user(request)
+        if not user.is_platform_admin:
+            raise HTTPException(status_code=403, detail="Platform admin access required.")
+        return user
+
     def html_redirect(target: str, *, session_token: str | None = None) -> RedirectResponse:
         response = RedirectResponse(target, status_code=303)
         if session_token is not None:
@@ -249,6 +256,23 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         if max((role_weight(role) for role in membership.roles), default=0) < role_weight(minimum_role):
             raise HTTPException(status_code=403, detail="Organization admin access required.")
         return membership
+
+    def require_org_request_access(
+        request: Request,
+        organization_id: str,
+    ) -> tuple[PlatformUser, OrganizationMembership | None]:
+        user = require_current_user(request)
+        membership = require_org_access(user, organization_id)
+        return user, membership
+
+    def require_org_request_role(
+        request: Request,
+        organization_id: str,
+        minimum_role: OrganizationRole = OrganizationRole.ADMIN,
+    ) -> tuple[PlatformUser, OrganizationMembership | None]:
+        user = require_current_user(request)
+        membership = require_org_role(user, organization_id, minimum_role)
+        return user, membership
 
     def serialize_member_record(membership: OrganizationMembership) -> dict[str, object]:
         user = get_store().get_user(membership.user_id)
@@ -421,6 +445,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         highest = max(membership.roles, key=role_weight)
         return highest.value
 
+    def core_realm_key_for_organization(organization: Organization) -> str:
+        return server_config.core_realm_key_override or organization.slug
+
     def sync_core_binding(
         *,
         organization: Organization,
@@ -431,10 +458,11 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         if not server_config.core_url or not server_config.core_bootstrap_secret_present:
             return None
         current = get_store().get_core_realm_binding(organization.organization_id)
+        target_realm_key = core_realm_key_for_organization(organization)
         if not password and current is None:
             binding = CoreRealmBinding(
                 organization_id=organization.organization_id,
-                realm_subdomain=organization.slug,
+                realm_subdomain=target_realm_key,
                 realm_url="",
                 owner_email=owner.email,
                 status=ProvisioningStatus.PENDING,
@@ -445,7 +473,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         try:
             payload = require_core_client().provision_realm(
                 organization_id=organization.organization_id,
-                realm_subdomain=organization.slug,
+                realm_subdomain=target_realm_key,
                 realm_name=organization.display_name,
                 owner_email=owner.email,
                 owner_full_name=owner.display_name,
@@ -455,7 +483,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         except FoundryCoreRequestError as exc:
             binding = CoreRealmBinding(
                 organization_id=organization.organization_id,
-                realm_subdomain=current.realm_subdomain if current else organization.slug,
+                realm_subdomain=current.realm_subdomain if current else target_realm_key,
                 realm_url=current.realm_url if current else "",
                 owner_email=owner.email,
                 status=ProvisioningStatus.ERROR,
@@ -469,7 +497,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             realm = {}
         binding = CoreRealmBinding(
             organization_id=organization.organization_id,
-            realm_subdomain=str(realm.get("string_id", organization.slug)),
+            realm_subdomain=str(realm.get("string_id", "")).strip() or target_realm_key,
             realm_url=str(realm.get("url", "")),
             owner_email=owner.email,
             status=ProvisioningStatus.READY,
@@ -680,8 +708,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             sync_coder_binding(organization),
         )
 
-    def require_workspace_bootstrap_secret(
-        provided_secret: str | None,
+    def require_workspace_bootstrap_token(
+        owner: str,
+        repo: str,
+        provided_token: str | None,
     ) -> None:
         expected_secret = server_config.workspace_bootstrap_secret
         if not expected_secret:
@@ -689,8 +719,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 status_code=503,
                 detail="Workspace bootstrap secret is not configured.",
             )
-        if not provided_secret or not hmac.compare_digest(provided_secret, expected_secret):
-            raise HTTPException(status_code=401, detail="Invalid workspace bootstrap secret.")
+        repo_identity = f"{owner.strip().lower()}/{repo.strip().lower()}"
+        expected_token = hashlib.sha256(
+            f"{expected_secret}:{repo_identity}".encode("utf-8")
+        ).hexdigest()
+        if not provided_token or not hmac.compare_digest(provided_token, expected_token):
+            raise HTTPException(status_code=401, detail="Invalid workspace bootstrap token.")
 
     def require_local_password_auth() -> None:
         if server_config.auth_provider.value != "local_password":
@@ -710,14 +744,16 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/meta/launch-decisions")
-    def launch_decisions() -> dict[str, object]:
+    def launch_decisions(request: Request) -> dict[str, object]:
+        require_platform_admin(request)
         return LAUNCH_DECISIONS.to_dict()
 
     @app.get("/api/v1/meta/bootstrap")
-    def bootstrap_summary() -> dict[str, object]:
+    def bootstrap_summary(request: Request) -> dict[str, object]:
+        require_platform_admin(request)
         return {
             "service": "foundry-server",
-            "config": server_config.public_summary(),
+            "config": server_config.admin_summary(),
             "launch_decisions": LAUNCH_DECISIONS.to_dict(),
             "next_steps": [
                 "Add OIDC-backed hosted auth and self-host bootstrap auth.",
@@ -898,9 +934,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         user = require_current_user(request)
         organizations = allowed_organizations_for_user(user)
         coder_status: dict[str, object] | None = None
-        if server_config.coder_url and server_config.coder_api_token_present:
+        if user.is_platform_admin and server_config.coder_url and server_config.coder_api_token_present:
             try:
-                coder_status = coder_status_api()
+                coder_status = fetch_coder_status()
             except HTTPException:
                 coder_status = None
         return templates.TemplateResponse(
@@ -1194,29 +1230,40 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/organizations")
-    def list_organizations() -> list[dict[str, object]]:
-        return [serialize_organization(item) for item in get_store().list_organizations()]
+    def list_organizations(request: Request) -> list[dict[str, object]]:
+        user = require_current_user(request)
+        return [serialize_organization(item) for item in allowed_organizations_for_user(user)]
 
     @app.post("/api/v1/organizations")
-    def create_organization(payload: dict[str, object] = Body(default_factory=dict)) -> dict[str, object]:
+    def create_organization(
+        request: Request,
+        payload: dict[str, object] = Body(default_factory=dict),
+    ) -> dict[str, object]:
+        user = require_current_user(request)
         slug = str(payload.get("slug", "")).strip()
         display_name = str(payload.get("display_name", "")).strip()
-        created_by_user_id = str(payload.get("created_by_user_id", "")).strip()
-        owner_user_id = str(payload.get("owner_user_id", created_by_user_id)).strip()
-        support_email = str(payload.get("support_email", server_config.support_email)).strip()
-        if not slug or not display_name or not created_by_user_id or not owner_user_id:
+        owner_user_id = user.user_id
+        if user.is_platform_admin:
+            requested_owner_user_id = str(payload.get("owner_user_id", user.user_id)).strip()
+            if requested_owner_user_id:
+                owner_user_id = requested_owner_user_id
+        owner_user = get_store().get_user(owner_user_id)
+        support_email = str(payload.get("support_email", user.email or server_config.support_email)).strip()
+        if not slug or not display_name:
             raise HTTPException(
                 status_code=400,
-                detail="slug, display_name, created_by_user_id, and owner_user_id are required.",
+                detail="slug and display_name are required.",
             )
+        if owner_user is None:
+            raise HTTPException(status_code=404, detail=f"Owner user not found: {owner_user_id}")
 
         organization = Organization(
             organization_id=str(payload.get("organization_id", uuid.uuid4())),
             slug=slug,
             display_name=display_name,
-            created_by_user_id=created_by_user_id,
+            created_by_user_id=user.user_id,
             support_email=support_email,
-            self_host_mode=bool(payload.get("self_host_mode", False)),
+            self_host_mode=bool(payload.get("self_host_mode", False)) if user.is_platform_admin else False,
         )
         membership = OrganizationMembership(
             organization_id=organization.organization_id,
@@ -1249,9 +1296,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/organizations/{organization_id}")
-    def organization_detail(organization_id: str) -> dict[str, object]:
+    def organization_detail(request: Request, organization_id: str) -> dict[str, object]:
+        user, _membership = require_org_request_access(request, organization_id)
         organization = require_organization(organization_id)
-        memberships = get_store().list_memberships(organization_id)
+        memberships = (
+            get_store().list_memberships(organization_id)
+            if user.is_platform_admin or _membership is not None
+            else []
+        )
         runtime_settings = get_store().get_runtime_settings(organization_id)
         workspace_pool = get_store().get_workspace_pool(organization_id)
         github_installation = get_store().get_github_installation(organization_id)
@@ -1266,7 +1318,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         }
 
     @app.get("/api/v1/organizations/{organization_id}/runtime")
-    def organization_runtime_settings(organization_id: str) -> dict[str, object]:
+    def organization_runtime_settings(request: Request, organization_id: str) -> dict[str, object]:
+        require_org_request_access(request, organization_id)
         require_organization(organization_id)
         runtime_settings = get_store().get_runtime_settings(organization_id)
         if runtime_settings is None:
@@ -1275,9 +1328,11 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.put("/api/v1/organizations/{organization_id}/runtime")
     def update_organization_runtime_settings(
+        request: Request,
         organization_id: str,
         payload: dict[str, object] = Body(default_factory=dict),
     ) -> dict[str, object]:
+        require_org_request_role(request, organization_id, OrganizationRole.RUNTIME_ADMIN)
         require_organization(organization_id)
         credentials = tuple(
             RuntimeProviderCredential(
@@ -1317,7 +1372,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         return serialize_runtime_settings(runtime_settings)
 
     @app.get("/api/v1/organizations/{organization_id}/workspace-pool")
-    def organization_workspace_pool(organization_id: str) -> dict[str, object]:
+    def organization_workspace_pool(request: Request, organization_id: str) -> dict[str, object]:
+        require_org_request_access(request, organization_id)
         require_organization(organization_id)
         workspace_pool = get_store().get_workspace_pool(organization_id)
         if workspace_pool is None:
@@ -1326,9 +1382,11 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.put("/api/v1/organizations/{organization_id}/workspace-pool")
     def update_organization_workspace_pool(
+        request: Request,
         organization_id: str,
         payload: dict[str, object] = Body(default_factory=dict),
     ) -> dict[str, object]:
+        require_org_request_role(request, organization_id, OrganizationRole.ADMIN)
         require_organization(organization_id)
         current = get_store().get_workspace_pool(organization_id) or default_workspace_pool(organization_id)
         workspace_pool = OrganizationWorkspacePool(
@@ -1343,28 +1401,39 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         return serialize_workspace_pool(workspace_pool)
 
     @app.get("/api/v1/organizations/{organization_id}/github/installation")
-    def organization_github_installation(organization_id: str) -> dict[str, object] | None:
+    def organization_github_installation(
+        request: Request,
+        organization_id: str,
+    ) -> dict[str, object] | None:
+        require_org_request_access(request, organization_id)
         require_organization(organization_id)
         return serialize_github_installation(get_store().get_github_installation(organization_id))
 
-    @app.get("/api/v1/github/app")
-    def github_app_summary() -> dict[str, object]:
+    def fetch_github_app_summary() -> dict[str, object]:
         client = require_github_app_client()
         try:
             return client.describe_app()
         except GitHubAppRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    @app.get("/api/v1/github/installations")
-    def github_installations() -> list[dict[str, object]]:
+    @app.get("/api/v1/github/app")
+    def github_app_summary(request: Request) -> dict[str, object]:
+        require_platform_admin(request)
+        return fetch_github_app_summary()
+
+    def fetch_github_installations() -> list[dict[str, object]]:
         client = require_github_app_client()
         try:
             return client.list_installations()
         except GitHubAppRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    @app.get("/api/v1/coder/status")
-    def coder_status_api() -> dict[str, object]:
+    @app.get("/api/v1/github/installations")
+    def github_installations(request: Request) -> list[dict[str, object]]:
+        require_platform_admin(request)
+        return fetch_github_installations()
+
+    def fetch_coder_status() -> dict[str, object]:
         client = require_coder_client()
         try:
             build_info = client.build_info()
@@ -1382,33 +1451,44 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "healthy_workspace_count": sum(1 for item in workspaces if item["healthy"]),
         }
 
-    @app.get("/api/v1/coder/templates")
-    def coder_templates() -> list[dict[str, object]]:
+    @app.get("/api/v1/coder/status")
+    def coder_status_api(request: Request) -> dict[str, object]:
+        require_platform_admin(request)
+        return fetch_coder_status()
+
+    def fetch_coder_templates() -> list[dict[str, object]]:
         client = require_coder_client()
         try:
             return client.list_templates()
         except CoderRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    @app.get("/api/v1/coder/workspaces")
-    def coder_workspaces() -> list[dict[str, object]]:
+    @app.get("/api/v1/coder/templates")
+    def coder_templates(request: Request) -> list[dict[str, object]]:
+        require_platform_admin(request)
+        return fetch_coder_templates()
+
+    def fetch_coder_workspaces() -> list[dict[str, object]]:
         client = require_coder_client()
         try:
             return client.list_workspaces()
         except CoderRequestError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
+    @app.get("/api/v1/coder/workspaces")
+    def coder_workspaces(request: Request) -> list[dict[str, object]]:
+        require_platform_admin(request)
+        return fetch_coder_workspaces()
+
     @app.post("/api/v1/organizations/{organization_id}/github/installations/{installation_id}/bind")
     def bind_github_installation(
+        request: Request,
         organization_id: str,
         installation_id: str,
     ) -> dict[str, object]:
+        require_org_request_role(request, organization_id, OrganizationRole.ADMIN)
         require_organization(organization_id)
-        client = require_github_app_client()
-        try:
-            installations = client.list_installations()
-        except GitHubAppRequestError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        installations = fetch_github_installations()
 
         match = next(
             (
@@ -1434,7 +1514,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         return serialize_github_installation(installation) or {}
 
     @app.get("/api/v1/github/repositories/{owner}/{repo}/binding")
-    def github_repository_binding(owner: str, repo: str) -> dict[str, object]:
+    def github_repository_binding(request: Request, owner: str, repo: str) -> dict[str, object]:
+        require_platform_admin(request)
         client = require_github_app_client()
         try:
             return client.describe_repository_binding(owner, repo)
@@ -1445,9 +1526,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     def github_repository_clone_token(
         owner: str,
         repo: str,
-        x_foundry_workspace_bootstrap_secret: str | None = Header(default=None),
+        x_foundry_workspace_bootstrap_token: str | None = Header(default=None),
     ) -> dict[str, object]:
-        require_workspace_bootstrap_secret(x_foundry_workspace_bootstrap_secret)
+        require_workspace_bootstrap_token(owner, repo, x_foundry_workspace_bootstrap_token)
         client = require_github_app_client()
         try:
             return client.create_repository_clone_token(owner, repo)

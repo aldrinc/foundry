@@ -35,6 +35,17 @@ class CloudAuthTests(unittest.TestCase):
         )
         return TestClient(create_app(config))
 
+    def _login_admin(self, client: TestClient) -> None:
+        response = client.post(
+            "/login",
+            data={
+                "email": "admin@foundry.test",
+                "password": "bootstrap-password",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+
     def test_signup_creates_user_session_and_org(self) -> None:
         with self._create_client() as client:
             response = client.post(
@@ -60,28 +71,36 @@ class CloudAuthTests(unittest.TestCase):
     def test_bootstrap_admin_can_view_all_organizations(self) -> None:
         with self._create_client() as client:
             create_response = client.post(
-                "/api/v1/organizations",
-                json={
-                    "slug": "foundry",
-                    "display_name": "Foundry",
-                    "created_by_user_id": "seed-user",
-                },
-            )
-            self.assertEqual(create_response.status_code, 200)
-
-            login_response = client.post(
-                "/login",
+                "/signup",
                 data={
-                    "email": "admin@foundry.test",
-                    "password": "bootstrap-password",
+                    "display_name": "Owner",
+                    "email": "owner@example.com",
+                    "password": "owner-password",
+                    "organization_name": "Foundry",
+                    "organization_slug": "foundry",
                 },
                 follow_redirects=False,
             )
-            self.assertEqual(login_response.status_code, 303)
+            self.assertEqual(create_response.status_code, 303)
+
+            self._login_admin(client)
 
             dashboard_response = client.get("/cloud")
             self.assertEqual(dashboard_response.status_code, 200)
             self.assertIn("Foundry", dashboard_response.text)
+
+    def test_authenticated_org_api_requires_real_owner(self) -> None:
+        with self._create_client() as client:
+            self._login_admin(client)
+            create_response = client.post(
+                "/api/v1/organizations",
+                json={
+                    "slug": "foundry",
+                    "display_name": "Foundry",
+                    "owner_user_id": "missing-user",
+                },
+            )
+            self.assertEqual(create_response.status_code, 404)
 
     def test_invitation_acceptance_adds_member(self) -> None:
         with self._create_client() as owner_client:

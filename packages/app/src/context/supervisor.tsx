@@ -1,13 +1,13 @@
 import { createContext, createEffect, useContext, type JSX, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import type {
   SupervisorSession,
   SupervisorEvent,
   SupervisorTask,
   JsonValue,
-} from "@zulip/desktop/bindings"
+} from "@foundry/desktop/bindings"
 import {
   unwrapSupervisorMessageWithDelegates,
   wrapSupervisorMessageWithDelegates,

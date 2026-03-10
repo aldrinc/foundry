@@ -2,17 +2,17 @@
 
 Foundry-owned Coder deployment pack for the dev environment.
 
-This deployment intentionally avoids Meridian-specific OIDC, domains, and
-network defaults. It runs a local Coder + Postgres stack on the Foundry dev
-host and exposes it through Caddy.
+This deployment intentionally avoids product-specific OIDC, domain, and
+network defaults. It runs a local Coder + Postgres stack on a Foundry-managed
+dev host and exposes it through Caddy.
 
 ## Fork model
 
 Foundry does not rely on Coder's enterprise-only organization endpoints. This
 deployment builds a Foundry-owned AGPL fork from a pinned upstream tag and
-applies the tracked patch in [coder-agpl-org-create.patch](/Users/aldrinclement/Documents/programming/ideas-space/foundry/infra/apps/foundry-coder/coder-agpl-org-create.patch).
+applies the tracked patch in `coder-agpl-org-create.patch`.
 The patched binary is produced on the target host by
-[build-foundry-coder-fork.sh](/Users/aldrinclement/Documents/programming/ideas-space/foundry/infra/apps/foundry-coder/build-foundry-coder-fork.sh)
+`build-foundry-coder-fork.sh`
 and then packaged into the runtime image that actually serves `coder-dev`.
 
 The current custom delta is intentionally small:
@@ -34,7 +34,7 @@ without patching or bypassing enterprise license checks.
 - bootstrap a Foundry-owned Coder control plane
 - build a Foundry-managed Coder fork image from a pinned upstream tag
 - publish the `foundry-hetzner-workspace` template into that control plane
-- validate that Foundry workspaces can be provisioned without Meridian
+- validate that Foundry workspaces can be provisioned without prior internal infrastructure assumptions
 
 ## What it does not do yet
 

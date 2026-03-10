@@ -133,7 +133,7 @@ pub struct TaskEventsResponse {
     pub events: Vec<TaskEvent>,
 }
 
-/// A connected provider credential preview returned by Meridian
+/// A connected provider credential preview returned by the provider auth API
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProviderCredential {
     #[serde(default)]
@@ -168,14 +168,14 @@ pub struct FoundryProviderAuth {
     pub credential_status: Option<String>,
 }
 
-/// Response from GET /json/meridian/providers/auth
+/// Response from GET /json/foundry/providers/auth
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProvidersResponse {
     #[serde(default)]
     pub providers: Vec<FoundryProviderAuth>,
 }
 
-/// Response from POST /json/meridian/providers/connect or /disconnect
+/// Response from POST /json/foundry/providers/connect or /disconnect
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProviderCredentialResponse {
     pub provider: String,
@@ -183,7 +183,7 @@ pub struct FoundryProviderCredentialResponse {
     pub credential: Option<FoundryProviderCredential>,
 }
 
-/// Response from POST /json/meridian/providers/oauth/start
+/// Response from POST /json/foundry/providers/oauth/start
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct FoundryProviderOauthStartResponse {
     pub provider: String,

@@ -3,8 +3,8 @@ import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
 import { useSupervisor } from "../context/supervisor"
-import { commands } from "@zulip/desktop/bindings"
-import type { NarrowFilter } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { NarrowFilter } from "@foundry/desktop/bindings"
 import { MessageItem } from "./message-item"
 import { SearchBar } from "./search-bar"
 
@@ -42,6 +42,12 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
 
   const messages = () => sync.store.messages[props.narrow] || []
   const loadState = () => sync.store.messageLoadState[props.narrow] || "idle"
+
+  const scrollToBottom = () => {
+    if (!scrollContainer) return
+    scrollContainer.scrollTop = scrollContainer.scrollHeight
+    isAtBottom = true
+  }
 
   const markMessagesRead = async (messageIds: number[]) => {
     if (messageIds.length === 0) return
@@ -144,7 +150,7 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
     const _ = messages().length
     if (isAtBottom && scrollContainer) {
       requestAnimationFrame(() => {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight
+        scrollToBottom()
       })
     }
   })

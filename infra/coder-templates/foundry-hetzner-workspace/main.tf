@@ -8,7 +8,7 @@ data "coder_workspace_owner" "me" {}
 data "coder_parameter" "repo_id" {
   name         = "repo_id"
   display_name = "Repository ID"
-  description  = "Repository identity (for example: aldrinc/foundry)"
+  description  = "Repository identity (for example: example-org/foundry)"
   type         = "string"
   default      = ""
   mutable      = true
@@ -26,9 +26,15 @@ data "coder_parameter" "repo_url" {
 }
 
 locals {
-  workspace_key = data.coder_workspace.me.id
-  volume_name   = "coder-${local.workspace_key}-home"
-  server_name   = "coder-${local.workspace_key}"
+  workspace_key      = data.coder_workspace.me.id
+  volume_name        = "coder-${local.workspace_key}-home"
+  server_name        = "coder-${local.workspace_key}"
+  normalized_repo_id = lower(trimspace(data.coder_parameter.repo_id.value))
+  workspace_bootstrap_token = (
+    local.normalized_repo_id != "" && trimspace(var.workspace_bootstrap_secret) != ""
+    ? sha256("${trimspace(var.workspace_bootstrap_secret)}:${local.normalized_repo_id}")
+    : ""
+  )
   labels = {
     managed      = "coder"
     stack        = "foundry"
@@ -88,7 +94,7 @@ resource "hcloud_server" "runner" {
     repo_url                   = data.coder_parameter.repo_url.value
     runner_daemon_download_url = var.runner_daemon_download_url
     foundry_server_url         = var.foundry_server_url
-    workspace_bootstrap_secret = var.workspace_bootstrap_secret
+    workspace_bootstrap_token  = local.workspace_bootstrap_token
     netbird_setup_key          = var.netbird_setup_key
     netbird_management_url     = var.netbird_management_url
     extra_hosts_json           = var.extra_hosts_json

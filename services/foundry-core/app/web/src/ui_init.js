@@ -69,8 +69,8 @@ import * as linkifiers from "./linkifiers.ts";
 import * as local_message from "./local_message.ts";
 import * as markdown from "./markdown.ts";
 import * as markdown_config from "./markdown_config.ts";
-import * as meridian_supervisor_sidebar from "./meridian_supervisor_sidebar.ts";
-import * as meridian_tasks_ui from "./meridian_tasks_ui.ts";
+import * as foundry_supervisor_sidebar from "./foundry_supervisor_sidebar.ts";
+import * as foundry_tasks_ui from "./foundry_tasks_ui.ts";
 import * as message_actions_popover from "./message_actions_popover.ts";
 import * as message_edit_history from "./message_edit_history.ts";
 import * as message_fetch from "./message_fetch.ts";
@@ -756,8 +756,8 @@ export async function initialize_everything(state_data) {
             }
         },
     });
-    meridian_tasks_ui.initialize();
-    meridian_supervisor_sidebar.initialize();
+    foundry_tasks_ui.initialize();
+    foundry_supervisor_sidebar.initialize();
     drafts.initialize_ui();
     drafts_overlay_ui.initialize();
     // This needs to happen after activity_ui.initialize, so that user_filter

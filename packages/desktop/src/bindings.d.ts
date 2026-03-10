@@ -274,6 +274,10 @@ export declare const commands: {
      */
     setUnreadBadgeCount(count: number | null): Promise<Result<null, string>>;
     /**
+     * Play the bundled desktop notification sound from the native layer.
+     */
+    playNotificationSound(): Promise<Result<null, string>>;
+    /**
      * Get app config value as JSON string (caller parses)
      */
     getConfig(key: string): Promise<Result<string | null, string>>;
@@ -478,7 +482,7 @@ export type FoundryProviderAuth = {
     credential_status?: string | null;
 };
 /**
- * A connected provider credential preview returned by Meridian
+ * A connected provider credential preview returned by the provider auth API
  */
 export type FoundryProviderCredential = {
     auth_mode?: string | null;
@@ -488,14 +492,14 @@ export type FoundryProviderCredential = {
     updated_at?: string | null;
 };
 /**
- * Response from POST /json/meridian/providers/connect or /disconnect
+ * Response from POST /json/foundry/providers/connect or /disconnect
  */
 export type FoundryProviderCredentialResponse = {
     provider: string;
     credential?: FoundryProviderCredential | null;
 };
 /**
- * Response from POST /json/meridian/providers/oauth/start
+ * Response from POST /json/foundry/providers/oauth/start
  */
 export type FoundryProviderOauthStartResponse = {
     provider: string;
@@ -505,7 +509,7 @@ export type FoundryProviderOauthStartResponse = {
     redirect_uri?: string | null;
 };
 /**
- * Response from GET /json/meridian/providers/auth
+ * Response from GET /json/foundry/providers/auth
  */
 export type FoundryProvidersResponse = {
     providers?: FoundryProviderAuth[];

@@ -1,8 +1,8 @@
 import { createContext, useContext, type JSX, onMount, onCleanup } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { listen } from "@tauri-apps/api/event"
-import { commands } from "@zulip/desktop/bindings"
-import type { UserTopic, UserTopicVisibilityPolicy } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { UserTopic, UserTopicVisibilityPolicy } from "@foundry/desktop/bindings"
 import { sanitizeEventId } from "../tauri-event-utils"
 import { usePlatform } from "./platform"
 import { useSettings } from "./settings"
@@ -175,6 +175,7 @@ export interface ZulipSync {
   ): void
   setDisconnected(): void
   addMessages(narrow: string, messages: Message[]): void
+  replaceUsers(users: User[]): void
   setMessageLoadState(narrow: string, state: "idle" | "loading" | "loaded-all"): void
   isNarrowHydrated(narrow: string): boolean
   markNarrowHydrated(narrow: string, hydrated: boolean): void
@@ -362,6 +363,11 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       setStore(produce(s => {
         s.messages[narrow] = mergeMessagesById(s.messages[narrow] || [], messages)
       }))
+    },
+
+    replaceUsers(users) {
+      setStore("users", users)
+      syncUnreadUi(store.subscriptions, users, store.currentUserId)
     },
 
     setMessageLoadState(narrow, state) {
@@ -755,9 +761,10 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
     // Event: resync (queue was re-registered)
     handleResync(data: any) {
       if (!data) return
+      const nextUsers = Array.isArray(data.users) && data.users.length > 0 ? data.users : store.users
       setStore(produce(s => {
         if (data.subscriptions) s.subscriptions = data.subscriptions
-        if (data.users) s.users = data.users
+        s.users = nextUsers
         // Clear messages to force refetch
         s.messages = {}
         s.messageLoadState = {}
@@ -767,7 +774,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       seedUnreadState(
         data.unread_msgs,
         data.subscriptions || store.subscriptions,
-        data.users || store.users,
+        nextUsers,
         store.currentUserId,
       )
       seedRecentDirectMessages(data.recent_private_conversations, store.currentUserId)

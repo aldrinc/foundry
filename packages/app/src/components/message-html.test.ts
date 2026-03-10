@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  findImageCarouselRanges,
   resolveAuthenticatedMediaUrl,
   resolveMessageUrl,
   shouldFetchAuthenticatedMedia,
@@ -26,8 +27,8 @@ describe("shouldFetchAuthenticatedMedia", () => {
   test("requires same-origin realm-hosted uploads", () => {
     expect(
       shouldFetchAuthenticatedMedia(
-        "https://zulip.meridian.cv/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
+        "https://chat.example.invalid",
       ),
     ).toBe(true)
   })
@@ -35,8 +36,8 @@ describe("shouldFetchAuthenticatedMedia", () => {
   test("ignores public same-origin static assets", () => {
     expect(
       shouldFetchAuthenticatedMedia(
-        "https://zulip.meridian.cv/static/images/story-tutorial/zulip-compose.png",
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid/static/images/story-tutorial/zulip-compose.png",
+        "https://chat.example.invalid",
       ),
     ).toBe(false)
   })
@@ -45,7 +46,7 @@ describe("shouldFetchAuthenticatedMedia", () => {
     expect(
       shouldFetchAuthenticatedMedia(
         "https://example.com/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid",
       ),
     ).toBe(false)
   })
@@ -55,23 +56,23 @@ describe("resolveAuthenticatedMediaUrl", () => {
   test("prefers a protected thumbnail src when one is present", () => {
     expect(
       resolveAuthenticatedMediaUrl(
-        "https://zulip.meridian.cv/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
+        "https://chat.example.invalid/user_uploads/thumbnail/3/5b/file.png/840x560.webp",
         null,
-        "https://zulip.meridian.cv/user_uploads/3/5b/file.png",
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid/user_uploads/3/5b/file.png",
+        "https://chat.example.invalid",
       ),
-    ).toBe("https://zulip.meridian.cv/user_uploads/thumbnail/3/5b/file.png/840x560.webp")
+    ).toBe("https://chat.example.invalid/user_uploads/thumbnail/3/5b/file.png/840x560.webp")
   })
 
   test("falls back to the protected upload link when the image src is a loader placeholder", () => {
     expect(
       resolveAuthenticatedMediaUrl(
-        "https://zulip.meridian.cv/static/images/loading/loader-black.svg",
+        "https://chat.example.invalid/static/images/loading/loader-black.svg",
         null,
         "/user_uploads/3/5b/file.png",
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid",
       ),
-    ).toBe("https://zulip.meridian.cv/user_uploads/3/5b/file.png")
+    ).toBe("https://chat.example.invalid/user_uploads/3/5b/file.png")
   })
 
   test("uses data-original-src for markdown image placeholders", () => {
@@ -80,8 +81,23 @@ describe("resolveAuthenticatedMediaUrl", () => {
         "/static/images/loading/loader-black.svg",
         "/user_uploads/3/5b/file.png",
         null,
-        "https://zulip.meridian.cv",
+        "https://chat.example.invalid",
       ),
-    ).toBe("https://zulip.meridian.cv/user_uploads/3/5b/file.png")
+    ).toBe("https://chat.example.invalid/user_uploads/3/5b/file.png")
+  })
+})
+
+describe("findImageCarouselRanges", () => {
+  test("returns only consecutive runs with at least two image-only blocks", () => {
+    expect(
+      findImageCarouselRanges([true, true, false, true, false, true, true, true]),
+    ).toEqual([
+      { start: 0, end: 2 },
+      { start: 5, end: 8 },
+    ])
+  })
+
+  test("ignores isolated image blocks", () => {
+    expect(findImageCarouselRanges([false, true, false, true, false])).toEqual([])
   })
 })

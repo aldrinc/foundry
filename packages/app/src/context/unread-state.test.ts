@@ -107,8 +107,8 @@ describe("buildUnreadUiState", () => {
 
     const state = buildUnreadUiState(index, [], [
       { user_id: 7, full_name: "Desdemona" },
-      { user_id: 4, full_name: "Aldrin Clement" },
-      { user_id: 6, full_name: "Auggie Clement" },
+      { user_id: 4, full_name: "Alice Example" },
+      { user_id: 6, full_name: "Bob Example" },
       { user_id: 30, full_name: "Me" },
       { user_id: 101, full_name: "Franky" },
     ], 30)
@@ -119,8 +119,8 @@ describe("buildUnreadUiState", () => {
         kind: "dm",
         narrow: "dm:4,6,30,101",
         user_ids: [4, 6, 30, 101],
-        participant_names: ["Aldrin Clement", "Auggie Clement", "Franky"],
-        label: "Aldrin Clement, Auggie Clement, Franky",
+        participant_names: ["Alice Example", "Bob Example", "Franky"],
+        label: "Alice Example, Bob Example, Franky",
         count: 1,
         last_message_id: 2003,
         message_ids: [2003],

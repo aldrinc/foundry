@@ -1,5 +1,5 @@
 import DOMPurify from "dompurify"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 
 const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z\d+\-.]*:|\/\/|#)/i
 const AUTHENTICATED_MEDIA_PATHS = [
@@ -143,6 +143,165 @@ export function hydrateAuthenticatedMessageImages(
 
   return () => {
     disposed = true
+  }
+}
+
+function isImageOnlyNode(node: ChildNode): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return !(node.textContent || "").trim()
+  }
+  if (!(node instanceof HTMLElement)) return false
+
+  if (node.tagName === "IMG") return true
+
+  if (node.tagName === "A" || node.tagName === "P" || node.tagName === "DIV" || node.tagName === "SPAN") {
+    return Array.from(node.childNodes).every(isImageOnlyNode)
+  }
+
+  return false
+}
+
+function isImageOnlyBlock(element: Element): element is HTMLElement {
+  if (!(element instanceof HTMLElement)) return false
+  if (element.dataset.foundryImageCarousel === "true") return false
+  if (!element.querySelector("img")) return false
+  if (element.querySelector("video, audio, iframe")) return false
+  return Array.from(element.childNodes).every(isImageOnlyNode)
+}
+
+export function findImageCarouselRanges(imageOnlyBlocks: readonly boolean[]): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = []
+  let start = -1
+
+  for (let index = 0; index < imageOnlyBlocks.length; index += 1) {
+    if (imageOnlyBlocks[index]) {
+      if (start < 0) start = index
+      continue
+    }
+
+    if (start >= 0 && index - start > 1) {
+      ranges.push({ start, end: index })
+    }
+    start = -1
+  }
+
+  if (start >= 0 && imageOnlyBlocks.length - start > 1) {
+    ranges.push({ start, end: imageOnlyBlocks.length })
+  }
+
+  return ranges
+}
+
+function setActiveCarouselSlide(
+  slides: HTMLElement[],
+  dots: HTMLButtonElement[],
+  counter: HTMLElement,
+  nextIndex: number,
+) {
+  slides.forEach((slide, index) => {
+    const active = index === nextIndex
+    slide.hidden = !active
+    slide.setAttribute("data-active", active ? "true" : "false")
+  })
+
+  dots.forEach((dot, index) => {
+    const active = index === nextIndex
+    dot.setAttribute("aria-current", active ? "true" : "false")
+    dot.dataset.active = active ? "true" : "false"
+  })
+
+  counter.textContent = `${nextIndex + 1} / ${slides.length}`
+}
+
+export function hydrateMessageImageCarousels(container: HTMLElement): () => void {
+  const cleanups: Array<() => void> = []
+  const children = Array.from(container.children)
+  const ranges = findImageCarouselRanges(children.map((child) => isImageOnlyBlock(child)))
+
+  for (const range of ranges) {
+    const group = children.slice(range.start, range.end) as HTMLElement[]
+    if (group.length > 1) {
+      const wrapper = document.createElement("div")
+      wrapper.className = "foundry-image-carousel"
+      wrapper.dataset.foundryImageCarousel = "true"
+      group[0].before(wrapper)
+
+      const viewport = document.createElement("div")
+      viewport.className = "foundry-image-carousel-viewport"
+
+      const controls = document.createElement("div")
+      controls.className = "foundry-image-carousel-controls"
+
+      const prevButton = document.createElement("button")
+      prevButton.type = "button"
+      prevButton.className = "foundry-image-carousel-button"
+      prevButton.textContent = "Previous"
+      prevButton.setAttribute("aria-label", "Show previous image")
+
+      const counter = document.createElement("span")
+      counter.className = "foundry-image-carousel-counter"
+      counter.setAttribute("aria-live", "polite")
+
+      const nextButton = document.createElement("button")
+      nextButton.type = "button"
+      nextButton.className = "foundry-image-carousel-button"
+      nextButton.textContent = "Next"
+      nextButton.setAttribute("aria-label", "Show next image")
+
+      controls.append(prevButton, counter, nextButton)
+
+      const dots = document.createElement("div")
+      dots.className = "foundry-image-carousel-dots"
+
+      const slides = group.map((block, slideIndex) => {
+        const slide = document.createElement("div")
+        slide.className = "foundry-image-carousel-slide"
+        slide.hidden = slideIndex !== 0
+        slide.setAttribute("data-active", slideIndex === 0 ? "true" : "false")
+        slide.appendChild(block)
+        viewport.appendChild(slide)
+
+        const dot = document.createElement("button")
+        dot.type = "button"
+        dot.className = "foundry-image-carousel-dot"
+        dot.setAttribute("aria-label", `Show image ${slideIndex + 1}`)
+        dots.appendChild(dot)
+
+        return slide
+      })
+
+      wrapper.append(viewport, controls, dots)
+
+      let activeIndex = 0
+      const dotButtons = Array.from(dots.querySelectorAll<HTMLButtonElement>("button"))
+      const render = (nextIndex: number) => {
+        activeIndex = (nextIndex + slides.length) % slides.length
+        setActiveCarouselSlide(slides, dotButtons, counter, activeIndex)
+      }
+
+      const handlePrev = () => render(activeIndex - 1)
+      const handleNext = () => render(activeIndex + 1)
+
+      prevButton.addEventListener("click", handlePrev)
+      nextButton.addEventListener("click", handleNext)
+
+      dotButtons.forEach((dot, dotIndex) => {
+        const handleClick = () => render(dotIndex)
+        dot.addEventListener("click", handleClick)
+        cleanups.push(() => dot.removeEventListener("click", handleClick))
+      })
+
+      render(0)
+
+      cleanups.push(() => {
+        prevButton.removeEventListener("click", handlePrev)
+        nextButton.removeEventListener("click", handleNext)
+      })
+    }
+  }
+
+  return () => {
+    for (const cleanup of cleanups) cleanup()
   }
 }
 

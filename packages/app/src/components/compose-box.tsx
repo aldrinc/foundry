@@ -1,5 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { useNavigation } from "../context/navigation"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
@@ -592,6 +592,7 @@ export function ComposeBox(props: { narrow: string }) {
           <MentionAutocomplete
             query={mentionQuery()!}
             type={mentionType()}
+            allowSpecialMentions={parsed()?.type === "stream" || parsed()?.type === "topic"}
             onSelect={handleMentionSelect}
             onClose={() => { setMentionQuery(null); mentionTriggerIndex = -1 }}
           />

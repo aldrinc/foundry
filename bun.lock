@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "zulip-desktop",
+      "name": "foundry-workspace",
       "devDependencies": {
         "@typescript-eslint/parser": "^8.56.1",
         "eslint": "^9.39.4",
@@ -14,14 +14,14 @@
       },
     },
     "packages/app": {
-      "name": "@zulip/app",
+      "name": "@foundry/app",
       "version": "0.1.0",
       "dependencies": {
         "@kobalte/core": "^0.13.0",
         "@solidjs/meta": "^0.29.0",
         "@solidjs/router": "^0.15.0",
         "@tauri-apps/api": "^2.5.0",
-        "@zulip/ui": "workspace:*",
+        "@foundry/ui": "workspace:*",
         "dompurify": "^3.2.0",
         "fuzzysort": "^3.1.0",
         "luxon": "^3.5.0",
@@ -39,7 +39,7 @@
       },
     },
     "packages/desktop": {
-      "name": "@zulip/desktop",
+      "name": "@foundry/desktop",
       "version": "0.1.0",
       "dependencies": {
         "@solidjs/meta": "^0.29.0",
@@ -56,8 +56,8 @@
         "@tauri-apps/plugin-store": "~2",
         "@tauri-apps/plugin-updater": "~2",
         "@tauri-apps/plugin-window-state": "~2",
-        "@zulip/app": "workspace:*",
-        "@zulip/ui": "workspace:*",
+        "@foundry/app": "workspace:*",
+        "@foundry/ui": "workspace:*",
         "solid-js": "^1.9.0",
       },
       "devDependencies": {
@@ -70,7 +70,7 @@
       },
     },
     "packages/ui": {
-      "name": "@zulip/ui",
+      "name": "@foundry/ui",
       "version": "0.1.0",
       "dependencies": {
         "@kobalte/core": "^0.13.0",
@@ -424,11 +424,11 @@
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.56.1", "", { "dependencies": { "@typescript-eslint/types": "8.56.1", "eslint-visitor-keys": "^5.0.0" } }, "sha512-KiROIzYdEV85YygXw6BI/Dx4fnBlFQu6Mq4QE4MOH9fFnhohw6wX/OAvDY2/C+ut0I3RSPKenvZJIVYqJNkhEw=="],
 
-    "@zulip/app": ["@zulip/app@workspace:packages/app"],
+    "@foundry/app": ["@foundry/app@workspace:packages/app"],
 
-    "@zulip/desktop": ["@zulip/desktop@workspace:packages/desktop"],
+    "@foundry/desktop": ["@foundry/desktop@workspace:packages/desktop"],
 
-    "@zulip/ui": ["@zulip/ui@workspace:packages/ui"],
+    "@foundry/ui": ["@foundry/ui@workspace:packages/ui"],
 
     "acorn": ["acorn@8.16.0", "", { "bin": { "acorn": "bin/acorn" } }, "sha512-UVJyE9MttOsBQIDKw1skb9nAwQuR5wuGD3+82K6JgJlm/Y+KI92oNsMNGZCYdDsVtRHSak0pcV5Dno5+4jh9sw=="],
 

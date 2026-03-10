@@ -194,11 +194,11 @@ impl ZulipClient {
         Ok(())
     }
 
-    /// GET /json/meridian/providers/auth
+    /// GET /json/foundry/providers/auth
     /// Get available AI providers and their auth status
     pub async fn get_foundry_providers(&self) -> Result<FoundryProvidersResponse, String> {
         let resp = self
-            .get("/json/meridian/providers/auth")
+            .get("/json/foundry/providers/auth")
             .send()
             .await
             .map_err(|e| format!("Failed to get providers: {}", e))?;
@@ -214,7 +214,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse providers response: {}", e))
     }
 
-    /// POST /json/meridian/providers/connect
+    /// POST /json/foundry/providers/connect
     /// Connect a provider using an API key credential
     pub async fn connect_foundry_provider(
         &self,
@@ -233,7 +233,7 @@ impl ZulipClient {
         }
 
         let resp = self
-            .post("/json/meridian/providers/connect")
+            .post("/json/foundry/providers/connect")
             .form(&params)
             .send()
             .await
@@ -250,14 +250,14 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse provider connect response: {}", e))
     }
 
-    /// POST /json/meridian/providers/disconnect
+    /// POST /json/foundry/providers/disconnect
     /// Disconnect a provider credential
     pub async fn disconnect_foundry_provider(
         &self,
         provider: &str,
     ) -> Result<FoundryProviderCredentialResponse, String> {
         let resp = self
-            .post("/json/meridian/providers/disconnect")
+            .post("/json/foundry/providers/disconnect")
             .form(&[("provider", provider)])
             .send()
             .await
@@ -274,7 +274,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse provider disconnect response: {}", e))
     }
 
-    /// POST /json/meridian/providers/oauth/start
+    /// POST /json/foundry/providers/oauth/start
     /// Start a provider OAuth flow and return the authorization URL
     pub async fn start_foundry_provider_oauth(
         &self,
@@ -291,7 +291,7 @@ impl ZulipClient {
         }
 
         let resp = self
-            .post("/json/meridian/providers/oauth/start")
+            .post("/json/foundry/providers/oauth/start")
             .form(&params)
             .send()
             .await

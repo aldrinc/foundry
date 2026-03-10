@@ -1,8 +1,8 @@
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import type {
   ExternalAuthenticationMethod,
   ServerSettings,
-} from "@zulip/desktop/bindings"
+} from "@foundry/desktop/bindings"
 import type { Platform } from "./context/platform"
 
 export const PENDING_SSO_STORAGE_KEY = "foundry.desktop.pending-sso"

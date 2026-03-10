@@ -1,5 +1,5 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import { useSupervisor } from "../../context/supervisor"
 import { useOrg } from "../../context/org"
 import { useSettings } from "../../context/settings"

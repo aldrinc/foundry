@@ -6,13 +6,13 @@ import * as compose_state from "./compose_state.ts";
 import * as dialog_widget from "./dialog_widget.ts";
 import * as hash_util from "./hash_util.ts";
 import * as markdown from "./markdown.ts";
-import * as meridian_supervisor_sidebar from "./meridian_supervisor_sidebar.ts";
+import * as foundry_supervisor_sidebar from "./foundry_supervisor_sidebar.ts";
 import * as narrow_state from "./narrow_state.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as stream_data from "./stream_data.ts";
 import * as ui_report from "./ui_report.ts";
 
-type MeridianTaskSummary = {
+type FoundryTaskSummary = {
     task_id: string;
     title: string;
     status: string;
@@ -42,7 +42,7 @@ type MeridianTaskSummary = {
     depends_on_task_ids: string[];
     file_claims: string[];
     area_claims: string[];
-    artifacts: MeridianTaskArtifact[];
+    artifacts: FoundryTaskArtifact[];
     approvals_pending: string[];
     approvals_required: string[];
     blockers: string[];
@@ -57,14 +57,14 @@ type MeridianTaskSummary = {
     updated_at: string;
 };
 
-type MeridianTaskArtifact = {
+type FoundryTaskArtifact = {
     kind: string;
     label: string;
     url: string;
     status: string;
 };
 
-type MeridianProviderAuthEntry = {
+type FoundryProviderAuthEntry = {
     provider: string;
     display_name: string;
     auth_modes: string[];
@@ -75,7 +75,7 @@ type MeridianProviderAuthEntry = {
     credential_updated_at: string;
 };
 
-type MeridianIntegrationEntry = {
+type FoundryIntegrationEntry = {
     integration: string;
     display_name: string;
     auth_modes: string[];
@@ -89,21 +89,21 @@ type MeridianIntegrationEntry = {
     credential_updated_at: string;
 };
 
-type MeridianIntegrationPolicy = {
+type FoundryIntegrationPolicy = {
     auto_topic_transcript: boolean;
     auto_repo_context: boolean;
     allow_external_integrations: boolean;
     enabled_integrations: string[];
 };
 
-type MeridianSidebarPayload = {
+type FoundrySidebarPayload = {
     topic_scope_id: string;
     task_count: number;
     counts: Record<string, number>;
-    tasks: MeridianTaskSummary[];
+    tasks: FoundryTaskSummary[];
 };
 
-type MeridianTaskEvent = {
+type FoundryTaskEvent = {
     id: number;
     task_id: string;
     ts: string;
@@ -113,7 +113,7 @@ type MeridianTaskEvent = {
     data: Record<string, unknown>;
 };
 
-type MeridianPlanRevision = {
+type FoundryPlanRevision = {
     plan_revision_id: string;
     topic_scope_id: string;
     author_id: string;
@@ -130,7 +130,7 @@ type MeridianPlanRevision = {
     updated_at: string;
 };
 
-type MeridianSupervisorContext = {
+type FoundrySupervisorContext = {
     soul: string;
     memory_tail: string;
     paths: Record<string, unknown>;
@@ -149,19 +149,19 @@ const ENABLE_TASK_EVENT_STREAM = false;
 const TASK_ROWS_LIMIT = 8;
 const EVENT_ROWS_LIMIT = 300;
 const AUTO_SCROLL_STICKY_DISTANCE_PX = 72;
-const REPO_ID_STORAGE_KEY = "meridian.topic_task_repo_id";
-const PROVIDER_STORAGE_KEY = "meridian.topic_task_provider";
+const REPO_ID_STORAGE_KEY = "foundry.topic_task_repo_id";
+const PROVIDER_STORAGE_KEY = "foundry.topic_task_provider";
 const DEFAULT_REPO_ID = "";
 const DEFAULT_PROVIDER = "codex";
-const CREATE_TASK_MODAL_ID = "meridian-topic-create-task-modal";
-const CREATE_TASK_MODAL_FORM_ID = "meridian-topic-create-task-form";
-const PROVIDER_ACCOUNTS_MODAL_ID = "meridian-provider-accounts-modal";
-const PROVIDER_ACCOUNTS_FORM_ID = "meridian-provider-accounts-form";
-const SUPERVISOR_PLAN_MODAL_ID = "meridian-supervisor-plan-modal";
-const SUPERVISOR_PLAN_FORM_ID = "meridian-supervisor-plan-form";
-const OAUTH_POPUP_NAME = "meridian-provider-oauth";
+const CREATE_TASK_MODAL_ID = "foundry-topic-create-task-modal";
+const CREATE_TASK_MODAL_FORM_ID = "foundry-topic-create-task-form";
+const PROVIDER_ACCOUNTS_MODAL_ID = "foundry-provider-accounts-modal";
+const PROVIDER_ACCOUNTS_FORM_ID = "foundry-provider-accounts-form";
+const SUPERVISOR_PLAN_MODAL_ID = "foundry-supervisor-plan-modal";
+const SUPERVISOR_PLAN_FORM_ID = "foundry-supervisor-plan-form";
+const OAUTH_POPUP_NAME = "foundry-provider-oauth";
 const DIFF_MAX_RENDER_CHARS = 22000;
-const SUPERVISOR_ROW_ID = "__meridian_supervisor__";
+const SUPERVISOR_ROW_ID = "__foundry_supervisor__";
 
 let sidebar_poll_timer: number | null = null;
 let events_poll_timer: number | null = null;
@@ -179,7 +179,7 @@ let task_events_stream: EventSource | null = null;
 let task_events_stream_task_id = "";
 let task_events_stream_disconnect_timer: number | null = null;
 let pending_task_open_scope_id = "";
-let provider_auth_entries: MeridianProviderAuthEntry[] = [];
+let provider_auth_entries: FoundryProviderAuthEntry[] = [];
 
 type PendingOauthContinuation =
     | {
@@ -195,15 +195,15 @@ type PendingOauthContinuation =
       };
 
 let pending_oauth_continuation: PendingOauthContinuation | null = null;
-let integration_entries: MeridianIntegrationEntry[] = [];
-let integration_policy: MeridianIntegrationPolicy = {
+let integration_entries: FoundryIntegrationEntry[] = [];
+let integration_policy: FoundryIntegrationPolicy = {
     auto_topic_transcript: true,
     auto_repo_context: true,
     allow_external_integrations: true,
     enabled_integrations: [],
 };
 
-type MeridianTasksUiState = {
+type FoundryTasksUiState = {
     topic_scope_id: string;
     selected_task_id: string;
     task_view_open: boolean;
@@ -211,14 +211,14 @@ type MeridianTasksUiState = {
     task_follow_output: boolean;
     task_stream_mode: "chat" | "activity";
     event_after_id: number;
-    event_rows: MeridianTaskEvent[];
-    last_sidebar: MeridianSidebarPayload | null;
+    event_rows: FoundryTaskEvent[];
+    last_sidebar: FoundrySidebarPayload | null;
     sidebar_rows_signature: string;
     task_view_signature: string;
     task_view_rows_signature: string;
     supervisor_view_signature: string;
-    supervisor_plan_revision: MeridianPlanRevision | null;
-    supervisor_context: MeridianSupervisorContext | null;
+    supervisor_plan_revision: FoundryPlanRevision | null;
+    supervisor_context: FoundrySupervisorContext | null;
     pending_reply_message: string;
     pending_reply_time: string;
     event_stream_connected: boolean;
@@ -229,7 +229,7 @@ type MeridianTasksUiState = {
     task_inspector_open: boolean;
 };
 
-const state: MeridianTasksUiState = {
+const state: FoundryTasksUiState = {
     topic_scope_id: "",
     selected_task_id: "",
     task_view_open: false,
@@ -320,11 +320,11 @@ function as_string_list(value: unknown): string[] {
     return out;
 }
 
-function as_artifact_list(value: unknown): MeridianTaskArtifact[] {
+function as_artifact_list(value: unknown): FoundryTaskArtifact[] {
     if (!Array.isArray(value)) {
         return [];
     }
-    const artifacts: MeridianTaskArtifact[] = [];
+    const artifacts: FoundryTaskArtifact[] = [];
     for (const item of value) {
         const record = as_record(item);
         if (!record) {
@@ -339,7 +339,7 @@ function as_artifact_list(value: unknown): MeridianTaskArtifact[] {
     return artifacts;
 }
 
-function parse_provider_auth_entries(data: unknown): MeridianProviderAuthEntry[] {
+function parse_provider_auth_entries(data: unknown): FoundryProviderAuthEntry[] {
     const root = as_record(data);
     if (!root) {
         return [];
@@ -350,7 +350,7 @@ function parse_provider_auth_entries(data: unknown): MeridianProviderAuthEntry[]
         : Array.isArray(raw_root?.["providers"])
           ? raw_root["providers"]
           : [];
-    const entries: MeridianProviderAuthEntry[] = [];
+    const entries: FoundryProviderAuthEntry[] = [];
     for (const value of providers_raw) {
         const item = as_record(value);
         if (!item) {
@@ -372,7 +372,7 @@ function parse_provider_auth_entries(data: unknown): MeridianProviderAuthEntry[]
     return entries;
 }
 
-function parse_integration_policy(data: unknown): MeridianIntegrationPolicy {
+function parse_integration_policy(data: unknown): FoundryIntegrationPolicy {
     const root = as_record(data);
     const raw_root = as_record(root?.["raw"]);
     const policy_raw = as_record(root?.["policy"]) ?? as_record(raw_root?.["policy"]) ?? {};
@@ -394,7 +394,7 @@ function parse_integration_policy(data: unknown): MeridianIntegrationPolicy {
     };
 }
 
-function parse_integration_entries(data: unknown): MeridianIntegrationEntry[] {
+function parse_integration_entries(data: unknown): FoundryIntegrationEntry[] {
     const root = as_record(data);
     if (!root) {
         return [];
@@ -405,7 +405,7 @@ function parse_integration_entries(data: unknown): MeridianIntegrationEntry[] {
         : Array.isArray(raw_root?.["integrations"])
           ? raw_root["integrations"]
           : [];
-    const entries: MeridianIntegrationEntry[] = [];
+    const entries: FoundryIntegrationEntry[] = [];
     for (const value of integrations_raw) {
         const item = as_record(value);
         if (!item) {
@@ -433,7 +433,7 @@ function parse_integration_entries(data: unknown): MeridianIntegrationEntry[] {
     return entries;
 }
 
-function parse_task_summary(value: unknown): MeridianTaskSummary | undefined {
+function parse_task_summary(value: unknown): FoundryTaskSummary | undefined {
     const item = as_record(value);
     if (!item) {
         return undefined;
@@ -500,7 +500,7 @@ function parse_task_summary(value: unknown): MeridianTaskSummary | undefined {
     };
 }
 
-function parse_sidebar_payload(data: unknown): MeridianSidebarPayload | undefined {
+function parse_sidebar_payload(data: unknown): FoundrySidebarPayload | undefined {
     const root = as_record(data);
     if (!root) {
         return undefined;
@@ -511,7 +511,7 @@ function parse_sidebar_payload(data: unknown): MeridianSidebarPayload | undefine
     }
 
     const tasks_raw = Array.isArray(sidebar["tasks"]) ? sidebar["tasks"] : [];
-    const tasks: MeridianTaskSummary[] = [];
+    const tasks: FoundryTaskSummary[] = [];
     for (const value of tasks_raw) {
         const task = parse_task_summary(value);
         if (task) {
@@ -536,7 +536,7 @@ function parse_sidebar_payload(data: unknown): MeridianSidebarPayload | undefine
     };
 }
 
-function parse_plan_revision(value: unknown): MeridianPlanRevision | null {
+function parse_plan_revision(value: unknown): FoundryPlanRevision | null {
     const item = as_record(value);
     if (!item) {
         return null;
@@ -567,7 +567,7 @@ function parse_plan_revision(value: unknown): MeridianPlanRevision | null {
     };
 }
 
-function parse_supervisor_context(value: unknown): MeridianSupervisorContext | null {
+function parse_supervisor_context(value: unknown): FoundrySupervisorContext | null {
     const root = as_record(value);
     if (!root) {
         return null;
@@ -579,7 +579,7 @@ function parse_supervisor_context(value: unknown): MeridianSupervisorContext | n
     };
 }
 
-function parse_task_status_payload(data: unknown): MeridianTaskSummary | undefined {
+function parse_task_status_payload(data: unknown): FoundryTaskSummary | undefined {
     const root = as_record(data);
     if (!root) {
         return undefined;
@@ -598,7 +598,7 @@ function parse_timestamp(value: string): number {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-function order_sidebar_tasks(tasks: MeridianTaskSummary[]): MeridianTaskSummary[] {
+function order_sidebar_tasks(tasks: FoundryTaskSummary[]): FoundryTaskSummary[] {
     return tasks.toSorted((left, right) => {
         const by_created = parse_timestamp(right.created_at) - parse_timestamp(left.created_at);
         if (by_created !== 0) {
@@ -608,7 +608,7 @@ function order_sidebar_tasks(tasks: MeridianTaskSummary[]): MeridianTaskSummary[
     });
 }
 
-function parse_task_event(value: unknown, fallback_task_id = ""): MeridianTaskEvent | undefined {
+function parse_task_event(value: unknown, fallback_task_id = ""): FoundryTaskEvent | undefined {
     const item = as_record(value);
     if (!item) {
         return undefined;
@@ -629,7 +629,7 @@ function parse_task_event(value: unknown, fallback_task_id = ""): MeridianTaskEv
     };
 }
 
-function parse_events(data: unknown): MeridianTaskEvent[] {
+function parse_events(data: unknown): FoundryTaskEvent[] {
     const root = as_record(data);
     if (!root) {
         return [];
@@ -641,7 +641,7 @@ function parse_events(data: unknown): MeridianTaskEvent[] {
         : Array.isArray(nested_raw?.["events"])
           ? nested_raw["events"]
           : [];
-    const events: MeridianTaskEvent[] = [];
+    const events: FoundryTaskEvent[] = [];
 
     for (const value of events_raw) {
         const event = parse_task_event(value, root_task_id);
@@ -930,7 +930,7 @@ function event_level_class(level: string): "info" | "warning" | "error" | "succe
     return "info";
 }
 
-function sidebar_rows_signature(tasks: MeridianTaskSummary[]): string {
+function sidebar_rows_signature(tasks: FoundryTaskSummary[]): string {
     const supervisor_selected = state.task_view_open && state.task_view_mode === "supervisor";
     const task_sig = tasks
         .slice(0, TASK_ROWS_LIMIT)
@@ -972,7 +972,7 @@ function format_event_time(iso_ts: string): string {
     return parsed.toLocaleTimeString();
 }
 
-function infer_task_phase(task: MeridianTaskSummary, rows: MeridianTaskEvent[]): string {
+function infer_task_phase(task: FoundryTaskSummary, rows: FoundryTaskEvent[]): string {
     const status = status_class(task.status);
     if (status === "done") {
         return "Completed";
@@ -1035,10 +1035,10 @@ function infer_task_phase(task: MeridianTaskSummary, rows: MeridianTaskEvent[]):
 }
 
 function ensure_task_view_container(): JQuery {
-    let $view = $("#meridian-task-main-view");
+    let $view = $("#foundry-task-main-view");
     if ($view.length === 0) {
         $view = $("<div>")
-            .attr("id", "meridian-task-main-view")
+            .attr("id", "foundry-task-main-view")
             .addClass("notdisplayed no-visible-focus-outlines")
             .attr("aria-live", "polite");
         $("#message_feed_container").append($view);
@@ -1049,7 +1049,7 @@ function ensure_task_view_container(): JQuery {
 function set_task_view_open_state(is_open: boolean): void {
     const $view = ensure_task_view_container();
     $view.toggleClass("notdisplayed", !is_open);
-    $("body").toggleClass("meridian-task-main-view-open", is_open);
+    $("body").toggleClass("foundry-task-main-view-open", is_open);
 }
 
 function hide_task_view(force = false): void {
@@ -1075,7 +1075,7 @@ function hide_task_view(force = false): void {
     chat_dom_state = null;
     set_task_view_open_state(false);
     if (was_open || force || was_visible) {
-        $view.trigger("meridian_task_view_hidden");
+        $view.trigger("foundry_task_view_hidden");
     }
 }
 
@@ -1116,37 +1116,37 @@ function reset_task_stream_state(task_id = ""): void {
 function clear_sidebar_task_rows(topic_scope_id?: string): void {
     if (topic_scope_id) {
         $(
-            `#stream_filters .meridian-topic-task-sublist[data-topic-scope-id="${CSS.escape(
+            `#stream_filters .foundry-topic-task-sublist[data-topic-scope-id="${CSS.escape(
                 topic_scope_id,
             )}"]`,
         ).remove();
     } else {
-        $("#stream_filters .meridian-topic-task-sublist").remove();
+        $("#stream_filters .foundry-topic-task-sublist").remove();
     }
     state.sidebar_rows_signature = "";
 }
 
 function build_sidebar_task_row_markup(
     context: TopicContext,
-    task: MeridianTaskSummary,
+    task: FoundryTaskSummary,
 ): string {
     const status = status_class(task.status);
     const selected =
         state.task_view_open &&
         state.task_view_mode === "task" &&
         task.task_id === state.selected_task_id
-            ? " meridian-task-selected"
+            ? " foundry-task-selected"
             : "";
     const short_status = status_short_label(task.status);
     const topic_url = hash_util.by_stream_topic_url(context.stream_id, context.topic);
     return `
-<li class="meridian-topic-task-item meridian-task-status-${status}${selected}" data-meridian-task-id="${_.escape(task.task_id)}">
-    <a href="${_.escape(topic_url)}" class="meridian-topic-task-link" data-meridian-task-id="${_.escape(task.task_id)}" data-meridian-stream-id="${context.stream_id}" data-meridian-topic-name="${_.escape(context.topic)}" aria-label="${_.escape(task.title)}">
-        <span class="meridian-topic-task-main">
-            <span class="meridian-topic-task-dot"></span>
-            <span class="meridian-topic-task-title">${_.escape(task.title)}</span>
+<li class="foundry-topic-task-item foundry-task-status-${status}${selected}" data-foundry-task-id="${_.escape(task.task_id)}">
+    <a href="${_.escape(topic_url)}" class="foundry-topic-task-link" data-foundry-task-id="${_.escape(task.task_id)}" data-foundry-stream-id="${context.stream_id}" data-foundry-topic-name="${_.escape(context.topic)}" aria-label="${_.escape(task.title)}">
+        <span class="foundry-topic-task-main">
+            <span class="foundry-topic-task-dot"></span>
+            <span class="foundry-topic-task-title">${_.escape(task.title)}</span>
         </span>
-        <span class="meridian-topic-task-mini-status">${_.escape(short_status)}</span>
+        <span class="foundry-topic-task-mini-status">${_.escape(short_status)}</span>
     </a>
 </li>`;
 }
@@ -1154,7 +1154,7 @@ function build_sidebar_task_row_markup(
 function update_sidebar_task_row(
     context: TopicContext,
     $row: JQuery,
-    task: MeridianTaskSummary,
+    task: FoundryTaskSummary,
 ): void {
     const status = status_class(task.status);
     const selected =
@@ -1163,51 +1163,51 @@ function update_sidebar_task_row(
         task.task_id === state.selected_task_id;
     const short_status = status_short_label(task.status);
     const topic_url = hash_util.by_stream_topic_url(context.stream_id, context.topic);
-    $row.attr("data-meridian-task-id", task.task_id);
+    $row.attr("data-foundry-task-id", task.task_id);
     $row.removeClass(
         [
-            "meridian-task-status-running",
-            "meridian-task-status-queued",
-            "meridian-task-status-paused",
-            "meridian-task-status-stalled",
-            "meridian-task-status-blocked_approval",
-            "meridian-task-status-blocked_dependency",
-            "meridian-task-status-blocked_information",
-            "meridian-task-status-at_risk",
-            "meridian-task-status-done",
-            "meridian-task-status-failed",
-            "meridian-task-status-canceled",
-            "meridian-task-selected",
+            "foundry-task-status-running",
+            "foundry-task-status-queued",
+            "foundry-task-status-paused",
+            "foundry-task-status-stalled",
+            "foundry-task-status-blocked_approval",
+            "foundry-task-status-blocked_dependency",
+            "foundry-task-status-blocked_information",
+            "foundry-task-status-at_risk",
+            "foundry-task-status-done",
+            "foundry-task-status-failed",
+            "foundry-task-status-canceled",
+            "foundry-task-selected",
         ].join(" "),
     );
-    $row.addClass(`meridian-task-status-${status}`);
+    $row.addClass(`foundry-task-status-${status}`);
     if (selected) {
-        $row.addClass("meridian-task-selected");
+        $row.addClass("foundry-task-selected");
     }
-    const $link = $row.find(".meridian-topic-task-link").first();
-    $link.attr("data-meridian-task-id", task.task_id);
-    $link.attr("data-meridian-stream-id", context.stream_id);
-    $link.attr("data-meridian-topic-name", context.topic);
+    const $link = $row.find(".foundry-topic-task-link").first();
+    $link.attr("data-foundry-task-id", task.task_id);
+    $link.attr("data-foundry-stream-id", context.stream_id);
+    $link.attr("data-foundry-topic-name", context.topic);
     $link.attr("href", topic_url);
     $link.attr("aria-label", task.title);
-    $link.find(".meridian-topic-task-title").text(task.title);
-    $link.find(".meridian-topic-task-mini-status").text(short_status);
+    $link.find(".foundry-topic-task-title").text(task.title);
+    $link.find(".foundry-topic-task-mini-status").text(short_status);
 }
 
 function build_sidebar_supervisor_row_markup(context: TopicContext): string {
     const selected =
         state.task_view_open && state.task_view_mode === "supervisor"
-            ? " meridian-task-selected"
+            ? " foundry-task-selected"
             : "";
     const topic_url = hash_util.by_stream_topic_url(context.stream_id, context.topic);
     return `
-<li class="meridian-topic-task-item meridian-topic-supervisor-item${selected}" data-meridian-task-id="${SUPERVISOR_ROW_ID}" data-meridian-supervisor="true">
-    <a href="${_.escape(topic_url)}" class="meridian-topic-supervisor-link" data-meridian-stream-id="${context.stream_id}" data-meridian-topic-name="${_.escape(context.topic)}" aria-label="AI Supervisor">
-        <span class="meridian-topic-task-main">
-            <span class="meridian-topic-task-dot"></span>
-            <span class="meridian-topic-task-title">AI Supervisor</span>
+<li class="foundry-topic-task-item foundry-topic-supervisor-item${selected}" data-foundry-task-id="${SUPERVISOR_ROW_ID}" data-foundry-supervisor="true">
+    <a href="${_.escape(topic_url)}" class="foundry-topic-supervisor-link" data-foundry-stream-id="${context.stream_id}" data-foundry-topic-name="${_.escape(context.topic)}" aria-label="AI Supervisor">
+        <span class="foundry-topic-task-main">
+            <span class="foundry-topic-task-dot"></span>
+            <span class="foundry-topic-task-title">AI Supervisor</span>
         </span>
-        <span class="meridian-topic-task-mini-status">AI</span>
+        <span class="foundry-topic-task-mini-status">AI</span>
     </a>
 </li>`;
 }
@@ -1216,16 +1216,16 @@ function update_sidebar_supervisor_row(context: TopicContext, $row: JQuery): voi
     const selected =
         state.task_view_open && state.task_view_mode === "supervisor";
     const topic_url = hash_util.by_stream_topic_url(context.stream_id, context.topic);
-    $row.attr("data-meridian-task-id", SUPERVISOR_ROW_ID);
-    $row.attr("data-meridian-supervisor", "true");
-    $row.toggleClass("meridian-task-selected", selected);
-    const $link = $row.find(".meridian-topic-supervisor-link").first();
+    $row.attr("data-foundry-task-id", SUPERVISOR_ROW_ID);
+    $row.attr("data-foundry-supervisor", "true");
+    $row.toggleClass("foundry-task-selected", selected);
+    const $link = $row.find(".foundry-topic-supervisor-link").first();
     $link.attr("href", topic_url);
-    $link.attr("data-meridian-stream-id", context.stream_id);
-    $link.attr("data-meridian-topic-name", context.topic);
+    $link.attr("data-foundry-stream-id", context.stream_id);
+    $link.attr("data-foundry-topic-name", context.topic);
 }
 
-function render_sidebar_task_rows(context: TopicContext, tasks: MeridianTaskSummary[]): void {
+function render_sidebar_task_rows(context: TopicContext, tasks: FoundryTaskSummary[]): void {
     const visible_tasks = tasks.slice(0, TASK_ROWS_LIMIT);
 
     const $topic_row = find_sidebar_topic_row(context);
@@ -1236,20 +1236,20 @@ function render_sidebar_task_rows(context: TopicContext, tasks: MeridianTaskSumm
     }
 
     let $task_sublist = $topic_row.children(
-        `.meridian-topic-task-sublist[data-topic-scope-id="${CSS.escape(context.topic_scope_id)}"]`,
+        `.foundry-topic-task-sublist[data-topic-scope-id="${CSS.escape(context.topic_scope_id)}"]`,
     );
     if ($task_sublist.length === 0) {
-        $topic_row.children(".meridian-topic-task-sublist").remove();
-        $task_sublist = $("<ul>").addClass("meridian-topic-task-sublist");
+        $topic_row.children(".foundry-topic-task-sublist").remove();
+        $task_sublist = $("<ul>").addClass("foundry-topic-task-sublist");
         $task_sublist.attr("data-topic-scope-id", context.topic_scope_id);
         $topic_row.append($task_sublist);
     }
 
     const expected_ids = [SUPERVISOR_ROW_ID, ...visible_tasks.map((task) => task.task_id)];
     const dom_ids = $task_sublist
-        .children(".meridian-topic-task-item")
+        .children(".foundry-topic-task-item")
         .toArray()
-        .map((element) => ($(element).attr("data-meridian-task-id") ?? "").trim())
+        .map((element) => ($(element).attr("data-foundry-task-id") ?? "").trim())
         .filter(Boolean);
     const signature = sidebar_rows_signature(visible_tasks);
     if (
@@ -1262,14 +1262,14 @@ function render_sidebar_task_rows(context: TopicContext, tasks: MeridianTaskSumm
     const order_matches = dom_ids.join("||") === expected_ids.join("||");
     if (order_matches) {
         const $supervisor = $task_sublist.children(
-            `.meridian-topic-task-item[data-meridian-task-id="${SUPERVISOR_ROW_ID}"]`,
+            `.foundry-topic-task-item[data-foundry-task-id="${SUPERVISOR_ROW_ID}"]`,
         );
         if ($supervisor.length > 0) {
             update_sidebar_supervisor_row(context, $supervisor);
         }
         for (const task of visible_tasks) {
             const $row = $task_sublist.children(
-                `.meridian-topic-task-item[data-meridian-task-id="${_.escape(task.task_id)}"]`,
+                `.foundry-topic-task-item[data-foundry-task-id="${_.escape(task.task_id)}"]`,
             );
             if ($row.length === 0) {
                 continue;
@@ -1281,8 +1281,8 @@ function render_sidebar_task_rows(context: TopicContext, tasks: MeridianTaskSumm
     }
 
     const existing_rows = new Map<string, JQuery>();
-    $task_sublist.children(".meridian-topic-task-item").each((_index, element) => {
-        const id = ($(element).attr("data-meridian-task-id") ?? "").trim();
+    $task_sublist.children(".foundry-topic-task-item").each((_index, element) => {
+        const id = ($(element).attr("data-foundry-task-id") ?? "").trim();
         if (id) {
             existing_rows.set(id, $(element));
         }
@@ -1303,7 +1303,7 @@ function render_sidebar_task_rows(context: TopicContext, tasks: MeridianTaskSumm
 }
 
 function task_link_stream_id($trigger: JQuery): number | undefined {
-    const direct = $trigger.attr("data-meridian-stream-id");
+    const direct = $trigger.attr("data-foundry-stream-id");
     if (direct) {
         const parsed = Number.parseInt(direct, 10);
         if (!Number.isNaN(parsed)) {
@@ -1325,7 +1325,7 @@ function task_link_stream_id($trigger: JQuery): number | undefined {
 }
 
 function task_link_topic_name($trigger: JQuery): string | undefined {
-    const direct = ($trigger.attr("data-meridian-topic-name") ?? "").trim();
+    const direct = ($trigger.attr("data-foundry-topic-name") ?? "").trim();
     if (direct) {
         return direct;
     }
@@ -1337,8 +1337,8 @@ function task_link_topic_name($trigger: JQuery): string | undefined {
 }
 
 function selected_task_from_sidebar(
-    sidebar: MeridianSidebarPayload,
-): MeridianTaskSummary | undefined {
+    sidebar: FoundrySidebarPayload,
+): FoundryTaskSummary | undefined {
     return (
         sidebar.tasks.find((task) => task.task_id === state.selected_task_id) ?? sidebar.tasks[0]
     );
@@ -1459,7 +1459,7 @@ function merge_thread_text(existing: string, incoming: string): string {
     return join_thread_text(left, right);
 }
 
-function event_kind(event: MeridianTaskEvent): EventKind {
+function event_kind(event: FoundryTaskEvent): EventKind {
     const event_type = normalized_event_type(event.event_type);
     if (event_type === "chat.user") {
         return "user";
@@ -1520,7 +1520,7 @@ function event_kind(event: MeridianTaskEvent): EventKind {
     return "system";
 }
 
-function event_label(event: MeridianTaskEvent): string {
+function event_label(event: FoundryTaskEvent): string {
     const event_type = normalized_event_type(event.event_type);
     if (event_type === "chat.user") {
         return "You";
@@ -1686,7 +1686,7 @@ function event_text(value: unknown): string {
     return `${joined.slice(0, MAX_EVENT_TEXT_LENGTH - 3).trimEnd()}...`;
 }
 
-function extract_event_body(event: MeridianTaskEvent): string {
+function extract_event_body(event: FoundryTaskEvent): string {
     const event_type = normalized_event_type(event.event_type);
     const is_stream_chunk = is_stream_chunk_event_type(event_type);
     if (is_stream_chunk && event.message.length > 0) {
@@ -1817,7 +1817,7 @@ function collapse_exact_double(text: string): string {
     return normalized;
 }
 
-function renderable_event(event: MeridianTaskEvent): RenderableThreadEvent {
+function renderable_event(event: FoundryTaskEvent): RenderableThreadEvent {
     const kind = event_kind(event);
     const merge_mode = is_stream_chunk_event_type(event.event_type) ? "chunk" : "block";
     const raw_body = extract_event_body(event);
@@ -1923,7 +1923,7 @@ function thread_is_near_bottom(thread: HTMLElement): boolean {
 }
 
 function update_follow_output_ui(): void {
-    const $button = $("#meridian-task-follow-button");
+    const $button = $("#foundry-task-follow-button");
     if ($button.length === 0) {
         return;
     }
@@ -1934,7 +1934,7 @@ function update_follow_output_ui(): void {
     $button.removeClass("notdisplayed");
 }
 
-function compact_thread_events(rows: MeridianTaskEvent[]): RenderableThreadEvent[] {
+function compact_thread_events(rows: FoundryTaskEvent[]): RenderableThreadEvent[] {
     const compacted: RenderableThreadEvent[] = [];
     for (const event of rows) {
         const next = renderable_event(event);
@@ -2010,7 +2010,7 @@ function compact_thread_events(rows: MeridianTaskEvent[]): RenderableThreadEvent
     return compacted;
 }
 
-function is_chat_event(event: MeridianTaskEvent): boolean {
+function is_chat_event(event: FoundryTaskEvent): boolean {
     const kind = event_kind(event);
     if (kind === "assistant" || kind === "user" || kind === "error" || kind === "command") {
         return true;
@@ -2041,9 +2041,9 @@ function format_duration_ms(value: number | undefined): string {
 function render_markdown_message(message: string): string {
     try {
         const rendered = markdown.parse_non_message(sanitize_agent_markdown(message));
-        return `<div class="meridian-thread-message meridian-thread-message-rendered rendered_markdown">${rendered}</div>`;
+        return `<div class="foundry-thread-message foundry-thread-message-rendered rendered_markdown">${rendered}</div>`;
     } catch {
-        return `<div class="meridian-thread-message">${_.escape(message)}</div>`;
+        return `<div class="foundry-thread-message">${_.escape(message)}</div>`;
     }
 }
 
@@ -2070,21 +2070,21 @@ function decorate_markdown_code_blocks(root: HTMLElement): void {
             continue;
         }
         let wrapper: HTMLElement;
-        if (existing_parent.classList.contains("meridian-markdown-code")) {
+        if (existing_parent.classList.contains("foundry-markdown-code")) {
             wrapper = existing_parent;
         } else {
             wrapper = document.createElement("div");
-            wrapper.className = "meridian-markdown-code";
+            wrapper.className = "foundry-markdown-code";
             existing_parent.replaceChild(wrapper, block);
             wrapper.append(block);
         }
-        if (wrapper.querySelector("[data-meridian-markdown-copy]")) {
+        if (wrapper.querySelector("[data-foundry-markdown-copy]")) {
             continue;
         }
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "meridian-markdown-copy";
-        button.setAttribute("data-meridian-markdown-copy", "1");
+        button.className = "foundry-markdown-copy";
+        button.setAttribute("data-foundry-markdown-copy", "1");
         button.setAttribute("aria-label", "Copy code block");
         button.textContent = "Copy";
         wrapper.append(button);
@@ -2095,7 +2095,7 @@ function render_event_message(event: RenderableThreadEvent, mode: "chat" | "acti
     if (event.kind === "assistant" && mode === "chat" && event.message.trim()) {
         return render_markdown_message(event.message);
     }
-    return `<div class="meridian-thread-message">${_.escape(event.message || "(no output)")}</div>`;
+    return `<div class="foundry-thread-message">${_.escape(event.message || "(no output)")}</div>`;
 }
 
 type ChatTurn = {
@@ -2459,25 +2459,25 @@ function render_tool_event_card(event: RenderableThreadEvent): string {
     const subtitle = _.escape(tool_event_subtitle(event));
     const command_or_output = _.escape(event.command || event.message || "(no output)");
     const details_markup = event.details
-        ? `<details class="meridian-chat-tool-details"${state.task_details_collapsed ? "" : " open"}>
+        ? `<details class="foundry-chat-tool-details"${state.task_details_collapsed ? "" : " open"}>
     <summary>Show details</summary>
-    <pre class="meridian-chat-tool-details-body">${_.escape(event.details)}</pre>
+    <pre class="foundry-chat-tool-details-body">${_.escape(event.details)}</pre>
 </details>`
         : "";
     return `
-<article class="meridian-chat-tool-card" id="meridian-task-event-${event.event_id}" data-component="basic-tool">
-    <div class="meridian-chat-tool-head">
+<article class="foundry-chat-tool-card" id="foundry-task-event-${event.event_id}" data-component="basic-tool">
+    <div class="foundry-chat-tool-head">
         <div>
-            <div class="meridian-chat-tool-title">${title}</div>
-            <div class="meridian-chat-tool-subtitle">${subtitle}</div>
+            <div class="foundry-chat-tool-title">${title}</div>
+            <div class="foundry-chat-tool-subtitle">${subtitle}</div>
         </div>
     </div>
-    <pre class="meridian-chat-tool-command">${command_or_output}</pre>
+    <pre class="foundry-chat-tool-command">${command_or_output}</pre>
     ${details_markup}
 </article>`;
 }
 
-function build_chat_turns(rows: MeridianTaskEvent[]): ChatTurn[] {
+function build_chat_turns(rows: FoundryTaskEvent[]): ChatTurn[] {
     const source_rows = rows.filter((event) => is_chat_event(event));
     const rendered_rows = source_rows.map((event) => renderable_event(event));
     const turns: ChatTurn[] = [];
@@ -2518,21 +2518,21 @@ function build_chat_turns(rows: MeridianTaskEvent[]): ChatTurn[] {
 function render_chat_turn(turn: ChatTurn): string {
     const user_markup = turn.user
         ? `
-<article class="meridian-chat-user" id="meridian-task-event-${turn.user.event_id}" data-component="user-message">
-    <div class="meridian-chat-user-bubble">
-        <div class="meridian-thread-message">${_.escape(turn.user.message || "(no output)")}</div>
+<article class="foundry-chat-user" id="foundry-task-event-${turn.user.event_id}" data-component="user-message">
+    <div class="foundry-chat-user-bubble">
+        <div class="foundry-thread-message">${_.escape(turn.user.message || "(no output)")}</div>
     </div>
 </article>`
         : "";
     const assistant = aggregate_assistant_event(turn.assistant_events);
     const assistant_markup = assistant
         ? `
-<article class="meridian-chat-assistant" id="meridian-task-event-${assistant.event_id}" data-component="assistant-message">
-    <div class="meridian-chat-assistant-meta">
-        <span class="meridian-chat-assistant-label">Assistant</span>
-        <span class="meridian-chat-assistant-time">${_.escape(assistant.time)}</span>
-        <span class="meridian-chat-assistant-actions">
-            <button type="button" class="meridian-thread-inline-action" data-meridian-thread-copy="${assistant.event_id}" aria-label="Copy assistant output">Copy</button>
+<article class="foundry-chat-assistant" id="foundry-task-event-${assistant.event_id}" data-component="assistant-message">
+    <div class="foundry-chat-assistant-meta">
+        <span class="foundry-chat-assistant-label">Assistant</span>
+        <span class="foundry-chat-assistant-time">${_.escape(assistant.time)}</span>
+        <span class="foundry-chat-assistant-actions">
+            <button type="button" class="foundry-thread-inline-action" data-foundry-thread-copy="${assistant.event_id}" aria-label="Copy assistant output">Copy</button>
         </span>
     </div>
     ${render_markdown_message(assistant.message)}
@@ -2542,24 +2542,24 @@ function render_chat_turn(turn: ChatTurn): string {
     const system_markup = turn.system_events
         .map(
             (event) => `
-<article class="meridian-chat-system" id="meridian-task-event-${event.event_id}">
-    <div class="meridian-thread-message">${_.escape(event.message || event.event_type)}</div>
+<article class="foundry-chat-system" id="foundry-task-event-${event.event_id}">
+    <div class="foundry-thread-message">${_.escape(event.message || event.event_type)}</div>
 </article>`,
         )
         .join("");
     const error_markup = turn.error_events
         .map(
             (event) => `
-<article class="meridian-chat-error" id="meridian-task-event-${event.event_id}">
-    <div class="meridian-chat-error-head">
+<article class="foundry-chat-error" id="foundry-task-event-${event.event_id}">
+    <div class="foundry-chat-error-head">
         <span>${_.escape(event.label)}</span>
     </div>
-    <pre class="meridian-chat-error-body">${_.escape(event.message || event.details || event.event_type)}</pre>
+    <pre class="foundry-chat-error-body">${_.escape(event.message || event.details || event.event_type)}</pre>
 </article>`,
         )
         .join("");
     return `
-<section class="meridian-chat-turn" data-turn-id="${_.escape(turn.key)}">
+<section class="foundry-chat-turn" data-turn-id="${_.escape(turn.key)}">
     ${user_markup}
     ${assistant_markup}
     ${tool_markup}
@@ -2568,11 +2568,11 @@ function render_chat_turn(turn: ChatTurn): string {
 </section>`;
 }
 
-function render_chat_rows(rows: MeridianTaskEvent[], is_running: boolean): string {
+function render_chat_rows(rows: FoundryTaskEvent[], is_running: boolean): string {
     const turns = build_chat_turns(rows);
     if (turns.length === 0) {
         return `
-<div class="meridian-task-empty-events">
+<div class="foundry-task-empty-events">
     ${is_running ? "Agent is running. Waiting for assistant output." : "Waiting for assistant output."}
 </div>`;
     }
@@ -2581,8 +2581,8 @@ function render_chat_rows(rows: MeridianTaskEvent[], is_running: boolean): strin
         return markup;
     }
     return `${markup}
-<article class="meridian-chat-system meridian-thread-live-indicator-row" id="meridian-thread-live-indicator">
-    <div class="meridian-thread-message">Assistant is running…</div>
+<article class="foundry-chat-system foundry-thread-live-indicator-row" id="foundry-thread-live-indicator">
+    <div class="foundry-thread-message">Assistant is running…</div>
 </article>`;
 }
 
@@ -2590,60 +2590,60 @@ function render_event_row(event: RenderableThreadEvent, mode: "chat" | "activity
     const {event_id, kind, label, time, event_type, command, pending} = event;
     const display_label = pending ? `${label} (sending...)` : label;
     const source_badge = event.source
-        ? `<span class="meridian-thread-badge">${_.escape(event.source)}</span>`
+        ? `<span class="foundry-thread-badge">${_.escape(event.source)}</span>`
         : "";
     const status_badge = event.status
-        ? `<span class="meridian-thread-badge meridian-thread-badge-status">${_.escape(event.status)}</span>`
+        ? `<span class="foundry-thread-badge foundry-thread-badge-status">${_.escape(event.status)}</span>`
         : "";
     const duration_badge = event.duration_ms
-        ? `<span class="meridian-thread-badge">${_.escape(format_duration_ms(event.duration_ms))}</span>`
+        ? `<span class="foundry-thread-badge">${_.escape(format_duration_ms(event.duration_ms))}</span>`
         : "";
     const copy_button =
         kind === "assistant"
-            ? `<button type="button" class="meridian-thread-inline-action" data-meridian-thread-copy="${event_id}" aria-label="Copy assistant output">Copy</button>`
+            ? `<button type="button" class="foundry-thread-inline-action" data-foundry-thread-copy="${event_id}" aria-label="Copy assistant output">Copy</button>`
             : "";
     const jump_button =
         mode === "chat"
-            ? `<button type="button" class="meridian-thread-inline-action" data-meridian-jump-event="${event_id}" aria-label="Jump to activity event">Activity</button>`
+            ? `<button type="button" class="foundry-thread-inline-action" data-foundry-jump-event="${event_id}" aria-label="Jump to activity event">Activity</button>`
             : "";
     const details_markup =
         mode === "activity" && event.details
             ? `
-    <details class="meridian-thread-details"${state.task_details_collapsed ? "" : " open"}>
+    <details class="foundry-thread-details"${state.task_details_collapsed ? "" : " open"}>
         <summary>Details</summary>
-        <pre class="meridian-thread-details-body">${_.escape(event.details)}</pre>
+        <pre class="foundry-thread-details-body">${_.escape(event.details)}</pre>
     </details>`
             : "";
 
     if (kind === "command") {
         return `
-<article class="meridian-thread-row meridian-thread-command" id="meridian-task-event-${event_id}">
-    <div class="meridian-thread-meta">
-        <div class="meridian-thread-meta-main">
-            <span class="meridian-thread-label">${_.escape(display_label)}</span>
-            <span class="meridian-thread-time">${_.escape(time)}</span>
+<article class="foundry-thread-row foundry-thread-command" id="foundry-task-event-${event_id}">
+    <div class="foundry-thread-meta">
+        <div class="foundry-thread-meta-main">
+            <span class="foundry-thread-label">${_.escape(display_label)}</span>
+            <span class="foundry-thread-time">${_.escape(time)}</span>
         </div>
-        <div class="meridian-thread-actions">
+        <div class="foundry-thread-actions">
             ${source_badge}
             ${status_badge}
             ${duration_badge}
             ${jump_button}
         </div>
     </div>
-    <pre class="meridian-thread-command-line">${_.escape(command || event.message)}</pre>
-    <div class="meridian-thread-event-type">${_.escape(event_type)}</div>
+    <pre class="foundry-thread-command-line">${_.escape(command || event.message)}</pre>
+    <div class="foundry-thread-event-type">${_.escape(event_type)}</div>
     ${details_markup}
 </article>`;
     }
 
     return `
-<article class="meridian-thread-row meridian-thread-${_.escape(kind)}" id="meridian-task-event-${event_id}">
-    <div class="meridian-thread-meta">
-        <div class="meridian-thread-meta-main">
-            <span class="meridian-thread-label">${_.escape(display_label)}</span>
-            <span class="meridian-thread-time">${_.escape(time)}</span>
+<article class="foundry-thread-row foundry-thread-${_.escape(kind)}" id="foundry-task-event-${event_id}">
+    <div class="foundry-thread-meta">
+        <div class="foundry-thread-meta-main">
+            <span class="foundry-thread-label">${_.escape(display_label)}</span>
+            <span class="foundry-thread-time">${_.escape(time)}</span>
         </div>
-        <div class="meridian-thread-actions">
+        <div class="foundry-thread-actions">
             ${source_badge}
             ${status_badge}
             ${duration_badge}
@@ -2654,7 +2654,7 @@ function render_event_row(event: RenderableThreadEvent, mode: "chat" | "activity
     ${render_event_message(event, mode)}
     ${
         kind === "error" || kind === "system"
-            ? `<div class="meridian-thread-event-type">${_.escape(event_type)}</div>`
+            ? `<div class="foundry-thread-event-type">${_.escape(event_type)}</div>`
             : ""
     }
     ${details_markup}
@@ -2662,7 +2662,7 @@ function render_event_row(event: RenderableThreadEvent, mode: "chat" | "activity
 }
 
 function render_thread_rows(
-    rows: MeridianTaskEvent[],
+    rows: FoundryTaskEvent[],
     mode: "chat" | "activity",
     is_running: boolean,
 ): string {
@@ -2673,7 +2673,7 @@ function render_thread_rows(
     const render_rows = compact_thread_events(rows);
     if (render_rows.length === 0) {
         return `
-<div class="meridian-task-empty-events">
+<div class="foundry-task-empty-events">
     ${is_running ? "Agent is running. Waiting for task activity." : "Waiting for task activity."}
 </div>`;
     }
@@ -2682,8 +2682,8 @@ function render_thread_rows(
         return markup;
     }
     return `${markup}
-<article class="meridian-thread-row meridian-thread-system meridian-thread-live-indicator-row">
-    <div class="meridian-thread-message">Agent is running…</div>
+<article class="foundry-thread-row foundry-thread-system foundry-thread-live-indicator-row">
+    <div class="foundry-thread-message">Agent is running…</div>
 </article>`;
 }
 
@@ -2719,7 +2719,7 @@ function extract_diff_block_from_text(value: string): string {
     return "";
 }
 
-function extract_event_diff_text(event: MeridianTaskEvent): string {
+function extract_event_diff_text(event: FoundryTaskEvent): string {
     const records = [
         event.data,
         as_record(event.data["payload"]) ?? {},
@@ -2744,7 +2744,7 @@ function extract_event_diff_text(event: MeridianTaskEvent): string {
     return "";
 }
 
-function collect_diff_documents(task: MeridianTaskSummary, rows: MeridianTaskEvent[]): DiffDocument[] {
+function collect_diff_documents(task: FoundryTaskSummary, rows: FoundryTaskEvent[]): DiffDocument[] {
     const docs: DiffDocument[] = [];
 
     for (const event of rows.toReversed()) {
@@ -2784,43 +2784,43 @@ function render_split_diff_table(diff_text: string): string {
     for (const line of lines) {
         if (line.startsWith("+++ ") || line.startsWith("--- ")) {
             rows.push(
-                `<tr class="meridian-diff-row meridian-diff-meta"><td colspan="2">${_.escape(line)}</td></tr>`,
+                `<tr class="foundry-diff-row foundry-diff-meta"><td colspan="2">${_.escape(line)}</td></tr>`,
             );
             continue;
         }
         if (line.startsWith("+")) {
             rows.push(
-                `<tr class="meridian-diff-row meridian-diff-add"><td class="meridian-diff-col-left"></td><td class="meridian-diff-col-right">${_.escape(line.slice(1))}</td></tr>`,
+                `<tr class="foundry-diff-row foundry-diff-add"><td class="foundry-diff-col-left"></td><td class="foundry-diff-col-right">${_.escape(line.slice(1))}</td></tr>`,
             );
             continue;
         }
         if (line.startsWith("-")) {
             rows.push(
-                `<tr class="meridian-diff-row meridian-diff-del"><td class="meridian-diff-col-left">${_.escape(line.slice(1))}</td><td class="meridian-diff-col-right"></td></tr>`,
+                `<tr class="foundry-diff-row foundry-diff-del"><td class="foundry-diff-col-left">${_.escape(line.slice(1))}</td><td class="foundry-diff-col-right"></td></tr>`,
             );
             continue;
         }
         if (line.startsWith("diff --git ") || line.startsWith("@@ ")) {
             rows.push(
-                `<tr class="meridian-diff-row meridian-diff-meta"><td colspan="2">${_.escape(line)}</td></tr>`,
+                `<tr class="foundry-diff-row foundry-diff-meta"><td colspan="2">${_.escape(line)}</td></tr>`,
             );
             continue;
         }
         rows.push(
-            `<tr class="meridian-diff-row meridian-diff-context"><td class="meridian-diff-col-left">${_.escape(line)}</td><td class="meridian-diff-col-right">${_.escape(line)}</td></tr>`,
+            `<tr class="foundry-diff-row foundry-diff-context"><td class="foundry-diff-col-left">${_.escape(line)}</td><td class="foundry-diff-col-right">${_.escape(line)}</td></tr>`,
         );
     }
-    return `<table class="meridian-diff-table"><tbody>${rows.join("")}</tbody></table>`;
+    return `<table class="foundry-diff-table"><tbody>${rows.join("")}</tbody></table>`;
 }
 
 function render_diff_document_markup(doc: DiffDocument, mode: "unified" | "split"): string {
     if (!doc.content) {
-        return `<div class="meridian-task-review-empty">Diff content is stored as an artifact link. Open it from Evidence.</div>`;
+        return `<div class="foundry-task-review-empty">Diff content is stored as an artifact link. Open it from Evidence.</div>`;
     }
     if (mode === "split") {
         return render_split_diff_table(doc.content);
     }
-    return `<pre class="meridian-diff-unified">${_.escape(doc.content)}</pre>`;
+    return `<pre class="foundry-diff-unified">${_.escape(doc.content)}</pre>`;
 }
 
 function summarize_task_result_text(value: string): string {
@@ -2836,8 +2836,8 @@ function summarize_task_result_text(value: string): string {
 
 function update_reply_composer_state(): void {
     const busy = reply_request_in_flight;
-    const $input = $("#meridian-task-reply-input");
-    const $send = $("#meridian-task-reply-send");
+    const $input = $("#foundry-task-reply-input");
+    const $send = $("#foundry-task-reply-send");
     if ($input.length > 0) {
         $input.prop("disabled", busy);
     }
@@ -2848,7 +2848,7 @@ function update_reply_composer_state(): void {
 }
 
 function autosize_reply_input(): void {
-    const input = document.querySelector<HTMLTextAreaElement>("#meridian-task-reply-input");
+    const input = document.querySelector<HTMLTextAreaElement>("#foundry-task-reply-input");
     if (!input) {
         return;
     }
@@ -2864,24 +2864,24 @@ function render_task_view_loading(task_id: string): void {
     const $view = ensure_task_view_container();
     const label = _.escape(task_id || "task");
     const markup = `
-<div class="meridian-task-session-shell meridian-task-loading-shell">
-    <header class="meridian-task-session-header">
-        <div class="meridian-task-session-title-row">
-            <button type="button" class="meridian-action-button" id="meridian-task-view-back">Close</button>
-            <div class="meridian-task-session-title-wrap">
-                <div class="meridian-task-session-title">Loading task</div>
-                <div class="meridian-task-id">${label}</div>
+<div class="foundry-task-session-shell foundry-task-loading-shell">
+    <header class="foundry-task-session-header">
+        <div class="foundry-task-session-title-row">
+            <button type="button" class="foundry-action-button" id="foundry-task-view-back">Close</button>
+            <div class="foundry-task-session-title-wrap">
+                <div class="foundry-task-session-title">Loading task</div>
+                <div class="foundry-task-id">${label}</div>
             </div>
-            <span class="meridian-status-pill meridian-status-queued">SYNCING</span>
+            <span class="foundry-status-pill foundry-status-queued">SYNCING</span>
         </div>
     </header>
-    <section class="meridian-task-thread-panel">
-        <div class="meridian-task-view-log meridian-task-thread-log">
-            <div class="meridian-task-empty-events meridian-task-loading-state">
-                <div class="meridian-task-skeleton-line"></div>
-                <div class="meridian-task-skeleton-line meridian-task-skeleton-line-short"></div>
-                <div class="meridian-task-skeleton-line"></div>
-                <div class="meridian-task-skeleton-label">Loading task state and event stream…</div>
+    <section class="foundry-task-thread-panel">
+        <div class="foundry-task-view-log foundry-task-thread-log">
+            <div class="foundry-task-empty-events foundry-task-loading-state">
+                <div class="foundry-task-skeleton-line"></div>
+                <div class="foundry-task-skeleton-line foundry-task-skeleton-line-short"></div>
+                <div class="foundry-task-skeleton-line"></div>
+                <div class="foundry-task-skeleton-label">Loading task state and event stream…</div>
             </div>
         </div>
     </section>
@@ -2901,27 +2901,27 @@ function render_supervisor_view_loading(context: TopicContext): void {
     const $view = ensure_task_view_container();
     const label = _.escape(`${context.stream_name} · ${context.topic}`);
     const markup = `
-<div class="meridian-task-session-shell meridian-supervisor-shell meridian-task-loading-shell">
-    <header class="meridian-task-session-header">
-        <div class="meridian-task-session-title-row">
-            <button type="button" class="meridian-action-button" id="meridian-task-view-back">Close</button>
-            <div class="meridian-task-session-title-wrap">
-                <div class="meridian-task-session-title">Supervisor</div>
-                <div class="meridian-task-id">${label}</div>
+<div class="foundry-task-session-shell foundry-supervisor-shell foundry-task-loading-shell">
+    <header class="foundry-task-session-header">
+        <div class="foundry-task-session-title-row">
+            <button type="button" class="foundry-action-button" id="foundry-task-view-back">Close</button>
+            <div class="foundry-task-session-title-wrap">
+                <div class="foundry-task-session-title">Supervisor</div>
+                <div class="foundry-task-id">${label}</div>
             </div>
-            <span class="meridian-status-pill meridian-status-queued">SYNCING</span>
+            <span class="foundry-status-pill foundry-status-queued">SYNCING</span>
         </div>
-        <div class="meridian-task-action-row">
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-supervisor-refresh">Refresh</button>
+        <div class="foundry-task-action-row">
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-supervisor-refresh">Refresh</button>
         </div>
     </header>
-    <section class="meridian-task-thread-panel">
-        <div class="meridian-task-view-log meridian-task-thread-log">
-            <div class="meridian-task-empty-events meridian-task-loading-state">
-                <div class="meridian-task-skeleton-line"></div>
-                <div class="meridian-task-skeleton-line meridian-task-skeleton-line-short"></div>
-                <div class="meridian-task-skeleton-line"></div>
-                <div class="meridian-task-skeleton-label">Loading supervisor plan and context…</div>
+    <section class="foundry-task-thread-panel">
+        <div class="foundry-task-view-log foundry-task-thread-log">
+            <div class="foundry-task-empty-events foundry-task-loading-state">
+                <div class="foundry-task-skeleton-line"></div>
+                <div class="foundry-task-skeleton-line foundry-task-skeleton-line-short"></div>
+                <div class="foundry-task-skeleton-line"></div>
+                <div class="foundry-task-skeleton-label">Loading supervisor plan and context…</div>
             </div>
         </div>
     </section>
@@ -2934,7 +2934,7 @@ function render_supervisor_view_loading(context: TopicContext): void {
     set_task_view_open_state(true);
 }
 
-function render_supervisor_view(context: TopicContext, sidebar: MeridianSidebarPayload): void {
+function render_supervisor_view(context: TopicContext, sidebar: FoundrySidebarPayload): void {
     if (!state.task_view_open || state.task_view_mode !== "supervisor") {
         return;
     }
@@ -2977,7 +2977,7 @@ function render_supervisor_view(context: TopicContext, sidebar: MeridianSidebarP
 
     const steps_markup =
         steps.length > 0
-            ? `<ol class="meridian-supervisor-step-list">${steps
+            ? `<ol class="foundry-supervisor-step-list">${steps
                   .map((step) => {
                       const title = as_string(step["title"]).trim() || as_string(step["instruction"]).split("\n")[0] || "Step";
                       const kind = as_string(step["kind"]).trim() || "write";
@@ -2988,98 +2988,98 @@ function render_supervisor_view(context: TopicContext, sidebar: MeridianSidebarP
                       const meta = [kind, `${worker}/${role}`, depends ? `depends: ${depends}` : ""]
                           .filter(Boolean)
                           .join(" · ");
-                      return `<li class="meridian-supervisor-step">
-    <div class="meridian-supervisor-step-title">${_.escape(title)}</div>
-    <div class="meridian-supervisor-step-meta">${_.escape(meta)}</div>
-    ${instruction ? `<pre class="meridian-supervisor-step-instruction">${_.escape(instruction)}</pre>` : ""}
+                      return `<li class="foundry-supervisor-step">
+    <div class="foundry-supervisor-step-title">${_.escape(title)}</div>
+    <div class="foundry-supervisor-step-meta">${_.escape(meta)}</div>
+    ${instruction ? `<pre class="foundry-supervisor-step-instruction">${_.escape(instruction)}</pre>` : ""}
 </li>`;
                   })
                   .join("")}</ol>`
-            : `<div class="meridian-supervisor-empty">No steps yet. Click Synthesize to create a plan from the topic transcript.</div>`;
+            : `<div class="foundry-supervisor-empty">No steps yet. Click Synthesize to create a plan from the topic transcript.</div>`;
 
     const seams_markup =
         seams.length > 0
-            ? `<ul class="meridian-supervisor-seam-list">${seams
+            ? `<ul class="foundry-supervisor-seam-list">${seams
                   .map((seam) => {
                       const title = as_string(seam["title"]).trim() || as_string(seam["seam_id"]).trim() || "Seam";
                       const mode = as_string(seam["mode"]).trim();
                       const step_ids = as_string_list(seam["step_ids"]).join(", ");
                       const meta = [mode, step_ids ? `steps: ${step_ids}` : ""].filter(Boolean).join(" · ");
-                      return `<li><div class="meridian-supervisor-seam-title">${_.escape(title)}</div><div class="meridian-supervisor-seam-meta">${_.escape(meta)}</div></li>`;
+                      return `<li><div class="foundry-supervisor-seam-title">${_.escape(title)}</div><div class="foundry-supervisor-seam-meta">${_.escape(meta)}</div></li>`;
                   })
                   .join("")}</ul>`
-            : `<div class="meridian-supervisor-empty">No parallel seams identified yet.</div>`;
+            : `<div class="foundry-supervisor-empty">No parallel seams identified yet.</div>`;
 
     const unknowns_markup =
         unknowns.length > 0
-            ? `<ul class="meridian-supervisor-bullet-list">${unknowns
+            ? `<ul class="foundry-supervisor-bullet-list">${unknowns
                   .map((item) => `<li>${_.escape(item)}</li>`)
                   .join("")}</ul>`
-            : `<div class="meridian-supervisor-empty">None</div>`;
+            : `<div class="foundry-supervisor-empty">None</div>`;
 
     const approvals_markup =
         approval_points.length > 0
-            ? `<ul class="meridian-supervisor-bullet-list">${approval_points
+            ? `<ul class="foundry-supervisor-bullet-list">${approval_points
                   .map((item) => `<li>${_.escape(item)}</li>`)
                   .join("")}</ul>`
-            : `<div class="meridian-supervisor-empty">None</div>`;
+            : `<div class="foundry-supervisor-empty">None</div>`;
 
     const recommended_markup =
         recommended.length > 0
-            ? `<ul class="meridian-supervisor-bullet-list">${recommended
+            ? `<ul class="foundry-supervisor-bullet-list">${recommended
                   .map((item) => {
                       const instruction = as_string(item["instruction"]).trim();
                       const worker = as_string(item["assigned_worker"]).trim();
                       const role = as_string(item["assigned_role"]).trim();
                       const meta = [worker, role].filter(Boolean).join(" / ");
-                      return `<li><div class="meridian-supervisor-reco-instruction">${_.escape(instruction || "Directive")}</div>${meta ? `<div class="meridian-supervisor-reco-meta">${_.escape(meta)}</div>` : ""}</li>`;
+                      return `<li><div class="foundry-supervisor-reco-instruction">${_.escape(instruction || "Directive")}</div>${meta ? `<div class="foundry-supervisor-reco-meta">${_.escape(meta)}</div>` : ""}</li>`;
                   })
                   .join("")}</ul>`
-            : `<div class="meridian-supervisor-empty">None</div>`;
+            : `<div class="foundry-supervisor-empty">None</div>`;
 
     const soul_text = state.supervisor_context?.soul || "";
     const memory_tail_text = state.supervisor_context?.memory_tail || "";
 
     const header_label = _.escape(`${context.stream_name} · ${context.topic}`);
     const markup = `
-<div class="meridian-task-session-shell meridian-supervisor-shell">
-    <header class="meridian-task-session-header">
-        <div class="meridian-task-session-title-row">
-            <button type="button" class="meridian-action-button" id="meridian-task-view-back">Close</button>
-            <div class="meridian-task-session-title-wrap">
-                <div class="meridian-task-session-title">Supervisor</div>
-                <div class="meridian-task-id">${header_label}</div>
+<div class="foundry-task-session-shell foundry-supervisor-shell">
+    <header class="foundry-task-session-header">
+        <div class="foundry-task-session-title-row">
+            <button type="button" class="foundry-action-button" id="foundry-task-view-back">Close</button>
+            <div class="foundry-task-session-title-wrap">
+                <div class="foundry-task-session-title">Supervisor</div>
+                <div class="foundry-task-id">${header_label}</div>
             </div>
-            <span class="meridian-status-pill meridian-status-${_.escape(plan_status)}">${_.escape(plan_status || "draft")}</span>
+            <span class="foundry-status-pill foundry-status-${_.escape(plan_status)}">${_.escape(plan_status || "draft")}</span>
         </div>
-        <div class="meridian-task-action-row">
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-supervisor-refresh">Refresh</button>
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-supervisor-synthesize">Synthesize</button>
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-task-provider-accounts">Provider accounts</button>
+        <div class="foundry-task-action-row">
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-supervisor-refresh">Refresh</button>
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-supervisor-synthesize">Synthesize</button>
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-task-provider-accounts">Provider accounts</button>
         </div>
     </header>
-    <div class="meridian-supervisor-body">
-        <section class="meridian-supervisor-card">
-            <div class="meridian-supervisor-card-header">
+    <div class="foundry-supervisor-body">
+        <section class="foundry-supervisor-card">
+            <div class="foundry-supervisor-card-header">
                 <h3>Plan</h3>
-                <div class="meridian-supervisor-plan-meta">
-                    <span class="meridian-supervisor-chip">tasks: ${sidebar.task_count}</span>
-                    <span class="meridian-supervisor-chip">plan: ${_.escape(plan_id)}</span>
+                <div class="foundry-supervisor-plan-meta">
+                    <span class="foundry-supervisor-chip">tasks: ${sidebar.task_count}</span>
+                    <span class="foundry-supervisor-chip">plan: ${_.escape(plan_id)}</span>
                 </div>
             </div>
-            <label class="meridian-task-create-label" for="meridian-supervisor-summary-input">Summary</label>
-            <input id="meridian-supervisor-summary-input" class="modal_text_input" maxlength="280" autocomplete="off" value="${_.escape(plan_summary)}" placeholder="Short summary for this plan revision" />
-            <label class="meridian-task-create-label" for="meridian-supervisor-objective-input">Objective</label>
-            <textarea id="meridian-supervisor-objective-input" class="modal_text_input meridian-task-create-textarea" rows="3" placeholder="What should the supervisor accomplish for this topic?">${_.escape(plan_objective)}</textarea>
-            <div class="meridian-supervisor-plan-subgrid">
+            <label class="foundry-task-create-label" for="foundry-supervisor-summary-input">Summary</label>
+            <input id="foundry-supervisor-summary-input" class="modal_text_input" maxlength="280" autocomplete="off" value="${_.escape(plan_summary)}" placeholder="Short summary for this plan revision" />
+            <label class="foundry-task-create-label" for="foundry-supervisor-objective-input">Objective</label>
+            <textarea id="foundry-supervisor-objective-input" class="modal_text_input foundry-task-create-textarea" rows="3" placeholder="What should the supervisor accomplish for this topic?">${_.escape(plan_objective)}</textarea>
+            <div class="foundry-supervisor-plan-subgrid">
                 <div>
                     <h4>Assumptions</h4>
                     ${
                         assumptions.length > 0
-                            ? `<ul class="meridian-supervisor-bullet-list">${assumptions
+                            ? `<ul class="foundry-supervisor-bullet-list">${assumptions
                                   .map((item) => `<li>${_.escape(item)}</li>`)
                                   .join("")}</ul>`
-                            : `<div class="meridian-supervisor-empty">None</div>`
+                            : `<div class="foundry-supervisor-empty">None</div>`
                     }
                 </div>
                 <div>
@@ -3093,54 +3093,54 @@ function render_supervisor_view(context: TopicContext, sidebar: MeridianSidebarP
             </div>
         </section>
 
-        <section class="meridian-supervisor-card">
+        <section class="foundry-supervisor-card">
             <h3>Work plan</h3>
             ${steps_markup}
         </section>
 
-        <section class="meridian-supervisor-card">
+        <section class="foundry-supervisor-card">
             <h3>Parallel seams</h3>
             ${seams_markup}
         </section>
 
-        <section class="meridian-supervisor-card">
+        <section class="foundry-supervisor-card">
             <h3>Recommended directives</h3>
             ${recommended_markup}
         </section>
 
-        <section class="meridian-supervisor-card">
+        <section class="foundry-supervisor-card">
             <h3>Dispatch directive</h3>
-            <label class="meridian-task-create-label" for="meridian-supervisor-directive-instruction">Instruction</label>
-            <textarea id="meridian-supervisor-directive-instruction" class="modal_text_input meridian-task-create-textarea" rows="4" placeholder="Describe the directive the supervisor should assign to a worker"></textarea>
-            <div class="meridian-task-two-col-grid">
+            <label class="foundry-task-create-label" for="foundry-supervisor-directive-instruction">Instruction</label>
+            <textarea id="foundry-supervisor-directive-instruction" class="modal_text_input foundry-task-create-textarea" rows="4" placeholder="Describe the directive the supervisor should assign to a worker"></textarea>
+            <div class="foundry-task-two-col-grid">
                 <div>
-                    <label class="meridian-task-create-label" for="meridian-supervisor-directive-worker">Assigned worker</label>
-                    <input id="meridian-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
+                    <label class="foundry-task-create-label" for="foundry-supervisor-directive-worker">Assigned worker</label>
+                    <input id="foundry-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
                 </div>
                 <div>
-                    <label class="meridian-task-create-label" for="meridian-supervisor-directive-role">Role</label>
-                    <select id="meridian-supervisor-directive-role" class="modal_text_input">
+                    <label class="foundry-task-create-label" for="foundry-supervisor-directive-role">Role</label>
+                    <select id="foundry-supervisor-directive-role" class="modal_text_input">
                         <option value="writer">writer</option>
                         <option value="read_only">read_only</option>
                         <option value="verify">verify</option>
                     </select>
                 </div>
             </div>
-            <button type="button" class="button rounded meridian-supervisor-dispatch-button" id="meridian-supervisor-dispatch">Dispatch</button>
+            <button type="button" class="button rounded foundry-supervisor-dispatch-button" id="foundry-supervisor-dispatch">Dispatch</button>
         </section>
 
-        <details class="meridian-supervisor-card meridian-supervisor-context" ${
+        <details class="foundry-supervisor-card foundry-supervisor-context" ${
             soul_text || memory_tail_text ? "" : "open"
         }>
             <summary>Supervisor context (soul + memory)</summary>
-            <div class="meridian-supervisor-context-grid">
+            <div class="foundry-supervisor-context-grid">
                 <div>
                     <h4>Soul</h4>
-                    <pre class="meridian-supervisor-context-pre">${_.escape(soul_text || "Loading…")}</pre>
+                    <pre class="foundry-supervisor-context-pre">${_.escape(soul_text || "Loading…")}</pre>
                 </div>
                 <div>
                     <h4>Memory tail</h4>
-                    <pre class="meridian-supervisor-context-pre">${_.escape(memory_tail_text || "Loading…")}</pre>
+                    <pre class="foundry-supervisor-context-pre">${_.escape(memory_tail_text || "Loading…")}</pre>
                 </div>
             </div>
         </details>
@@ -3156,7 +3156,7 @@ function render_supervisor_view(context: TopicContext, sidebar: MeridianSidebarP
     set_task_view_open_state(true);
 }
 
-function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload): void {
+function render_task_view(context: TopicContext, sidebar: FoundrySidebarPayload): void {
     if (!state.task_view_open || state.task_view_mode !== "task") {
         return;
     }
@@ -3221,47 +3221,47 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
     }
     const chat_count_text = count_text(chat_rows.length, "message");
     const preview_markup = selected_task.preview_url
-        ? `<a class="meridian-action-button meridian-task-preview-button" href="${_.escape(selected_task.preview_url)}" target="_blank" rel="noopener noreferrer">Open preview</a>`
-        : '<span class="meridian-task-view-preview-pending">Preview pending</span>';
+        ? `<a class="foundry-action-button foundry-task-preview-button" href="${_.escape(selected_task.preview_url)}" target="_blank" rel="noopener noreferrer">Open preview</a>`
+        : '<span class="foundry-task-view-preview-pending">Preview pending</span>';
     const clarification_questions_markup = has_clarification_questions
-        ? `<ul class="meridian-task-clarification-list">${selected_task.clarification_questions
+        ? `<ul class="foundry-task-clarification-list">${selected_task.clarification_questions
               .map((question) => `<li>${_.escape(question)}</li>`)
               .join("")}</ul>`
         : "";
     const blocked_banner_markup = blocked_reason.length > 0
-        ? `<div class="meridian-task-banner meridian-task-banner-warning">${_.escape(blocked_reason)}</div>`
+        ? `<div class="foundry-task-banner foundry-task-banner-warning">${_.escape(blocked_reason)}</div>`
         : "";
     const review_claims_markup = selected_task.file_claims.length > 0
         ? selected_task.file_claims.map((item) => `<code>${_.escape(item)}</code>`).join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const review_areas_markup = selected_task.area_claims.length > 0
         ? selected_task.area_claims.map((item) => `<code>${_.escape(item)}</code>`).join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const review_depends_markup = selected_task.depends_on_task_ids.length > 0
         ? selected_task.depends_on_task_ids
-              .map((item) => `<span class="meridian-task-dependency-chip">${_.escape(item)}</span>`)
+              .map((item) => `<span class="foundry-task-dependency-chip">${_.escape(item)}</span>`)
               .join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const review_artifacts_markup = selected_task.artifacts.length > 0
         ? selected_task.artifacts
               .map((artifact) => {
                   if (artifact.url) {
-                      return `<a class="meridian-task-artifact-link" href="${_.escape(artifact.url)}" target="_blank" rel="noopener noreferrer">${_.escape(artifact.label)}</a>`;
+                      return `<a class="foundry-task-artifact-link" href="${_.escape(artifact.url)}" target="_blank" rel="noopener noreferrer">${_.escape(artifact.label)}</a>`;
                   }
-                  return `<span class="meridian-task-artifact-chip">${_.escape(artifact.label)}</span>`;
+                  return `<span class="foundry-task-artifact-chip">${_.escape(artifact.label)}</span>`;
               })
               .join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const approvals_pending_markup = selected_task.approvals_pending.length > 0
         ? selected_task.approvals_pending
-              .map((item) => `<span class="meridian-task-dependency-chip">${_.escape(item)}</span>`)
+              .map((item) => `<span class="foundry-task-dependency-chip">${_.escape(item)}</span>`)
               .join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const blockers_markup = selected_task.blockers.length > 0
         ? selected_task.blockers
-              .map((item) => `<span class="meridian-task-dependency-chip">${_.escape(item)}</span>`)
+              .map((item) => `<span class="foundry-task-dependency-chip">${_.escape(item)}</span>`)
               .join("")
-        : '<span class="meridian-task-review-empty">None</span>';
+        : '<span class="foundry-task-review-empty">None</span>';
     const usage_turns = selected_task.turns_used ?? 0;
     const usage_tokens = selected_task.tokens_used ?? 0;
     const usage_cost = selected_task.usd_estimate ?? 0;
@@ -3269,16 +3269,16 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
     const active_diff_doc = diff_docs[0];
     const diff_doc_markup = active_diff_doc
         ? render_diff_document_markup(active_diff_doc, state.task_review_mode)
-        : '<div class="meridian-task-review-empty">No diff captured yet. Run activity that emits patch output or attach a diff artifact.</div>';
+        : '<div class="foundry-task-review-empty">No diff captured yet. Run activity that emits patch output or attach a diff artifact.</div>';
     const diff_sources_markup =
         diff_docs.length > 0
             ? diff_docs
                   .map(
                       (doc) =>
-                          `<span class="meridian-task-dependency-chip" title="${_.escape(doc.source)}">${_.escape(doc.label)}</span>`,
+                          `<span class="foundry-task-dependency-chip" title="${_.escape(doc.source)}">${_.escape(doc.label)}</span>`,
                   )
                   .join("")
-            : '<span class="meridian-task-review-empty">None</span>';
+            : '<span class="foundry-task-review-empty">None</span>';
 
     const task_view_signature = [
         selected_task.task_id,
@@ -3314,7 +3314,7 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
     ].join("||");
 
     const $view = ensure_task_view_container();
-    const current_draft = String($("#meridian-task-reply-input").val() ?? "");
+    const current_draft = String($("#foundry-task-reply-input").val() ?? "");
     const needs_full_render = task_view_signature !== state.task_view_signature;
     if (needs_full_render) {
         state.task_view_signature = task_view_signature;
@@ -3323,165 +3323,165 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
         // or we can end up with a blank log when signatures are unchanged.
         chat_dom_state = null;
         $view.html(`
-<div class="meridian-task-session-shell" data-meridian-task-id="${_.escape(selected_task.task_id)}">
-    <header class="meridian-task-session-header">
-        <div class="meridian-task-session-title-row">
-            <button type="button" class="meridian-action-button" id="meridian-task-view-back">Close</button>
-            <div class="meridian-task-session-title-wrap">
-                <div class="meridian-task-session-title">${_.escape(selected_task.title)}</div>
-                <div class="meridian-task-id">${_.escape(selected_task.task_id)}</div>
+<div class="foundry-task-session-shell" data-foundry-task-id="${_.escape(selected_task.task_id)}">
+    <header class="foundry-task-session-header">
+        <div class="foundry-task-session-title-row">
+            <button type="button" class="foundry-action-button" id="foundry-task-view-back">Close</button>
+            <div class="foundry-task-session-title-wrap">
+                <div class="foundry-task-session-title">${_.escape(selected_task.title)}</div>
+                <div class="foundry-task-id">${_.escape(selected_task.task_id)}</div>
             </div>
-            <span class="meridian-status-pill meridian-status-${status_class(selected_task.status)}">${_.escape(status_label(selected_task.status))}</span>
-            ${is_running ? '<span class="meridian-task-live-indicator">Live</span>' : ""}
+            <span class="foundry-status-pill foundry-status-${status_class(selected_task.status)}">${_.escape(status_label(selected_task.status))}</span>
+            ${is_running ? '<span class="foundry-task-live-indicator">Live</span>' : ""}
         </div>
-        <div class="meridian-task-session-subtitle">${_.escape(source_stream_name)} · ${_.escape(source_topic_name)} · ${_.escape(selected_task.provider || "provider: n/a")} · ${_.escape(model_text)}</div>
-        <div class="meridian-task-phase-row">
-            <span class="meridian-task-phase-label">Phase</span>
-            <span class="meridian-task-phase-value" id="meridian-task-phase-value">${_.escape(phase_text)}</span>
-            <span class="meridian-task-event-chip" id="meridian-task-event-count">${rows_with_fallback.length} event${rows_with_fallback.length === 1 ? "" : "s"}</span>
-            <span class="meridian-task-event-chip" id="meridian-task-elapsed-chip">${_.escape(format_elapsed(selected_task.elapsed_seconds))}</span>
-            <span class="meridian-task-event-chip" id="meridian-task-branch-chip">${_.escape(selected_task.branch_name || "branch: pending")}</span>
-            <span class="meridian-task-event-chip" id="meridian-task-approval-chip">${selected_task.approved ? "approved" : "approval pending"}</span>
+        <div class="foundry-task-session-subtitle">${_.escape(source_stream_name)} · ${_.escape(source_topic_name)} · ${_.escape(selected_task.provider || "provider: n/a")} · ${_.escape(model_text)}</div>
+        <div class="foundry-task-phase-row">
+            <span class="foundry-task-phase-label">Phase</span>
+            <span class="foundry-task-phase-value" id="foundry-task-phase-value">${_.escape(phase_text)}</span>
+            <span class="foundry-task-event-chip" id="foundry-task-event-count">${rows_with_fallback.length} event${rows_with_fallback.length === 1 ? "" : "s"}</span>
+            <span class="foundry-task-event-chip" id="foundry-task-elapsed-chip">${_.escape(format_elapsed(selected_task.elapsed_seconds))}</span>
+            <span class="foundry-task-event-chip" id="foundry-task-branch-chip">${_.escape(selected_task.branch_name || "branch: pending")}</span>
+            <span class="foundry-task-event-chip" id="foundry-task-approval-chip">${selected_task.approved ? "approved" : "approval pending"}</span>
         </div>
         ${blocked_banner_markup}
         ${
             selected_task.error_text
-                ? `<div class="meridian-task-banner meridian-task-banner-error">${_.escape(selected_task.error_text)}</div>`
+                ? `<div class="foundry-task-banner foundry-task-banner-error">${_.escape(selected_task.error_text)}</div>`
                 : ""
         }
         ${
             has_clarification_questions
-                ? `<details class="meridian-task-summary-details" open><summary>Clarification needed</summary>${clarification_questions_markup}</details>`
+                ? `<details class="foundry-task-summary-details" open><summary>Clarification needed</summary>${clarification_questions_markup}</details>`
                 : ""
         }
 	        ${
 	            summary_text
-	                ? `<details class="meridian-task-summary-details"><summary>Latest run summary</summary><div class="meridian-task-banner meridian-task-banner-summary">${_.escape(summary_text)}</div></details>`
+	                ? `<details class="foundry-task-summary-details"><summary>Latest run summary</summary><div class="foundry-task-banner foundry-task-banner-summary">${_.escape(summary_text)}</div></details>`
 	                : ""
 	        }
-	        <div class="meridian-task-banner meridian-task-banner-warning meridian-task-banner-slot notdisplayed" id="meridian-task-stream-banner" role="status" aria-live="polite"></div>
-	        <div class="meridian-task-banner meridian-task-banner-error meridian-task-banner-slot notdisplayed" id="meridian-task-inline-error-banner" role="alert"></div>
-	        <div class="meridian-task-action-row">
+	        <div class="foundry-task-banner foundry-task-banner-warning foundry-task-banner-slot notdisplayed" id="foundry-task-stream-banner" role="status" aria-live="polite"></div>
+	        <div class="foundry-task-banner foundry-task-banner-error foundry-task-banner-slot notdisplayed" id="foundry-task-inline-error-banner" role="alert"></div>
+	        <div class="foundry-task-action-row">
             ${preview_markup}
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="status" aria-label="Refresh task status">Refresh</button>
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-task-supervisor-plan" aria-label="Synthesize plan and dispatch">Plan</button>
-            <button type="button" class="meridian-task-action-button button small rounded" id="meridian-task-provider-accounts" aria-label="Manage provider accounts">Provider accounts</button>
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="approve" aria-label="Approve task" ${
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="status" aria-label="Refresh task status">Refresh</button>
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-task-supervisor-plan" aria-label="Synthesize plan and dispatch">Plan</button>
+            <button type="button" class="foundry-task-action-button button small rounded" id="foundry-task-provider-accounts" aria-label="Manage provider accounts">Provider accounts</button>
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="approve" aria-label="Approve task" ${
                 needs_approval ? "" : "disabled"
             }>Approve</button>
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="pause" aria-label="Pause task" ${
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="pause" aria-label="Pause task" ${
                 can_pause ? "" : "disabled"
             }>Pause</button>
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="resume" aria-label="Resume task" ${
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="resume" aria-label="Resume task" ${
                 can_resume ? "" : "disabled"
             }>Resume</button>
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="mark_at_risk" aria-label="Mark task at risk" ${
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="mark_at_risk" aria-label="Mark task at risk" ${
                 task_status === "at_risk" || task_is_terminal(selected_task.status) ? "disabled" : ""
             }>Mark at risk</button>
-            <button type="button" class="meridian-task-action-button button small rounded" data-meridian-task-action="resolve_clarification_prompt" aria-label="Resolve clarification" ${
+            <button type="button" class="foundry-task-action-button button small rounded" data-foundry-task-action="resolve_clarification_prompt" aria-label="Resolve clarification" ${
                 task_status === "blocked_information" ? "" : "disabled"
             }>Resolve clarification</button>
-            <button type="button" id="meridian-task-header-stop" class="meridian-task-action-button button small rounded button-danger" data-meridian-task-action="cancel" ${
+            <button type="button" id="foundry-task-header-stop" class="foundry-task-action-button button small rounded button-danger" data-foundry-task-action="cancel" ${
                 can_stop ? "" : "disabled"
             }>Stop</button>
         </div>
     </header>
-    <details class="meridian-task-inspector" id="meridian-task-inspector"${state.task_inspector_open ? " open" : ""}>
+    <details class="foundry-task-inspector" id="foundry-task-inspector"${state.task_inspector_open ? " open" : ""}>
         <summary>
-            <span class="meridian-task-inspector-label">Inspector</span>
-            <span class="meridian-task-inspector-chips">
-                <span class="meridian-task-inspector-chip">${_.escape(count_text(selected_task.approvals_pending.length, "approval"))} pending</span>
-                <span class="meridian-task-inspector-chip">${_.escape(count_text(selected_task.blockers.length, "blocker"))}</span>
-                <span class="meridian-task-inspector-chip">${_.escape(count_text(selected_task.artifacts.length, "artifact"))}</span>
+            <span class="foundry-task-inspector-label">Inspector</span>
+            <span class="foundry-task-inspector-chips">
+                <span class="foundry-task-inspector-chip">${_.escape(count_text(selected_task.approvals_pending.length, "approval"))} pending</span>
+                <span class="foundry-task-inspector-chip">${_.escape(count_text(selected_task.blockers.length, "blocker"))}</span>
+                <span class="foundry-task-inspector-chip">${_.escape(count_text(selected_task.artifacts.length, "artifact"))}</span>
             </span>
         </summary>
-        <div class="meridian-task-inspector-grid">
-            <section class="meridian-task-review-card">
+        <div class="foundry-task-inspector-grid">
+            <section class="foundry-task-review-card">
                 <h4>Supervisor</h4>
-                <div class="meridian-task-review-grid">
-                    <span>Assigned worker</span><span id="meridian-task-supervisor-worker">${_.escape(selected_task.assigned_worker || "auto")}</span>
-                    <span>Assigned role</span><span id="meridian-task-supervisor-role">${_.escape(selected_task.assigned_role || "n/a")}</span>
-                    <span>Assigned by</span><span id="meridian-task-supervisor-by">${_.escape(selected_task.assigned_by || "n/a")}</span>
-                    <span>Directive</span><span id="meridian-task-supervisor-directive">${_.escape(selected_task.directive_id || "n/a")}</span>
-                    <span>Plan revision</span><span id="meridian-task-supervisor-plan-revision">${_.escape(selected_task.plan_revision_id || "n/a")}</span>
+                <div class="foundry-task-review-grid">
+                    <span>Assigned worker</span><span id="foundry-task-supervisor-worker">${_.escape(selected_task.assigned_worker || "auto")}</span>
+                    <span>Assigned role</span><span id="foundry-task-supervisor-role">${_.escape(selected_task.assigned_role || "n/a")}</span>
+                    <span>Assigned by</span><span id="foundry-task-supervisor-by">${_.escape(selected_task.assigned_by || "n/a")}</span>
+                    <span>Directive</span><span id="foundry-task-supervisor-directive">${_.escape(selected_task.directive_id || "n/a")}</span>
+                    <span>Plan revision</span><span id="foundry-task-supervisor-plan-revision">${_.escape(selected_task.plan_revision_id || "n/a")}</span>
                 </div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Claims</h4>
-                <div class="meridian-task-chip-list" id="meridian-task-claims">${review_claims_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-claims">${review_claims_markup}</div>
                 <h5>Areas</h5>
-                <div class="meridian-task-chip-list" id="meridian-task-areas">${review_areas_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-areas">${review_areas_markup}</div>
                 <h5>Depends on</h5>
-                <div class="meridian-task-chip-list" id="meridian-task-depends">${review_depends_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-depends">${review_depends_markup}</div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Approvals</h4>
                 <h5>Pending</h5>
-                <div class="meridian-task-chip-list" id="meridian-task-approvals">${approvals_pending_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-approvals">${approvals_pending_markup}</div>
                 <h5>Blockers</h5>
-                <div class="meridian-task-chip-list" id="meridian-task-blockers">${blockers_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-blockers">${blockers_markup}</div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Evidence</h4>
-                <div class="meridian-task-artifact-list" id="meridian-task-artifacts">${review_artifacts_markup}</div>
+                <div class="foundry-task-artifact-list" id="foundry-task-artifacts">${review_artifacts_markup}</div>
                 <h5>Last meaningful artifact</h5>
-                <div class="meridian-task-review-grid">
-                    <span>Artifact</span><span id="meridian-task-last-artifact">${_.escape(selected_task.last_meaningful_artifact || "n/a")}</span>
+                <div class="foundry-task-review-grid">
+                    <span>Artifact</span><span id="foundry-task-last-artifact">${_.escape(selected_task.last_meaningful_artifact || "n/a")}</span>
                 </div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Diff review</h4>
-                <div class="meridian-task-review-toolbar">
-                    <button type="button" class="meridian-task-review-mode${
+                <div class="foundry-task-review-toolbar">
+                    <button type="button" class="foundry-task-review-mode${
                         state.task_review_mode === "unified" ? " active" : ""
-                    }" data-meridian-task-review-mode="unified" aria-label="Unified diff view">Unified</button>
-                    <button type="button" class="meridian-task-review-mode${
+                    }" data-foundry-task-review-mode="unified" aria-label="Unified diff view">Unified</button>
+                    <button type="button" class="foundry-task-review-mode${
                         state.task_review_mode === "split" ? " active" : ""
-                    }" data-meridian-task-review-mode="split" aria-label="Split diff view">Split</button>
+                    }" data-foundry-task-review-mode="split" aria-label="Split diff view">Split</button>
                 </div>
-                <div class="meridian-task-chip-list" id="meridian-task-diff-sources">${diff_sources_markup}</div>
-                <div class="meridian-task-diff-shell" id="meridian-task-diff-shell">${diff_doc_markup}</div>
+                <div class="foundry-task-chip-list" id="foundry-task-diff-sources">${diff_sources_markup}</div>
+                <div class="foundry-task-diff-shell" id="foundry-task-diff-shell">${diff_doc_markup}</div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Runtime</h4>
-                <div class="meridian-task-review-grid">
-                    <span>Container</span><span id="meridian-task-runtime-container">${_.escape(selected_task.container_name || "pending")}</span>
-                    <span>Worktree</span><span class="meridian-task-path-text" id="meridian-task-runtime-worktree">${_.escape(selected_task.worktree_path || "pending")}</span>
-                    <span>Branch</span><span id="meridian-task-runtime-branch">${_.escape(selected_task.branch_name || "pending")}</span>
-                    <span>Heartbeat</span><span id="meridian-task-runtime-heartbeat">${_.escape(selected_task.last_heartbeat_at || "n/a")}</span>
+                <div class="foundry-task-review-grid">
+                    <span>Container</span><span id="foundry-task-runtime-container">${_.escape(selected_task.container_name || "pending")}</span>
+                    <span>Worktree</span><span class="foundry-task-path-text" id="foundry-task-runtime-worktree">${_.escape(selected_task.worktree_path || "pending")}</span>
+                    <span>Branch</span><span id="foundry-task-runtime-branch">${_.escape(selected_task.branch_name || "pending")}</span>
+                    <span>Heartbeat</span><span id="foundry-task-runtime-heartbeat">${_.escape(selected_task.last_heartbeat_at || "n/a")}</span>
                 </div>
             </section>
-            <section class="meridian-task-review-card">
+            <section class="foundry-task-review-card">
                 <h4>Usage</h4>
-                <div class="meridian-task-review-grid">
-                    <span>Turns</span><span id="meridian-task-usage-turns">${usage_turns}</span>
-                    <span>Tokens</span><span id="meridian-task-usage-tokens">${usage_tokens.toLocaleString()}</span>
-                    <span>Cost</span><span id="meridian-task-usage-cost">$${usage_cost.toFixed(2)}</span>
+                <div class="foundry-task-review-grid">
+                    <span>Turns</span><span id="foundry-task-usage-turns">${usage_turns}</span>
+                    <span>Tokens</span><span id="foundry-task-usage-tokens">${usage_tokens.toLocaleString()}</span>
+                    <span>Cost</span><span id="foundry-task-usage-cost">$${usage_cost.toFixed(2)}</span>
                 </div>
             </section>
         </div>
     </details>
-    <div class="meridian-task-session-body">
-        <section class="meridian-task-thread-panel">
-            <div class="meridian-task-view-log-header">
-                <span class="meridian-task-log-title">Agent stream</span>
-                <div class="meridian-task-stream-detail-controls">
-                    <button type="button" class="meridian-task-inline-detail-control" data-meridian-task-details-toggle="expand" aria-label="Expand all event details">Expand details</button>
-                    <button type="button" class="meridian-task-inline-detail-control" data-meridian-task-details-toggle="collapse" aria-label="Collapse all event details">Collapse details</button>
+    <div class="foundry-task-session-body">
+        <section class="foundry-task-thread-panel">
+            <div class="foundry-task-view-log-header">
+                <span class="foundry-task-log-title">Agent stream</span>
+                <div class="foundry-task-stream-detail-controls">
+                    <button type="button" class="foundry-task-inline-detail-control" data-foundry-task-details-toggle="expand" aria-label="Expand all event details">Expand details</button>
+                    <button type="button" class="foundry-task-inline-detail-control" data-foundry-task-details-toggle="collapse" aria-label="Collapse all event details">Collapse details</button>
                 </div>
-                <button type="button" class="meridian-task-follow-button notdisplayed" id="meridian-task-follow-button">Jump to latest</button>
-                <span class="meridian-task-log-count" id="meridian-task-log-count">${chat_count_text}</span>
+                <button type="button" class="foundry-task-follow-button notdisplayed" id="foundry-task-follow-button">Jump to latest</button>
+                <span class="foundry-task-log-count" id="foundry-task-log-count">${chat_count_text}</span>
             </div>
-            <div class="meridian-task-thread-log meridian-task-view-log" id="meridian-task-thread-log" role="log" aria-live="polite"></div>
+            <div class="foundry-task-thread-log foundry-task-view-log" id="foundry-task-thread-log" role="log" aria-live="polite"></div>
         </section>
     </div>
-    <footer class="meridian-task-reply-composer">
-        <textarea id="meridian-task-reply-input" class="modal_text_input meridian-task-reply-textarea" rows="3" aria-label="Task reply input" placeholder="Ask the agent to change code, run checks, explain, or continue."></textarea>
-        <div class="meridian-task-reply-actions">
-            <button type="button" class="button small rounded" id="meridian-task-reply-send" ${
+    <footer class="foundry-task-reply-composer">
+        <textarea id="foundry-task-reply-input" class="modal_text_input foundry-task-reply-textarea" rows="3" aria-label="Task reply input" placeholder="Ask the agent to change code, run checks, explain, or continue."></textarea>
+        <div class="foundry-task-reply-actions">
+            <button type="button" class="button small rounded" id="foundry-task-reply-send" ${
                 reply_request_in_flight ? "disabled" : ""
             }>${reply_request_in_flight ? "Sending..." : "Send"}</button>
-            <button type="button" class="button small rounded button-danger" id="meridian-task-inline-stop" ${
+            <button type="button" class="button small rounded button-danger" id="foundry-task-inline-stop" ${
                 can_stop ? "" : "disabled"
             }>Stop</button>
         </div>
@@ -3489,27 +3489,27 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
 </div>
 `);
         if (current_draft) {
-            $("#meridian-task-reply-input").val(current_draft);
+            $("#foundry-task-reply-input").val(current_draft);
         }
     }
 
     const event_count_text = count_text(rows_with_fallback.length, "event");
     const message_count_text = count_text(chat_rows.length, "message");
-    $("#meridian-task-phase-value").text(phase_text);
-    $("#meridian-task-event-count").text(event_count_text);
-    $("#meridian-task-elapsed-chip").text(format_elapsed(selected_task.elapsed_seconds));
-    $("#meridian-task-branch-chip").text(selected_task.branch_name || "branch: pending");
-    $("#meridian-task-approval-chip").text(selected_task.approved ? "approved" : "approval pending");
-    $("#meridian-task-log-count").text(message_count_text);
-    $("#meridian-task-inline-stop").prop("disabled", !can_stop);
-    $("#meridian-task-header-stop").prop("disabled", !can_stop);
+    $("#foundry-task-phase-value").text(phase_text);
+    $("#foundry-task-event-count").text(event_count_text);
+    $("#foundry-task-elapsed-chip").text(format_elapsed(selected_task.elapsed_seconds));
+    $("#foundry-task-branch-chip").text(selected_task.branch_name || "branch: pending");
+    $("#foundry-task-approval-chip").text(selected_task.approved ? "approved" : "approval pending");
+    $("#foundry-task-log-count").text(message_count_text);
+    $("#foundry-task-inline-stop").prop("disabled", !can_stop);
+    $("#foundry-task-header-stop").prop("disabled", !can_stop);
     update_task_view_banners(is_running);
     update_reply_composer_state();
 
-    $("#meridian-task-runtime-heartbeat").text(selected_task.last_heartbeat_at || "n/a");
-    $("#meridian-task-usage-turns").text(String(usage_turns));
-    $("#meridian-task-usage-tokens").text(usage_tokens.toLocaleString());
-    $("#meridian-task-usage-cost").text(`$${usage_cost.toFixed(2)}`);
+    $("#foundry-task-runtime-heartbeat").text(selected_task.last_heartbeat_at || "n/a");
+    $("#foundry-task-usage-turns").text(String(usage_turns));
+    $("#foundry-task-usage-tokens").text(usage_tokens.toLocaleString());
+    $("#foundry-task-usage-cost").text(`$${usage_cost.toFixed(2)}`);
 
     const last_row = rows_with_fallback.at(-1);
     const rows_signature = [
@@ -3521,7 +3521,7 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
     ].join("|");
     if (rows_signature !== state.task_view_rows_signature) {
         const should_stick_to_bottom = state.task_follow_output;
-        const thread = document.querySelector<HTMLElement>("#meridian-task-thread-log");
+        const thread = document.querySelector<HTMLElement>("#foundry-task-thread-log");
         if (thread) {
             update_thread_log(thread, rows_with_fallback, active_stream_mode, is_running);
             if (should_stick_to_bottom) {
@@ -3538,7 +3538,7 @@ function render_task_view(context: TopicContext, sidebar: MeridianSidebarPayload
 }
 
 function update_task_view_banners(is_running: boolean): void {
-    const stream_banner = document.querySelector<HTMLElement>("#meridian-task-stream-banner");
+    const stream_banner = document.querySelector<HTMLElement>("#foundry-task-stream-banner");
     if (stream_banner) {
         if (is_running && state.event_stream_disconnected) {
             stream_banner.textContent =
@@ -3550,7 +3550,7 @@ function update_task_view_banners(is_running: boolean): void {
         }
     }
 
-    const error_banner = document.querySelector<HTMLElement>("#meridian-task-inline-error-banner");
+    const error_banner = document.querySelector<HTMLElement>("#foundry-task-inline-error-banner");
     if (error_banner) {
         const message = state.task_inline_error.trim();
         if (message && message !== "Live stream disconnected; polling fallback will continue.") {
@@ -3575,13 +3575,13 @@ function sync_task_view_banners(): void {
     update_task_view_banners(status_class(selected_task.status) === "running");
 }
 
-type MeridianChatDomState = {
+type FoundryChatDomState = {
     task_id: string;
     turn_keys: string[];
     turn_signatures: Map<string, string>;
 };
 
-let chat_dom_state: MeridianChatDomState | null = null;
+let chat_dom_state: FoundryChatDomState | null = null;
 
 function chat_turn_signature(turn: ChatTurn): string {
     const user_id = turn.user ? String(turn.user.event_id) : "";
@@ -3604,7 +3604,7 @@ function chat_turn_signature(turn: ChatTurn): string {
 }
 
 function decorate_rendered_markdown(root: HTMLElement): void {
-    const nodes = Array.from(root.querySelectorAll<HTMLElement>(".meridian-thread-message-rendered"));
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>(".foundry-thread-message-rendered"));
     for (const node of nodes) {
         rendered_markdown.update_elements($(node));
         decorate_markdown_code_blocks(node);
@@ -3612,7 +3612,7 @@ function decorate_rendered_markdown(root: HTMLElement): void {
 }
 
 function ensure_chat_live_indicator(thread: HTMLElement, is_running: boolean): void {
-    const indicator = thread.querySelector<HTMLElement>("#meridian-thread-live-indicator");
+    const indicator = thread.querySelector<HTMLElement>("#foundry-thread-live-indicator");
     if (!is_running) {
         indicator?.remove();
         return;
@@ -3622,15 +3622,15 @@ function ensure_chat_live_indicator(thread: HTMLElement, is_running: boolean): v
     }
     thread.insertAdjacentHTML(
         "beforeend",
-        `<article class="meridian-chat-system meridian-thread-live-indicator-row" id="meridian-thread-live-indicator">
-    <div class="meridian-thread-message">Assistant is running…</div>
+        `<article class="foundry-chat-system foundry-thread-live-indicator-row" id="foundry-thread-live-indicator">
+    <div class="foundry-thread-message">Assistant is running…</div>
 </article>`,
     );
 }
 
 function full_render_thread(
     thread: HTMLElement,
-    rows: MeridianTaskEvent[],
+    rows: FoundryTaskEvent[],
     mode: "chat" | "activity",
     is_running: boolean,
 ): void {
@@ -3641,7 +3641,7 @@ function full_render_thread(
 
 function update_chat_thread_incremental(
     thread: HTMLElement,
-    rows: MeridianTaskEvent[],
+    rows: FoundryTaskEvent[],
     is_running: boolean,
 ): void {
     const task_id = state.selected_task_id;
@@ -3733,7 +3733,7 @@ function update_chat_thread_incremental(
 
 function update_thread_log(
     thread: HTMLElement,
-    rows: MeridianTaskEvent[],
+    rows: FoundryTaskEvent[],
     mode: "chat" | "activity",
     is_running: boolean,
 ): void {
@@ -3808,7 +3808,7 @@ function handle_error(prefix: string, xhr: JQuery.jqXHR<unknown>): void {
     ui_report.generic_embed_error(_.escape(message), 5000);
 }
 
-function choose_default_task(sidebar: MeridianSidebarPayload): string {
+function choose_default_task(sidebar: FoundrySidebarPayload): string {
     const running = sidebar.tasks.find((task) => status_class(task.status) === "running");
     if (running) {
         return running.task_id;
@@ -3816,7 +3816,7 @@ function choose_default_task(sidebar: MeridianSidebarPayload): string {
     return sidebar.tasks[0]?.task_id ?? "";
 }
 
-function single_task_sidebar(context: TopicContext, task: MeridianTaskSummary): MeridianSidebarPayload {
+function single_task_sidebar(context: TopicContext, task: FoundryTaskSummary): FoundrySidebarPayload {
     return {
         topic_scope_id: context.topic_scope_id,
         task_count: 1,
@@ -3839,12 +3839,12 @@ function close_selected_task_event_stream(): void {
     state.event_stream_disconnected = false;
 }
 
-function append_task_events(events: MeridianTaskEvent[]): void {
+function append_task_events(events: FoundryTaskEvent[]): void {
     if (events.length === 0) {
         return;
     }
     const seen_ids = new Set(state.event_rows.map((event) => event.id));
-    const new_events: MeridianTaskEvent[] = [];
+    const new_events: FoundryTaskEvent[] = [];
     let max_id = state.event_after_id;
     for (const event of events) {
         max_id = Math.max(max_id, event.id);
@@ -3916,7 +3916,7 @@ function refresh_selected_task_details(context: TopicContext, show_error = false
     task_details_request_task_id = task_id;
 
     channel.get({
-        url: `/json/meridian/tasks/${encodeURIComponent(task_id)}`,
+        url: `/json/foundry/tasks/${encodeURIComponent(task_id)}`,
         success(data) {
             if (task_details_request_task_id === task_id) {
                 task_details_request_task_id = "";
@@ -3968,7 +3968,7 @@ function start_selected_task_event_stream(): void {
     }
 
     close_selected_task_event_stream();
-    const url = `/json/meridian/tasks/${encodeURIComponent(task_id)}/events/stream?after_id=${state.event_after_id}`;
+    const url = `/json/foundry/tasks/${encodeURIComponent(task_id)}/events/stream?after_id=${state.event_after_id}`;
     const stream = new EventSource(url);
     task_events_stream = stream;
     task_events_stream_task_id = task_id;
@@ -4078,7 +4078,7 @@ function refresh_topic_sidebar(force = false): void {
     sidebar_request_in_flight = true;
 
     channel.get({
-        url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/sidebar`,
+        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/sidebar`,
         data: {limit: 100},
         success(data) {
             sidebar_request_in_flight = false;
@@ -4161,13 +4161,13 @@ function refresh_supervisor_view_data(force = false): void {
     }
     supervisor_view_request_in_flight = true;
     channel.get({
-        url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/plan/current`,
+        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/plan/current`,
         success(data) {
             const root = as_record(data);
             const plan = parse_plan_revision(root?.["plan_revision"]);
             state.supervisor_plan_revision = plan;
             channel.get({
-                url: "/json/meridian/supervisor/context",
+                url: "/json/foundry/supervisor/context",
                 success(ctx_data) {
                     supervisor_view_request_in_flight = false;
                     const ctx_root = as_record(ctx_data);
@@ -4206,11 +4206,11 @@ function submit_supervisor_synthesize_from_view(): void {
     if (!context || supervisor_plan_request_in_flight) {
         return;
     }
-    const summary = String($("#meridian-supervisor-summary-input").val() ?? "").trim();
-    const objective = String($("#meridian-supervisor-objective-input").val() ?? "").trim();
+    const summary = String($("#foundry-supervisor-summary-input").val() ?? "").trim();
+    const objective = String($("#foundry-supervisor-objective-input").val() ?? "").trim();
     supervisor_plan_request_in_flight = true;
     channel.post({
-        url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/plan/synthesize`,
+        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/plan/synthesize`,
         data: {
             summary,
             objective,
@@ -4237,15 +4237,15 @@ function submit_supervisor_dispatch_from_view(): void {
     if (!context || supervisor_dispatch_request_in_flight) {
         return;
     }
-    const instruction = String($("#meridian-supervisor-directive-instruction").val() ?? "").trim();
+    const instruction = String($("#foundry-supervisor-directive-instruction").val() ?? "").trim();
     if (!instruction) {
         ui_report.generic_embed_error("Directive instruction is required.", 3500);
         return;
     }
-    const assigned_worker = String($("#meridian-supervisor-directive-worker").val() ?? "")
+    const assigned_worker = String($("#foundry-supervisor-directive-worker").val() ?? "")
         .trim()
         .toLowerCase();
-    const assigned_role = String($("#meridian-supervisor-directive-role").val() ?? "writer")
+    const assigned_role = String($("#foundry-supervisor-directive-role").val() ?? "writer")
         .trim()
         .toLowerCase();
     const plan_revision_id = state.supervisor_plan_revision?.plan_revision_id || undefined;
@@ -4262,7 +4262,7 @@ function submit_supervisor_dispatch_from_view(): void {
     ];
     supervisor_dispatch_request_in_flight = true;
     channel.post({
-        url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
+        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
         data: {
             plan_revision_id,
             directives: JSON.stringify(directives),
@@ -4272,7 +4272,7 @@ function submit_supervisor_dispatch_from_view(): void {
         },
         success(dispatch_data) {
             supervisor_dispatch_request_in_flight = false;
-            $("#meridian-supervisor-directive-instruction").val("");
+            $("#foundry-supervisor-directive-instruction").val("");
             const dispatch_root = as_record(dispatch_data);
             const tasks_raw = Array.isArray(dispatch_root?.["tasks"]) ? dispatch_root["tasks"] : [];
             const first_task = parse_task_summary(tasks_raw[0]);
@@ -4308,7 +4308,7 @@ function poll_selected_task_events(force = false): void {
     const task_id = state.selected_task_id;
 
     channel.get({
-        url: `/json/meridian/tasks/${encodeURIComponent(task_id)}/events`,
+        url: `/json/foundry/tasks/${encodeURIComponent(task_id)}/events`,
         data: {after_id: state.event_after_id, limit: 250},
         success(data) {
             events_request_in_flight = false;
@@ -4348,22 +4348,22 @@ function handle_create_task_success(context: TopicContext, data: unknown): void 
 }
 
 function update_create_task_credential_placeholder(): void {
-    const mode = String($("#meridian-topic-task-auth-mode-input").val() ?? "api_key")
+    const mode = String($("#foundry-topic-task-auth-mode-input").val() ?? "api_key")
         .trim()
         .toLowerCase();
     const placeholder =
         mode === "oauth"
             ? "Optional OAuth access token"
             : "Optional provider API key";
-    $("#meridian-topic-task-credential-input").attr("placeholder", placeholder);
+    $("#foundry-topic-task-credential-input").attr("placeholder", placeholder);
 }
 
 function update_create_task_provider_hint(): void {
     const provider = normalize_provider(
-        String($("#meridian-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
+        String($("#foundry-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
     );
     const model = provider_default_model(provider) || "provider default";
-    $("#meridian-topic-task-provider-hint").text(`Default model: ${model}`);
+    $("#foundry-topic-task-provider-hint").text(`Default model: ${model}`);
 }
 
 function start_provider_oauth(provider: string, continuation?: PendingOauthContinuation): void {
@@ -4373,10 +4373,10 @@ function start_provider_oauth(provider: string, continuation?: PendingOauthConti
         pending_oauth_continuation = continuation;
     }
     channel.post({
-        url: "/json/meridian/providers/oauth/start",
+        url: "/json/foundry/providers/oauth/start",
         data: {
             provider: normalized_provider,
-            redirect_uri: `${window.location.origin}/json/meridian/providers/oauth/callback`,
+            redirect_uri: `${window.location.origin}/json/foundry/providers/oauth/callback`,
         },
         success(data) {
             create_request_in_flight = false;
@@ -4404,7 +4404,7 @@ function start_provider_oauth(provider: string, continuation?: PendingOauthConti
     });
 }
 
-function provider_account_status_text(entry: MeridianProviderAuthEntry): string {
+function provider_account_status_text(entry: FoundryProviderAuthEntry): string {
     if (!entry.credential_connected) {
         return "Not connected";
     }
@@ -4413,33 +4413,33 @@ function provider_account_status_text(entry: MeridianProviderAuthEntry): string 
     return `Connected (${label})`;
 }
 
-function render_provider_accounts_markup(entries: MeridianProviderAuthEntry[]): string {
+function render_provider_accounts_markup(entries: FoundryProviderAuthEntry[]): string {
     if (entries.length === 0) {
-        return '<div class="meridian-task-provider-accounts-empty">No providers available.</div>';
+        return '<div class="foundry-task-provider-accounts-empty">No providers available.</div>';
     }
     return entries
         .map((entry) => {
             const connected_class = entry.credential_connected
-                ? " meridian-provider-connected"
+                ? " foundry-provider-connected"
                 : "";
             const oauth_disabled = entry.oauth_configured ? "" : " disabled";
             const disconnect_disabled = entry.credential_connected ? "" : " disabled";
             const oauth_badge = entry.oauth_configured
-                ? '<span class="meridian-provider-capability">OAuth</span>'
+                ? '<span class="foundry-provider-capability">OAuth</span>'
                 : "";
             const api_key_badge = entry.auth_modes.includes("api_key")
-                ? '<span class="meridian-provider-capability">API key</span>'
+                ? '<span class="foundry-provider-capability">API key</span>'
                 : "";
             return `
-<article class="meridian-provider-account${connected_class}" data-meridian-provider="${_.escape(entry.provider)}">
-    <div class="meridian-provider-account-main">
-        <div class="meridian-provider-account-title">${_.escape(entry.display_name)}</div>
-        <div class="meridian-provider-account-status">${_.escape(provider_account_status_text(entry))}</div>
+<article class="foundry-provider-account${connected_class}" data-foundry-provider="${_.escape(entry.provider)}">
+    <div class="foundry-provider-account-main">
+        <div class="foundry-provider-account-title">${_.escape(entry.display_name)}</div>
+        <div class="foundry-provider-account-status">${_.escape(provider_account_status_text(entry))}</div>
     </div>
-    <div class="meridian-provider-account-caps">${oauth_badge}${api_key_badge}</div>
-    <div class="meridian-provider-account-actions">
-        <button type="button" class="button small rounded" data-meridian-provider-action="oauth" data-meridian-provider="${_.escape(entry.provider)}"${oauth_disabled}>OAuth sign-in</button>
-        <button type="button" class="button small rounded" data-meridian-provider-action="disconnect" data-meridian-provider="${_.escape(entry.provider)}"${disconnect_disabled}>Disconnect</button>
+    <div class="foundry-provider-account-caps">${oauth_badge}${api_key_badge}</div>
+    <div class="foundry-provider-account-actions">
+        <button type="button" class="button small rounded" data-foundry-provider-action="oauth" data-foundry-provider="${_.escape(entry.provider)}"${oauth_disabled}>OAuth sign-in</button>
+        <button type="button" class="button small rounded" data-foundry-provider-action="disconnect" data-foundry-provider="${_.escape(entry.provider)}"${disconnect_disabled}>Disconnect</button>
     </div>
 </article>`;
         })
@@ -4447,14 +4447,14 @@ function render_provider_accounts_markup(entries: MeridianProviderAuthEntry[]): 
 }
 
 function render_provider_accounts_loading(label = "Loading provider accounts…"): void {
-    $(".meridian-provider-accounts-container").html(
-        `<div class="meridian-task-provider-accounts-empty">${_.escape(label)}</div>`,
+    $(".foundry-provider-accounts-container").html(
+        `<div class="foundry-task-provider-accounts-empty">${_.escape(label)}</div>`,
     );
 }
 
 function render_provider_accounts_error(label: string): void {
-    $(".meridian-provider-accounts-container").html(
-        `<div class="meridian-task-provider-accounts-error">${_.escape(label)}</div>`,
+    $(".foundry-provider-accounts-container").html(
+        `<div class="foundry-task-provider-accounts-error">${_.escape(label)}</div>`,
     );
 }
 
@@ -4465,11 +4465,11 @@ function refresh_provider_auth_status(): void {
     provider_auth_request_in_flight = true;
     render_provider_accounts_loading();
     channel.get({
-        url: "/json/meridian/providers/auth",
+        url: "/json/foundry/providers/auth",
         success(data) {
             provider_auth_request_in_flight = false;
             provider_auth_entries = parse_provider_auth_entries(data);
-            $(".meridian-provider-accounts-container").html(
+            $(".foundry-provider-accounts-container").html(
                 render_provider_accounts_markup(provider_auth_entries),
             );
         },
@@ -4480,7 +4480,7 @@ function refresh_provider_auth_status(): void {
     });
 }
 
-function integration_account_status_text(entry: MeridianIntegrationEntry): string {
+function integration_account_status_text(entry: FoundryIntegrationEntry): string {
     if (!entry.credential_connected) {
         return "Not connected";
     }
@@ -4489,43 +4489,43 @@ function integration_account_status_text(entry: MeridianIntegrationEntry): strin
     return `Connected (${label})`;
 }
 
-function integration_is_enabled_by_policy(entry: MeridianIntegrationEntry): boolean {
+function integration_is_enabled_by_policy(entry: FoundryIntegrationEntry): boolean {
     if (integration_policy.enabled_integrations.length === 0) {
         return true;
     }
     return integration_policy.enabled_integrations.includes(entry.integration);
 }
 
-function render_integration_accounts_markup(entries: MeridianIntegrationEntry[]): string {
+function render_integration_accounts_markup(entries: FoundryIntegrationEntry[]): string {
     if (entries.length === 0) {
-        return '<div class="meridian-task-provider-accounts-empty">No integrations available.</div>';
+        return '<div class="foundry-task-provider-accounts-empty">No integrations available.</div>';
     }
     return entries
         .map((entry) => {
-            const connected_class = entry.credential_connected ? " meridian-provider-connected" : "";
+            const connected_class = entry.credential_connected ? " foundry-provider-connected" : "";
             const disconnect_disabled = entry.credential_connected ? "" : " disabled";
             const policy_checked = integration_is_enabled_by_policy(entry) ? " checked" : "";
-            const notes = entry.notes ? `<div class="meridian-provider-account-status">${_.escape(entry.notes)}</div>` : "";
+            const notes = entry.notes ? `<div class="foundry-provider-account-status">${_.escape(entry.notes)}</div>` : "";
             const tools = entry.tools.length > 0 ? entry.tools.join(", ") : "No declared tools";
             const base = entry.base_url ? ` · ${entry.base_url}` : "";
             const caps = entry.auth_modes
-                .map((mode) => `<span class="meridian-provider-capability">${_.escape(mode)}</span>`)
+                .map((mode) => `<span class="foundry-provider-capability">${_.escape(mode)}</span>`)
                 .join("");
             return `
-<article class="meridian-provider-account${connected_class}" data-meridian-integration="${_.escape(entry.integration)}">
-    <div class="meridian-provider-account-main">
-        <div class="meridian-provider-account-title">${_.escape(entry.display_name)}</div>
-        <div class="meridian-provider-account-status">${_.escape(integration_account_status_text(entry))}</div>
+<article class="foundry-provider-account${connected_class}" data-foundry-integration="${_.escape(entry.integration)}">
+    <div class="foundry-provider-account-main">
+        <div class="foundry-provider-account-title">${_.escape(entry.display_name)}</div>
+        <div class="foundry-provider-account-status">${_.escape(integration_account_status_text(entry))}</div>
     </div>
     ${notes}
-    <div class="meridian-provider-account-status">${_.escape(`Tools: ${tools}${base}`)}</div>
-    <div class="meridian-provider-account-caps">${caps}</div>
-    <label class="meridian-task-create-label meridian-task-checkbox-row">
-        <input type="checkbox" data-meridian-integration-enabled="${_.escape(entry.integration)}"${policy_checked} />
+    <div class="foundry-provider-account-status">${_.escape(`Tools: ${tools}${base}`)}</div>
+    <div class="foundry-provider-account-caps">${caps}</div>
+    <label class="foundry-task-create-label foundry-task-checkbox-row">
+        <input type="checkbox" data-foundry-integration-enabled="${_.escape(entry.integration)}"${policy_checked} />
         Enable for supervisor tools
     </label>
-    <div class="meridian-provider-account-actions">
-        <button type="button" class="button small rounded" data-meridian-integration-action="disconnect" data-meridian-integration="${_.escape(entry.integration)}"${disconnect_disabled}>Disconnect</button>
+    <div class="foundry-provider-account-actions">
+        <button type="button" class="button small rounded" data-foundry-integration-action="disconnect" data-foundry-integration="${_.escape(entry.integration)}"${disconnect_disabled}>Disconnect</button>
     </div>
 </article>`;
         })
@@ -4533,27 +4533,27 @@ function render_integration_accounts_markup(entries: MeridianIntegrationEntry[])
 }
 
 function render_integration_accounts_loading(label = "Loading integrations…"): void {
-    $(".meridian-integration-accounts-container").html(
-        `<div class="meridian-task-provider-accounts-empty">${_.escape(label)}</div>`,
+    $(".foundry-integration-accounts-container").html(
+        `<div class="foundry-task-provider-accounts-empty">${_.escape(label)}</div>`,
     );
 }
 
 function render_integration_accounts_error(label: string): void {
-    $(".meridian-integration-accounts-container").html(
-        `<div class="meridian-task-provider-accounts-error">${_.escape(label)}</div>`,
+    $(".foundry-integration-accounts-container").html(
+        `<div class="foundry-task-provider-accounts-error">${_.escape(label)}</div>`,
     );
 }
 
-function apply_integration_policy_controls(policy: MeridianIntegrationPolicy): void {
-    $("#meridian-integration-policy-auto-transcript").prop("checked", policy.auto_topic_transcript);
-    $("#meridian-integration-policy-auto-repo").prop("checked", policy.auto_repo_context);
-    $("#meridian-integration-policy-allow-external").prop("checked", policy.allow_external_integrations);
+function apply_integration_policy_controls(policy: FoundryIntegrationPolicy): void {
+    $("#foundry-integration-policy-auto-transcript").prop("checked", policy.auto_topic_transcript);
+    $("#foundry-integration-policy-auto-repo").prop("checked", policy.auto_repo_context);
+    $("#foundry-integration-policy-allow-external").prop("checked", policy.allow_external_integrations);
 }
 
 function collect_enabled_integrations_from_dom(): string[] {
     const out: string[] = [];
-    $("input[data-meridian-integration-enabled]:checked").each(function () {
-        const value = String($(this).attr("data-meridian-integration-enabled") ?? "")
+    $("input[data-foundry-integration-enabled]:checked").each(function () {
+        const value = String($(this).attr("data-foundry-integration-enabled") ?? "")
             .trim()
             .toLowerCase();
         if (value) {
@@ -4570,12 +4570,12 @@ function refresh_integration_status(): void {
     integration_request_in_flight = true;
     render_integration_accounts_loading();
     channel.get({
-        url: "/json/meridian/integrations/list",
+        url: "/json/foundry/integrations/list",
         success(data) {
             integration_request_in_flight = false;
             integration_entries = parse_integration_entries(data);
             integration_policy = parse_integration_policy(data);
-            const $select = $("#meridian-integration-provider");
+            const $select = $("#foundry-integration-provider");
             if ($select.length > 0 && integration_entries.length > 0) {
                 const current = String($select.val() ?? "").trim().toLowerCase();
                 const options = integration_entries
@@ -4589,7 +4589,7 @@ function refresh_integration_status(): void {
                 $select.html(options);
             }
             apply_integration_policy_controls(integration_policy);
-            $(".meridian-integration-accounts-container").html(
+            $(".foundry-integration-accounts-container").html(
                 render_integration_accounts_markup(integration_entries),
             );
         },
@@ -4603,16 +4603,16 @@ function refresh_integration_status(): void {
 }
 
 function save_integration_policy(): void {
-    const policy: MeridianIntegrationPolicy = {
+    const policy: FoundryIntegrationPolicy = {
         auto_topic_transcript:
-            $("#meridian-integration-policy-auto-transcript").prop("checked") === true,
-        auto_repo_context: $("#meridian-integration-policy-auto-repo").prop("checked") === true,
+            $("#foundry-integration-policy-auto-transcript").prop("checked") === true,
+        auto_repo_context: $("#foundry-integration-policy-auto-repo").prop("checked") === true,
         allow_external_integrations:
-            $("#meridian-integration-policy-allow-external").prop("checked") === true,
+            $("#foundry-integration-policy-allow-external").prop("checked") === true,
         enabled_integrations: collect_enabled_integrations_from_dom(),
     };
     channel.post({
-        url: "/json/meridian/integrations/policy",
+        url: "/json/foundry/integrations/policy",
         data: {
             policy: JSON.stringify(policy),
             merge: true,
@@ -4652,7 +4652,7 @@ function connect_integration_with_credential(
         payload["api_key"] = trimmed_credential;
     }
     channel.post({
-        url: "/json/meridian/integrations/connect",
+        url: "/json/foundry/integrations/connect",
         data: payload,
         success() {
             ui_report.success("Integration connected.", $("#dialog_error"));
@@ -4687,7 +4687,7 @@ function connect_provider_with_credential(provider: string, auth_mode: string, c
     }
     create_request_in_flight = true;
     channel.post({
-        url: "/json/meridian/providers/connect",
+        url: "/json/foundry/providers/connect",
         data: payload,
         success() {
             create_request_in_flight = false;
@@ -4703,12 +4703,12 @@ function connect_provider_with_credential(provider: string, auth_mode: string, c
 
 function connect_selected_provider_only(): void {
     const provider = normalize_provider(
-        String($("#meridian-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
+        String($("#foundry-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
     );
-    const auth_mode = String($("#meridian-topic-task-auth-mode-input").val() ?? "api_key")
+    const auth_mode = String($("#foundry-topic-task-auth-mode-input").val() ?? "api_key")
         .trim()
         .toLowerCase();
-    const credential = String($("#meridian-topic-task-credential-input").val() ?? "").trim();
+    const credential = String($("#foundry-topic-task-credential-input").val() ?? "").trim();
     connect_provider_with_credential(provider, auth_mode, credential);
 }
 
@@ -4722,7 +4722,7 @@ function submit_topic_task_creation(
     create_request_in_flight = true;
     dialog_widget.submit_api_request(
         channel.post,
-        "/json/meridian/tasks/create",
+        "/json/foundry/tasks/create",
         {
             stream_id: context.stream_id,
             stream_name: context.stream_name,
@@ -4754,39 +4754,39 @@ function split_csv_values(value: string): string[] {
 
 function render_supervisor_plan_modal_content(context: TopicContext): string {
     return `
-<form id="${SUPERVISOR_PLAN_FORM_ID}" class="meridian-task-create-modal-form">
-    <div class="meridian-task-create-modal-topic">${_.escape(context.stream_name)} · ${_.escape(context.topic)}</div>
-    <label for="meridian-supervisor-plan-summary" class="meridian-task-create-label">Plan summary (optional)</label>
-    <input id="meridian-supervisor-plan-summary" class="modal_text_input" maxlength="280" autocomplete="off" placeholder="Short summary for this plan revision" />
-    <label for="meridian-supervisor-plan-objective" class="meridian-task-create-label">Objective</label>
-    <textarea id="meridian-supervisor-plan-objective" class="modal_text_input meridian-task-create-textarea" rows="4" placeholder="What should the supervisor accomplish for this topic?"></textarea>
-    <label class="meridian-task-create-label meridian-task-checkbox-row"><input type="checkbox" id="meridian-supervisor-plan-activate" checked /> Activate synthesized revision</label>
+<form id="${SUPERVISOR_PLAN_FORM_ID}" class="foundry-task-create-modal-form">
+    <div class="foundry-task-create-modal-topic">${_.escape(context.stream_name)} · ${_.escape(context.topic)}</div>
+    <label for="foundry-supervisor-plan-summary" class="foundry-task-create-label">Plan summary (optional)</label>
+    <input id="foundry-supervisor-plan-summary" class="modal_text_input" maxlength="280" autocomplete="off" placeholder="Short summary for this plan revision" />
+    <label for="foundry-supervisor-plan-objective" class="foundry-task-create-label">Objective</label>
+    <textarea id="foundry-supervisor-plan-objective" class="modal_text_input foundry-task-create-textarea" rows="4" placeholder="What should the supervisor accomplish for this topic?"></textarea>
+    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-supervisor-plan-activate" checked /> Activate synthesized revision</label>
     <hr />
-    <label class="meridian-task-create-label meridian-task-checkbox-row"><input type="checkbox" id="meridian-supervisor-dispatch-enable" /> Dispatch one directive now</label>
-    <label for="meridian-supervisor-directive-instruction" class="meridian-task-create-label">Directive instruction</label>
-    <textarea id="meridian-supervisor-directive-instruction" class="modal_text_input meridian-task-create-textarea" rows="5" placeholder="Leave blank to only synthesize plan"></textarea>
-    <div class="meridian-task-two-col-grid">
+    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-supervisor-dispatch-enable" /> Dispatch one directive now</label>
+    <label for="foundry-supervisor-directive-instruction" class="foundry-task-create-label">Directive instruction</label>
+    <textarea id="foundry-supervisor-directive-instruction" class="modal_text_input foundry-task-create-textarea" rows="5" placeholder="Leave blank to only synthesize plan"></textarea>
+    <div class="foundry-task-two-col-grid">
         <div>
-            <label for="meridian-supervisor-directive-worker" class="meridian-task-create-label">Assigned worker</label>
-            <input id="meridian-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
+            <label for="foundry-supervisor-directive-worker" class="foundry-task-create-label">Assigned worker</label>
+            <input id="foundry-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
         </div>
         <div>
-            <label for="meridian-supervisor-directive-role" class="meridian-task-create-label">Role</label>
-            <select id="meridian-supervisor-directive-role" class="modal_text_input">
+            <label for="foundry-supervisor-directive-role" class="foundry-task-create-label">Role</label>
+            <select id="foundry-supervisor-directive-role" class="modal_text_input">
                 <option value="writer">writer</option>
                 <option value="read_only">read_only</option>
                 <option value="verify">verify</option>
             </select>
         </div>
     </div>
-    <div class="meridian-task-two-col-grid">
+    <div class="foundry-task-two-col-grid">
         <div>
-            <label for="meridian-supervisor-directive-file-claims" class="meridian-task-create-label">File claims (comma separated)</label>
-            <input id="meridian-supervisor-directive-file-claims" class="modal_text_input" autocomplete="off" />
+            <label for="foundry-supervisor-directive-file-claims" class="foundry-task-create-label">File claims (comma separated)</label>
+            <input id="foundry-supervisor-directive-file-claims" class="modal_text_input" autocomplete="off" />
         </div>
         <div>
-            <label for="meridian-supervisor-directive-area-claims" class="meridian-task-create-label">Area claims (comma separated)</label>
-            <input id="meridian-supervisor-directive-area-claims" class="modal_text_input" autocomplete="off" />
+            <label for="foundry-supervisor-directive-area-claims" class="foundry-task-create-label">Area claims (comma separated)</label>
+            <input id="foundry-supervisor-directive-area-claims" class="modal_text_input" autocomplete="off" />
         </div>
     </div>
 </form>`;
@@ -4801,15 +4801,15 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
         modal_content_html: render_supervisor_plan_modal_content(context),
         on_show() {
             setTimeout(() => {
-                $("#meridian-supervisor-plan-objective").trigger("focus");
+                $("#foundry-supervisor-plan-objective").trigger("focus");
             }, 0);
         },
         validate_input() {
             if (supervisor_plan_request_in_flight) {
                 return false;
             }
-            const dispatch_enabled = $("#meridian-supervisor-dispatch-enable").prop("checked") === true;
-            const instruction = String($("#meridian-supervisor-directive-instruction").val() ?? "").trim();
+            const dispatch_enabled = $("#foundry-supervisor-dispatch-enable").prop("checked") === true;
+            const instruction = String($("#foundry-supervisor-directive-instruction").val() ?? "").trim();
             if (dispatch_enabled && !instruction) {
                 ui_report.error("Directive instruction is required when dispatch is enabled.", undefined, $("#dialog_error"));
                 return false;
@@ -4821,29 +4821,29 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
                 return;
             }
 
-            const summary = String($("#meridian-supervisor-plan-summary").val() ?? "").trim();
-            const objective = String($("#meridian-supervisor-plan-objective").val() ?? "").trim();
-            const activate = $("#meridian-supervisor-plan-activate").prop("checked") === true;
-            const dispatch_enabled = $("#meridian-supervisor-dispatch-enable").prop("checked") === true;
+            const summary = String($("#foundry-supervisor-plan-summary").val() ?? "").trim();
+            const objective = String($("#foundry-supervisor-plan-objective").val() ?? "").trim();
+            const activate = $("#foundry-supervisor-plan-activate").prop("checked") === true;
+            const dispatch_enabled = $("#foundry-supervisor-dispatch-enable").prop("checked") === true;
             const directive_instruction = String(
-                $("#meridian-supervisor-directive-instruction").val() ?? "",
+                $("#foundry-supervisor-directive-instruction").val() ?? "",
             ).trim();
-            const assigned_worker = String($("#meridian-supervisor-directive-worker").val() ?? "")
+            const assigned_worker = String($("#foundry-supervisor-directive-worker").val() ?? "")
                 .trim()
                 .toLowerCase();
-            const assigned_role = String($("#meridian-supervisor-directive-role").val() ?? "writer")
+            const assigned_role = String($("#foundry-supervisor-directive-role").val() ?? "writer")
                 .trim()
                 .toLowerCase();
             const file_claims = split_csv_values(
-                String($("#meridian-supervisor-directive-file-claims").val() ?? ""),
+                String($("#foundry-supervisor-directive-file-claims").val() ?? ""),
             );
             const area_claims = split_csv_values(
-                String($("#meridian-supervisor-directive-area-claims").val() ?? ""),
+                String($("#foundry-supervisor-directive-area-claims").val() ?? ""),
             );
 
             supervisor_plan_request_in_flight = true;
             channel.post({
-                url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/plan/synthesize`,
+                url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/plan/synthesize`,
                 data: {
                     summary,
                     objective,
@@ -4877,7 +4877,7 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
                         },
                     ];
                     channel.post({
-                        url: `/json/meridian/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
+                        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
                         data: {
                             plan_revision_id: plan_revision_id || undefined,
                             directives: JSON.stringify(directives),
@@ -4921,53 +4921,53 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
 function render_provider_accounts_modal_content(): string {
     const selected_provider = get_provider_preference();
     return `
-<form id="${PROVIDER_ACCOUNTS_FORM_ID}" class="meridian-task-create-modal-form">
-    <label for="meridian-provider-accounts-provider" class="meridian-task-create-label">Provider</label>
-    <select id="meridian-provider-accounts-provider" class="modal_text_input">
+<form id="${PROVIDER_ACCOUNTS_FORM_ID}" class="foundry-task-create-modal-form">
+    <label for="foundry-provider-accounts-provider" class="foundry-task-create-label">Provider</label>
+    <select id="foundry-provider-accounts-provider" class="modal_text_input">
         <option value="codex" ${selected_provider === "codex" ? "selected" : ""}>Codex</option>
         <option value="claude_code" ${selected_provider === "claude_code" ? "selected" : ""}>Claude Code</option>
         <option value="opencode" ${selected_provider === "opencode" ? "selected" : ""}>OpenCode (Fireworks Kimi K2)</option>
     </select>
-    <label for="meridian-provider-accounts-auth-mode" class="meridian-task-create-label">Credential mode</label>
-    <select id="meridian-provider-accounts-auth-mode" class="modal_text_input">
+    <label for="foundry-provider-accounts-auth-mode" class="foundry-task-create-label">Credential mode</label>
+    <select id="foundry-provider-accounts-auth-mode" class="modal_text_input">
         <option value="api_key">API key</option>
         <option value="oauth">OAuth token</option>
     </select>
-    <label for="meridian-provider-accounts-credential" class="meridian-task-create-label">Credential (optional)</label>
-    <input id="meridian-provider-accounts-credential" class="modal_text_input" autocomplete="off" placeholder="Optional provider API key" />
-    <div class="meridian-task-provider-auth-actions">
-        <button type="button" class="button small rounded" id="meridian-provider-accounts-connect">Connect account</button>
-        <button type="button" class="button small rounded" id="meridian-provider-accounts-refresh">Refresh accounts</button>
+    <label for="foundry-provider-accounts-credential" class="foundry-task-create-label">Credential (optional)</label>
+    <input id="foundry-provider-accounts-credential" class="modal_text_input" autocomplete="off" placeholder="Optional provider API key" />
+    <div class="foundry-task-provider-auth-actions">
+        <button type="button" class="button small rounded" id="foundry-provider-accounts-connect">Connect account</button>
+        <button type="button" class="button small rounded" id="foundry-provider-accounts-refresh">Refresh accounts</button>
     </div>
-    <section class="meridian-task-provider-accounts meridian-provider-accounts-container">
-        <div class="meridian-task-provider-accounts-empty">Loading provider accounts…</div>
+    <section class="foundry-task-provider-accounts foundry-provider-accounts-container">
+        <div class="foundry-task-provider-accounts-empty">Loading provider accounts…</div>
     </section>
     <hr />
-    <label for="meridian-integration-provider" class="meridian-task-create-label">Integration</label>
-    <select id="meridian-integration-provider" class="modal_text_input">
+    <label for="foundry-integration-provider" class="foundry-task-create-label">Integration</label>
+    <select id="foundry-integration-provider" class="modal_text_input">
         <option value="github">GitHub</option>
         <option value="forgejo">Forgejo</option>
         <option value="calcom">Cal.com</option>
     </select>
-    <label for="meridian-integration-auth-mode" class="meridian-task-create-label">Integration credential mode</label>
-    <select id="meridian-integration-auth-mode" class="modal_text_input">
+    <label for="foundry-integration-auth-mode" class="foundry-task-create-label">Integration credential mode</label>
+    <select id="foundry-integration-auth-mode" class="modal_text_input">
         <option value="api_key">API key</option>
         <option value="oauth">OAuth token</option>
     </select>
-    <label for="meridian-integration-credential" class="meridian-task-create-label">Integration credential (optional)</label>
-    <input id="meridian-integration-credential" class="modal_text_input" autocomplete="off" placeholder="API key or access token" />
-    <div class="meridian-task-provider-auth-actions">
-        <button type="button" class="button small rounded" id="meridian-integration-connect">Connect integration</button>
-        <button type="button" class="button small rounded" id="meridian-integration-refresh">Refresh integrations</button>
+    <label for="foundry-integration-credential" class="foundry-task-create-label">Integration credential (optional)</label>
+    <input id="foundry-integration-credential" class="modal_text_input" autocomplete="off" placeholder="API key or access token" />
+    <div class="foundry-task-provider-auth-actions">
+        <button type="button" class="button small rounded" id="foundry-integration-connect">Connect integration</button>
+        <button type="button" class="button small rounded" id="foundry-integration-refresh">Refresh integrations</button>
     </div>
-    <label class="meridian-task-create-label meridian-task-checkbox-row"><input type="checkbox" id="meridian-integration-policy-auto-transcript" checked /> Auto-load topic transcript for supervisor</label>
-    <label class="meridian-task-create-label meridian-task-checkbox-row"><input type="checkbox" id="meridian-integration-policy-auto-repo" checked /> Auto-include repo context and guidance</label>
-    <label class="meridian-task-create-label meridian-task-checkbox-row"><input type="checkbox" id="meridian-integration-policy-allow-external" checked /> Allow connected integration tools in supervisor runs</label>
-    <div class="meridian-task-provider-auth-actions">
-        <button type="button" class="button small rounded" id="meridian-integration-policy-save">Save integration policy</button>
+    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-integration-policy-auto-transcript" checked /> Auto-load topic transcript for supervisor</label>
+    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-integration-policy-auto-repo" checked /> Auto-include repo context and guidance</label>
+    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-integration-policy-allow-external" checked /> Allow connected integration tools in supervisor runs</label>
+    <div class="foundry-task-provider-auth-actions">
+        <button type="button" class="button small rounded" id="foundry-integration-policy-save">Save integration policy</button>
     </div>
-    <section class="meridian-task-provider-accounts meridian-integration-accounts-container">
-        <div class="meridian-task-provider-accounts-empty">Loading integrations…</div>
+    <section class="foundry-task-provider-accounts foundry-integration-accounts-container">
+        <div class="foundry-task-provider-accounts-empty">Loading integrations…</div>
     </section>
 </form>`;
 }
@@ -4983,7 +4983,7 @@ function launch_provider_accounts_modal(): void {
             refresh_provider_auth_status();
             refresh_integration_status();
             setTimeout(() => {
-                $("#meridian-provider-accounts-provider").trigger("focus");
+                $("#foundry-provider-accounts-provider").trigger("focus");
             }, 0);
         },
         validate_input() {
@@ -4998,35 +4998,35 @@ function launch_provider_accounts_modal(): void {
 function render_create_task_modal_content(context: TopicContext): string {
     const selected_provider = get_provider_preference();
     return `
-<form id="${CREATE_TASK_MODAL_FORM_ID}" class="meridian-task-create-modal-form">
-    <div class="meridian-task-create-modal-topic">${_.escape(context.stream_name)} · ${_.escape(context.topic)}</div>
-    <label for="meridian-topic-task-title-input" class="meridian-task-create-label">Task title (optional)</label>
-    <input id="meridian-topic-task-title-input" class="modal_text_input" maxlength="200" autocomplete="off" />
-    <label for="meridian-topic-task-instruction-input" class="meridian-task-create-label">Instruction</label>
-    <textarea id="meridian-topic-task-instruction-input" class="modal_text_input meridian-task-create-textarea" rows="6" placeholder="Describe what the agent should do for this topic"></textarea>
-    <label for="meridian-topic-task-repo-input" class="meridian-task-create-label">Repo</label>
-    <input id="meridian-topic-task-repo-input" class="modal_text_input" value="${_.escape(get_repo_id_preference())}" placeholder="owner/repo" autocomplete="off" />
-    <label for="meridian-topic-task-provider-input" class="meridian-task-create-label">Provider</label>
-    <select id="meridian-topic-task-provider-input" class="modal_text_input">
+<form id="${CREATE_TASK_MODAL_FORM_ID}" class="foundry-task-create-modal-form">
+    <div class="foundry-task-create-modal-topic">${_.escape(context.stream_name)} · ${_.escape(context.topic)}</div>
+    <label for="foundry-topic-task-title-input" class="foundry-task-create-label">Task title (optional)</label>
+    <input id="foundry-topic-task-title-input" class="modal_text_input" maxlength="200" autocomplete="off" />
+    <label for="foundry-topic-task-instruction-input" class="foundry-task-create-label">Instruction</label>
+    <textarea id="foundry-topic-task-instruction-input" class="modal_text_input foundry-task-create-textarea" rows="6" placeholder="Describe what the agent should do for this topic"></textarea>
+    <label for="foundry-topic-task-repo-input" class="foundry-task-create-label">Repo</label>
+    <input id="foundry-topic-task-repo-input" class="modal_text_input" value="${_.escape(get_repo_id_preference())}" placeholder="owner/repo" autocomplete="off" />
+    <label for="foundry-topic-task-provider-input" class="foundry-task-create-label">Provider</label>
+    <select id="foundry-topic-task-provider-input" class="modal_text_input">
         <option value="codex" ${selected_provider === "codex" ? "selected" : ""}>Codex</option>
         <option value="claude_code" ${selected_provider === "claude_code" ? "selected" : ""}>Claude Code</option>
         <option value="opencode" ${selected_provider === "opencode" ? "selected" : ""}>OpenCode (Fireworks Kimi K2)</option>
     </select>
-    <div id="meridian-topic-task-provider-hint" class="meridian-task-create-oauth-hint"></div>
-    <label for="meridian-topic-task-auth-mode-input" class="meridian-task-create-label">Credential mode</label>
-    <select id="meridian-topic-task-auth-mode-input" class="modal_text_input">
+    <div id="foundry-topic-task-provider-hint" class="foundry-task-create-oauth-hint"></div>
+    <label for="foundry-topic-task-auth-mode-input" class="foundry-task-create-label">Credential mode</label>
+    <select id="foundry-topic-task-auth-mode-input" class="modal_text_input">
         <option value="api_key">API key</option>
         <option value="oauth">OAuth token</option>
     </select>
-    <label for="meridian-topic-task-credential-input" class="meridian-task-create-label">Credential (optional)</label>
-    <input id="meridian-topic-task-credential-input" class="modal_text_input" autocomplete="off" placeholder="Optional provider API key" />
-    <div class="meridian-task-create-oauth-hint">Tip: choose OAuth mode and submit without a credential to launch provider sign-in.</div>
-    <div class="meridian-task-provider-auth-actions">
-        <button type="button" class="button small rounded" id="meridian-topic-task-connect-provider-only">Connect provider only</button>
-        <button type="button" class="button small rounded" id="meridian-topic-task-refresh-provider-auth">Refresh accounts</button>
+    <label for="foundry-topic-task-credential-input" class="foundry-task-create-label">Credential (optional)</label>
+    <input id="foundry-topic-task-credential-input" class="modal_text_input" autocomplete="off" placeholder="Optional provider API key" />
+    <div class="foundry-task-create-oauth-hint">Tip: choose OAuth mode and submit without a credential to launch provider sign-in.</div>
+    <div class="foundry-task-provider-auth-actions">
+        <button type="button" class="button small rounded" id="foundry-topic-task-connect-provider-only">Connect provider only</button>
+        <button type="button" class="button small rounded" id="foundry-topic-task-refresh-provider-auth">Refresh accounts</button>
     </div>
-    <section id="meridian-topic-task-provider-accounts" class="meridian-task-provider-accounts meridian-provider-accounts-container">
-        <div class="meridian-task-provider-accounts-empty">Loading provider accounts…</div>
+    <section id="foundry-topic-task-provider-accounts" class="foundry-task-provider-accounts foundry-provider-accounts-container">
+        <div class="foundry-task-provider-accounts-empty">Loading provider accounts…</div>
     </section>
 </form>`;
 }
@@ -5044,17 +5044,17 @@ export function launch_create_task_modal(context: TopicContext): void {
         modal_content_html: render_create_task_modal_content(context),
         on_show() {
             setTimeout(() => {
-                $("#meridian-topic-task-instruction-input").trigger("focus");
+                $("#foundry-topic-task-instruction-input").trigger("focus");
             }, 0);
             update_create_task_credential_placeholder();
             $("body")
-                .off("change.meridian_task_auth_mode", "#meridian-topic-task-auth-mode-input")
-                .on("change.meridian_task_auth_mode", "#meridian-topic-task-auth-mode-input", () => {
+                .off("change.foundry_task_auth_mode", "#foundry-topic-task-auth-mode-input")
+                .on("change.foundry_task_auth_mode", "#foundry-topic-task-auth-mode-input", () => {
                     update_create_task_credential_placeholder();
                 });
             $("body")
-                .off("change.meridian_task_provider", "#meridian-topic-task-provider-input")
-                .on("change.meridian_task_provider", "#meridian-topic-task-provider-input", () => {
+                .off("change.foundry_task_provider", "#foundry-topic-task-provider-input")
+                .on("change.foundry_task_provider", "#foundry-topic-task-provider-input", () => {
                     update_create_task_provider_hint();
                 });
             update_create_task_provider_hint();
@@ -5063,9 +5063,9 @@ export function launch_create_task_modal(context: TopicContext): void {
         },
         validate_input() {
             const instruction = String(
-                $("#meridian-topic-task-instruction-input").val() ?? "",
+                $("#foundry-topic-task-instruction-input").val() ?? "",
             ).trim();
-            const repo_id = String($("#meridian-topic-task-repo-input").val() ?? "").trim();
+            const repo_id = String($("#foundry-topic-task-repo-input").val() ?? "").trim();
             if (!instruction) {
                 ui_report.error("Task instruction is required.", undefined, $("#dialog_error"));
                 return false;
@@ -5082,18 +5082,18 @@ export function launch_create_task_modal(context: TopicContext): void {
             }
 
             const instruction = String(
-                $("#meridian-topic-task-instruction-input").val() ?? "",
+                $("#foundry-topic-task-instruction-input").val() ?? "",
             ).trim();
-            const title_source = String($("#meridian-topic-task-title-input").val() ?? "").trim();
+            const title_source = String($("#foundry-topic-task-title-input").val() ?? "").trim();
             const task_title = title_source || instruction.split("\n")[0]!;
-            const repo_id = String($("#meridian-topic-task-repo-input").val() ?? "").trim();
+            const repo_id = String($("#foundry-topic-task-repo-input").val() ?? "").trim();
             const provider = normalize_provider(
-                String($("#meridian-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
+                String($("#foundry-topic-task-provider-input").val() ?? DEFAULT_PROVIDER),
             );
-            const auth_mode = String($("#meridian-topic-task-auth-mode-input").val() ?? "api_key")
+            const auth_mode = String($("#foundry-topic-task-auth-mode-input").val() ?? "api_key")
                 .trim()
                 .toLowerCase();
-            const credential = String($("#meridian-topic-task-credential-input").val() ?? "").trim();
+            const credential = String($("#foundry-topic-task-credential-input").val() ?? "").trim();
             set_repo_id_preference(repo_id);
             set_provider_preference(provider);
 
@@ -5109,7 +5109,7 @@ export function launch_create_task_modal(context: TopicContext): void {
                     connect_payload["api_key"] = credential;
                 }
                 channel.post({
-                    url: "/json/meridian/providers/connect",
+                    url: "/json/foundry/providers/connect",
                     data: connect_payload,
                     success() {
                         submit_topic_task_creation(context, instruction, task_title, repo_id, provider);
@@ -5151,7 +5151,7 @@ function submit_task_reply(message: string): void {
     reply_request_in_flight = true;
     update_reply_composer_state();
     channel.post({
-        url: `/json/meridian/tasks/${encodeURIComponent(task_id)}/reply`,
+        url: `/json/foundry/tasks/${encodeURIComponent(task_id)}/reply`,
         data: {message: trimmed_message},
         success(data) {
             reply_request_in_flight = false;
@@ -5182,7 +5182,7 @@ export function launch_create_task_modal_for_topic(stream_id: number, topic: str
 export function open_supervisor_view_for_topic(stream_id: number, topic: string): void {
     reset_supervisor_view_state();
     hide_task_view(true);
-    meridian_supervisor_sidebar.open_for_topic(stream_id, topic);
+    foundry_supervisor_sidebar.open_for_topic(stream_id, topic);
 }
 
 function invoke_selected_task_action(action: string, extra: Record<string, unknown> = {}): void {
@@ -5195,7 +5195,7 @@ function invoke_selected_task_action(action: string, extra: Record<string, unkno
         return;
     }
     if (action_name === "resolve_clarification_prompt") {
-        const guidance = String($("#meridian-task-reply-input").val() ?? "").trim();
+        const guidance = String($("#foundry-task-reply-input").val() ?? "").trim();
         if (!guidance) {
             ui_report.generic_embed_error(
                 "Provide clarification guidance in the reply box, then click Resolve clarification.",
@@ -5203,7 +5203,7 @@ function invoke_selected_task_action(action: string, extra: Record<string, unkno
             );
             return;
         }
-        $("#meridian-task-reply-input").val("");
+        $("#foundry-task-reply-input").val("");
         invoke_selected_task_action("resolve_clarification", {note: guidance});
         return;
     }
@@ -5212,7 +5212,7 @@ function invoke_selected_task_action(action: string, extra: Record<string, unkno
         return;
     }
     channel.post({
-        url: `/json/meridian/tasks/${encodeURIComponent(task_id)}/action`,
+        url: `/json/foundry/tasks/${encodeURIComponent(task_id)}/action`,
         data: {action: action_name, ...extra},
         success() {
             refresh_topic_sidebar(true);
@@ -5226,7 +5226,7 @@ function invoke_selected_task_action(action: string, extra: Record<string, unkno
 }
 
 function submit_task_reply_from_ui(): void {
-    const raw = String($("#meridian-task-reply-input").val() ?? "");
+    const raw = String($("#foundry-task-reply-input").val() ?? "");
     const message = raw.trim();
     if (!message || reply_request_in_flight) {
         return;
@@ -5234,7 +5234,7 @@ function submit_task_reply_from_ui(): void {
     state.pending_reply_message = message;
     state.pending_reply_time = new Date().toISOString();
     submit_task_reply(message);
-    $("#meridian-task-reply-input").val("");
+    $("#foundry-task-reply-input").val("");
     const context = current_topic_context();
     if (state.task_view_mode === "task" && context && state.last_sidebar) {
         render_task_view(context, state.last_sidebar);
@@ -5248,7 +5248,7 @@ function close_task_view(): void {
 export function initialize(): void {
     window.addEventListener("message", (event: MessageEvent) => {
         const data = as_record(event.data);
-        if (!data || as_string(data["source"]) !== "meridian_oauth") {
+        if (!data || as_string(data["source"]) !== "foundry_oauth") {
             return;
         }
         const status = as_string(data["status"]);
@@ -5290,13 +5290,13 @@ export function initialize(): void {
         if (!(target instanceof HTMLDetailsElement)) {
             return;
         }
-        if (target.id !== "meridian-task-inspector") {
+        if (target.id !== "foundry-task-inspector") {
             return;
         }
         state.task_inspector_open = target.open;
     });
 
-    $("body").on("click", "#meridian-task-view-back", (e) => {
+    $("body").on("click", "#foundry-task-view-back", (e) => {
         e.preventDefault();
         e.stopPropagation();
         close_task_view();
@@ -5317,7 +5317,7 @@ export function initialize(): void {
         close_task_view();
     });
 
-    $("body").on("click", ".meridian-topic-supervisor-link", function (e) {
+    $("body").on("click", ".foundry-topic-supervisor-link", function (e) {
         e.preventDefault();
         e.stopPropagation();
         if (!(this instanceof HTMLElement)) {
@@ -5332,7 +5332,7 @@ export function initialize(): void {
         open_supervisor_view_for_topic(stream_id, topic);
     });
 
-    $("body").on("keydown", ".meridian-topic-supervisor-link", function (e) {
+    $("body").on("keydown", ".foundry-topic-supervisor-link", function (e) {
         if (e.key !== "Enter" && e.key !== " ") {
             return;
         }
@@ -5350,14 +5350,14 @@ export function initialize(): void {
         open_supervisor_view_for_topic(stream_id, topic);
     });
 
-    $("body").on("click", ".meridian-topic-task-link", function (e) {
+    $("body").on("click", ".foundry-topic-task-link", function (e) {
         e.preventDefault();
         e.stopPropagation();
         if (!(this instanceof HTMLElement)) {
             return;
         }
         const $trigger = $(this);
-        const task_id = $trigger.attr("data-meridian-task-id") ?? "";
+        const task_id = $trigger.attr("data-foundry-task-id") ?? "";
         const stream_id = task_link_stream_id($trigger);
         const topic = task_link_topic_name($trigger);
         const open_opts: {open_view: true; stream_id?: number; topic?: string} = {
@@ -5372,7 +5372,7 @@ export function initialize(): void {
         select_task(task_id, open_opts);
     });
 
-    $("body").on("keydown", ".meridian-topic-task-link", function (e) {
+    $("body").on("keydown", ".foundry-topic-task-link", function (e) {
         if (e.key !== "Enter" && e.key !== " ") {
             return;
         }
@@ -5382,7 +5382,7 @@ export function initialize(): void {
             return;
         }
         const $trigger = $(this);
-        const task_id = $trigger.attr("data-meridian-task-id") ?? "";
+        const task_id = $trigger.attr("data-foundry-task-id") ?? "";
         const stream_id = task_link_stream_id($trigger);
         const topic = task_link_topic_name($trigger);
         const open_opts: {open_view: true; stream_id?: number; topic?: string} = {
@@ -5397,40 +5397,40 @@ export function initialize(): void {
         select_task(task_id, open_opts);
     });
 
-    $("body").on("click", ".meridian-task-action-button", function () {
+    $("body").on("click", ".foundry-task-action-button", function () {
         if ($(this).prop("disabled")) {
             return;
         }
-        const action = $(this).attr("data-meridian-task-action") ?? "";
+        const action = $(this).attr("data-foundry-task-action") ?? "";
         invoke_selected_task_action(action);
     });
 
-    $("body").on("click", "#meridian-task-provider-accounts", (e) => {
+    $("body").on("click", "#foundry-task-provider-accounts", (e) => {
         e.preventDefault();
         e.stopPropagation();
         launch_provider_accounts_modal();
     });
 
-    $("body").on("click", "#meridian-supervisor-refresh", (e) => {
+    $("body").on("click", "#foundry-supervisor-refresh", (e) => {
         e.preventDefault();
         e.stopPropagation();
         refresh_topic_sidebar(true);
         refresh_supervisor_view_data(true);
     });
 
-    $("body").on("click", "#meridian-supervisor-synthesize", (e) => {
+    $("body").on("click", "#foundry-supervisor-synthesize", (e) => {
         e.preventDefault();
         e.stopPropagation();
         submit_supervisor_synthesize_from_view();
     });
 
-    $("body").on("click", "#meridian-supervisor-dispatch", (e) => {
+    $("body").on("click", "#foundry-supervisor-dispatch", (e) => {
         e.preventDefault();
         e.stopPropagation();
         submit_supervisor_dispatch_from_view();
     });
 
-    $("body").on("click", "#meridian-task-supervisor-plan", (e) => {
+    $("body").on("click", "#foundry-task-supervisor-plan", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const context = current_topic_context();
@@ -5441,22 +5441,22 @@ export function initialize(): void {
         open_supervisor_view_for_topic(context.stream_id, context.topic);
     });
 
-    $("body").on("click", "#meridian-task-reply-send", (e) => {
+    $("body").on("click", "#foundry-task-reply-send", (e) => {
         e.preventDefault();
         e.stopPropagation();
         submit_task_reply_from_ui();
     });
 
-    $("body").on("click", "#meridian-task-inline-stop", (e) => {
+    $("body").on("click", "#foundry-task-inline-stop", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if ($("#meridian-task-inline-stop").prop("disabled")) {
+        if ($("#foundry-task-inline-stop").prop("disabled")) {
             return;
         }
         invoke_selected_task_action("cancel");
     });
 
-    $("body").on("keydown", "#meridian-task-reply-input", (e) => {
+    $("body").on("keydown", "#foundry-task-reply-input", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             e.stopPropagation();
@@ -5464,29 +5464,29 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("input", "#meridian-task-reply-input", () => {
+    $("body").on("input", "#foundry-task-reply-input", () => {
         autosize_reply_input();
     });
 
-    $("body").on("click", "#meridian-topic-task-refresh-provider-auth", (e) => {
+    $("body").on("click", "#foundry-topic-task-refresh-provider-auth", (e) => {
         e.preventDefault();
         e.stopPropagation();
         refresh_provider_auth_status();
     });
 
-    $("body").on("click", "#meridian-provider-accounts-refresh", (e) => {
+    $("body").on("click", "#foundry-provider-accounts-refresh", (e) => {
         e.preventDefault();
         e.stopPropagation();
         refresh_provider_auth_status();
     });
 
-    $("body").on("click", "#meridian-integration-refresh", (e) => {
+    $("body").on("click", "#foundry-integration-refresh", (e) => {
         e.preventDefault();
         e.stopPropagation();
         refresh_integration_status();
     });
 
-    $("body").on("click", "#meridian-topic-task-connect-provider-only", (e) => {
+    $("body").on("click", "#foundry-topic-task-connect-provider-only", (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (create_request_in_flight) {
@@ -5495,48 +5495,48 @@ export function initialize(): void {
         connect_selected_provider_only();
     });
 
-    $("body").on("click", "#meridian-provider-accounts-connect", (e) => {
+    $("body").on("click", "#foundry-provider-accounts-connect", (e) => {
         e.preventDefault();
         e.stopPropagation();
         if (create_request_in_flight) {
             return;
         }
         const provider = normalize_provider(
-            String($("#meridian-provider-accounts-provider").val() ?? DEFAULT_PROVIDER),
+            String($("#foundry-provider-accounts-provider").val() ?? DEFAULT_PROVIDER),
         );
-        const auth_mode = String($("#meridian-provider-accounts-auth-mode").val() ?? "api_key")
+        const auth_mode = String($("#foundry-provider-accounts-auth-mode").val() ?? "api_key")
             .trim()
             .toLowerCase();
-        const credential = String($("#meridian-provider-accounts-credential").val() ?? "").trim();
+        const credential = String($("#foundry-provider-accounts-credential").val() ?? "").trim();
         set_provider_preference(provider);
         connect_provider_with_credential(provider, auth_mode, credential);
     });
 
-    $("body").on("click", "#meridian-integration-connect", (e) => {
+    $("body").on("click", "#foundry-integration-connect", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const integration = String($("#meridian-integration-provider").val() ?? "").trim();
-        const auth_mode = String($("#meridian-integration-auth-mode").val() ?? "api_key")
+        const integration = String($("#foundry-integration-provider").val() ?? "").trim();
+        const auth_mode = String($("#foundry-integration-auth-mode").val() ?? "api_key")
             .trim()
             .toLowerCase();
-        const credential = String($("#meridian-integration-credential").val() ?? "").trim();
+        const credential = String($("#foundry-integration-credential").val() ?? "").trim();
         connect_integration_with_credential(integration, auth_mode, credential);
     });
 
-    $("body").on("click", "#meridian-integration-policy-save", (e) => {
+    $("body").on("click", "#foundry-integration-policy-save", (e) => {
         e.preventDefault();
         e.stopPropagation();
         save_integration_policy();
     });
 
-    $("body").on("click", "[data-meridian-provider-action]", function (e) {
+    $("body").on("click", "[data-foundry-provider-action]", function (e) {
         e.preventDefault();
         e.stopPropagation();
         if (create_request_in_flight) {
             return;
         }
-        const action = ($(this).attr("data-meridian-provider-action") ?? "").trim();
-        const provider = normalize_provider($(this).attr("data-meridian-provider") ?? "");
+        const action = ($(this).attr("data-foundry-provider-action") ?? "").trim();
+        const provider = normalize_provider($(this).attr("data-foundry-provider") ?? "");
         if (!provider) {
             return;
         }
@@ -5549,7 +5549,7 @@ export function initialize(): void {
         }
         create_request_in_flight = true;
         channel.post({
-            url: "/json/meridian/providers/disconnect",
+            url: "/json/foundry/providers/disconnect",
             data: {provider},
             success() {
                 create_request_in_flight = false;
@@ -5563,18 +5563,18 @@ export function initialize(): void {
         });
     });
 
-    $("body").on("click", "[data-meridian-integration-action]", function (e) {
+    $("body").on("click", "[data-foundry-integration-action]", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        const action = ($(this).attr("data-meridian-integration-action") ?? "").trim();
-        const integration = String($(this).attr("data-meridian-integration") ?? "")
+        const action = ($(this).attr("data-foundry-integration-action") ?? "").trim();
+        const integration = String($(this).attr("data-foundry-integration") ?? "")
             .trim()
             .toLowerCase();
         if (!integration || action !== "disconnect") {
             return;
         }
         channel.post({
-            url: "/json/meridian/integrations/disconnect",
+            url: "/json/foundry/integrations/disconnect",
             data: {integration},
             success() {
                 ui_report.success("Integration disconnected.", $("#dialog_error"));
@@ -5586,19 +5586,19 @@ export function initialize(): void {
         });
     });
 
-    $("body").on("click", "[data-meridian-thread-copy]", function (e) {
+    $("body").on("click", "[data-foundry-thread-copy]", function (e) {
         e.preventDefault();
         e.stopPropagation();
         void (async () => {
-        const event_id = Number.parseInt($(this).attr("data-meridian-thread-copy") ?? "", 10);
+        const event_id = Number.parseInt($(this).attr("data-foundry-thread-copy") ?? "", 10);
         if (Number.isNaN(event_id)) {
             return;
         }
-        const article = document.querySelector<HTMLElement>(`#meridian-task-event-${event_id}`);
+        const article = document.querySelector<HTMLElement>(`#foundry-task-event-${event_id}`);
         if (!article) {
             return;
         }
-        const text = article.querySelector<HTMLElement>(".meridian-thread-message")?.textContent ?? "";
+        const text = article.querySelector<HTMLElement>(".foundry-thread-message")?.textContent ?? "";
         if (!text.trim()) {
             return;
         }
@@ -5615,12 +5615,12 @@ export function initialize(): void {
         })();
     });
 
-    $("body").on("click", "[data-meridian-markdown-copy]", function (e) {
+    $("body").on("click", "[data-foundry-markdown-copy]", function (e) {
         e.preventDefault();
         e.stopPropagation();
         void (async () => {
             const button = this instanceof HTMLButtonElement ? this : undefined;
-            const block = button?.closest(".meridian-markdown-code");
+            const block = button?.closest(".foundry-markdown-code");
             const text = block?.querySelector("pre code, pre")?.textContent ?? "";
             if (!text.trim()) {
                 return;
@@ -5645,30 +5645,30 @@ export function initialize(): void {
         })();
     });
 
-    $("body").on("click", "[data-meridian-jump-event]", function (e) {
+    $("body").on("click", "[data-foundry-jump-event]", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        const event_id = Number.parseInt($(this).attr("data-meridian-jump-event") ?? "", 10);
+        const event_id = Number.parseInt($(this).attr("data-foundry-jump-event") ?? "", 10);
         if (Number.isNaN(event_id)) {
             return;
         }
         window.setTimeout(() => {
-            const target = document.querySelector<HTMLElement>(`#meridian-task-event-${event_id}`);
+            const target = document.querySelector<HTMLElement>(`#foundry-task-event-${event_id}`);
             if (!target) {
                 return;
             }
             target.scrollIntoView({block: "center"});
-            target.classList.add("meridian-thread-row-highlight");
+            target.classList.add("foundry-thread-row-highlight");
             window.setTimeout(() => {
-                target.classList.remove("meridian-thread-row-highlight");
+                target.classList.remove("foundry-thread-row-highlight");
             }, 1200);
         }, 0);
     });
 
-    $("body").on("click", "[data-meridian-task-details-toggle]", function (e) {
+    $("body").on("click", "[data-foundry-task-details-toggle]", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        const mode = ($(this).attr("data-meridian-task-details-toggle") ?? "").trim();
+        const mode = ($(this).attr("data-foundry-task-details-toggle") ?? "").trim();
         if (mode !== "expand" && mode !== "collapse") {
             return;
         }
@@ -5684,10 +5684,10 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("click", "[data-meridian-task-review-mode]", function (e) {
+    $("body").on("click", "[data-foundry-task-review-mode]", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        const mode = ($(this).attr("data-meridian-task-review-mode") ?? "").trim();
+        const mode = ($(this).attr("data-foundry-task-review-mode") ?? "").trim();
         if (mode !== "unified" && mode !== "split") {
             return;
         }
@@ -5703,7 +5703,7 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("keydown", "[data-meridian-task-review-mode]", (e) => {
+    $("body").on("keydown", "[data-foundry-task-review-mode]", (e) => {
         if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") {
             return;
         }
@@ -5721,7 +5721,7 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("scroll", "#meridian-task-thread-log", function () {
+    $("body").on("scroll", "#foundry-task-thread-log", function () {
         if (!(this instanceof HTMLElement)) {
             return;
         }
@@ -5733,10 +5733,10 @@ export function initialize(): void {
         update_follow_output_ui();
     });
 
-    $("body").on("click", "#meridian-task-follow-button", (e) => {
+    $("body").on("click", "#foundry-task-follow-button", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const thread = document.querySelector<HTMLElement>("#meridian-task-thread-log");
+        const thread = document.querySelector<HTMLElement>("#foundry-task-thread-log");
         if (!thread) {
             return;
         }
@@ -5747,7 +5747,7 @@ export function initialize(): void {
 
     hide_task_view(true);
 
-    $(window).on("hashchange.meridian_tasks", () => {
+    $(window).on("hashchange.foundry_tasks", () => {
         const next_context = current_topic_context();
         const next_scope = next_context?.topic_scope_id ?? "";
         const previous_scope = state.topic_scope_id;
@@ -5823,7 +5823,7 @@ export function teardown_for_tests(): void {
     provider_auth_entries = [];
     pending_oauth_continuation = null;
     close_selected_task_event_stream();
-    $(window).off("hashchange.meridian_tasks");
+    $(window).off("hashchange.foundry_tasks");
     clear_sidebar_task_rows();
     set_task_view_open_state(false);
     hide_task_view();

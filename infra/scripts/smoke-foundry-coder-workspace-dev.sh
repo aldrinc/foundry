@@ -9,8 +9,8 @@ fi
 HOST="$1"
 WORKSPACE_NAME="$2"
 CODER_ORG="${3:-coder}"
-REPO_ID="${FOUNDRY_REPO_ID:-aldrinc/foundry}"
-REPO_URL="${FOUNDRY_REPO_URL:-https://github.com/aldrinc/foundry.git}"
+REPO_ID="${FOUNDRY_REPO_ID:-example-org/foundry}"
+REPO_URL="${FOUNDRY_REPO_URL:-https://github.com/example-org/foundry.git}"
 
 ssh -i ~/.ssh/hetzner_prod -o StrictHostKeyChecking=accept-new "root@${HOST}" \
   "WORKSPACE_NAME='${WORKSPACE_NAME}' CODER_ORG='${CODER_ORG}' REPO_ID='${REPO_ID}' REPO_URL='${REPO_URL}' bash -s" <<'EOF'

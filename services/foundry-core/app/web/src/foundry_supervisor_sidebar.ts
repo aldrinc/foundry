@@ -104,7 +104,7 @@ const state: SidebarState = {
 const POLL_INTERVAL_MS = 1200;
 const POLL_WARNING_THRESHOLD = 5;
 const LIVE_THINKING_FRESH_MS = 22000;
-const SUPERVISOR_AI_OPEN_BODY_CLASS = "meridian-supervisor-ai-open";
+const SUPERVISOR_AI_OPEN_BODY_CLASS = "foundry-supervisor-ai-open";
 
 function as_record(value: unknown): Record<string, unknown> | undefined {
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -324,31 +324,31 @@ function decorate_markdown_code_blocks(root: HTMLElement): void {
             continue;
         }
         let wrapper: HTMLElement;
-        if (existing_parent.classList.contains("meridian-markdown-code")) {
+        if (existing_parent.classList.contains("foundry-markdown-code")) {
             wrapper = existing_parent;
         } else {
             wrapper = document.createElement("div");
-            wrapper.className = "meridian-markdown-code";
+            wrapper.className = "foundry-markdown-code";
             block.replaceWith(wrapper);
             wrapper.append(block);
         }
-        if (!wrapper.querySelector("[data-meridian-lang-label]")) {
+        if (!wrapper.querySelector("[data-foundry-lang-label]")) {
             const lang = detect_code_language(block);
             if (lang) {
                 const label = document.createElement("span");
-                label.className = "meridian-code-lang-label";
-                label.setAttribute("data-meridian-lang-label", "1");
+                label.className = "foundry-code-lang-label";
+                label.setAttribute("data-foundry-lang-label", "1");
                 label.textContent = lang;
                 wrapper.append(label);
             }
         }
-        if (wrapper.querySelector("[data-meridian-markdown-copy]")) {
+        if (wrapper.querySelector("[data-foundry-markdown-copy]")) {
             continue;
         }
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "meridian-markdown-copy";
-        button.setAttribute("data-meridian-markdown-copy", "1");
+        button.className = "foundry-markdown-copy";
+        button.setAttribute("data-foundry-markdown-copy", "1");
         button.setAttribute("aria-label", "Copy code block");
         button.innerHTML = '<i class="zulip-icon zulip-icon-copy" aria-hidden="true"></i>';
         wrapper.append(button);
@@ -361,10 +361,10 @@ function decorate_markdown_code_blocks(root: HTMLElement): void {
     for (const btn of root.querySelectorAll("button")) {
         if (
             btn instanceof HTMLElement &&
-            !btn.classList.contains("meridian-markdown-copy") &&
-            !btn.closest(".meridian-supervisor-composer-actions") &&
-            !btn.closest(".meridian-supervisor-tool-trigger") &&
-            !btn.closest(".meridian-task-dashboard-collapse") &&
+            !btn.classList.contains("foundry-markdown-copy") &&
+            !btn.closest(".foundry-supervisor-composer-actions") &&
+            !btn.closest(".foundry-supervisor-tool-trigger") &&
+            !btn.closest(".foundry-task-dashboard-collapse") &&
             !btn.id
         ) {
             const text = btn.textContent?.trim() ?? "";
@@ -392,7 +392,7 @@ function annotate_terminal_prompt_lines(block: HTMLElement): void {
     for (const line of lines) {
         const trimmed = line.trimStart();
         if (trimmed.startsWith("$ ") || trimmed.startsWith("# ") || trimmed === "$") {
-            html_parts.push(`<span class="meridian-terminal-prompt">${_.escape(line)}</span>`);
+            html_parts.push(`<span class="foundry-terminal-prompt">${_.escape(line)}</span>`);
         } else {
             html_parts.push(_.escape(line));
         }
@@ -442,15 +442,15 @@ function render_shell_output_card(event: SupervisorEvent): JQuery {
     const block_count = count_code_blocks_in_content(event.content_md);
     const badge = `${block_count} cmd${block_count !== 1 ? "s" : ""}`;
     const html = `
-<div class="meridian-supervisor-shell-output-card" data-supervisor-event-id="${event.id}">
-  <details class="meridian-supervisor-tool-collapse">
-    <summary class="meridian-supervisor-tool-trigger">
-      <i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i>
-      <span class="meridian-supervisor-tool-icon meridian-shell-icon">$</span>
-      <span class="meridian-supervisor-tool-name">${_.escape(summary)}</span>
-      <span class="meridian-supervisor-tool-status">${_.escape(badge)}</span>
+<div class="foundry-supervisor-shell-output-card" data-supervisor-event-id="${event.id}">
+  <details class="foundry-supervisor-tool-collapse">
+    <summary class="foundry-supervisor-tool-trigger">
+      <i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i>
+      <span class="foundry-supervisor-tool-icon foundry-shell-icon">$</span>
+      <span class="foundry-supervisor-tool-name">${_.escape(summary)}</span>
+      <span class="foundry-supervisor-tool-status">${_.escape(badge)}</span>
     </summary>
-    <div class="meridian-supervisor-tool-body">
+    <div class="foundry-supervisor-tool-body">
       ${render_markdown(event.content_md)}
     </div>
   </details>
@@ -527,9 +527,9 @@ function render_markdown(content: string): string {
     const source = sanitize_markdown_text(content || "(no content)");
     try {
         const rendered = markdown.parse_non_message(source);
-        return `<div class="meridian-supervisor-content rendered_markdown">${rendered}</div>`;
+        return `<div class="foundry-supervisor-content rendered_markdown">${rendered}</div>`;
     } catch {
-        return `<div class="meridian-supervisor-content">${_.escape(source)}</div>`;
+        return `<div class="foundry-supervisor-content">${_.escape(source)}</div>`;
     }
 }
 
@@ -604,13 +604,13 @@ function render_trace_fields(event: SupervisorEvent): string {
     const badges = fields
         .map(
             (field) =>
-                `<span class="meridian-supervisor-trace-badge"><span class="meridian-supervisor-trace-label">${_.escape(field.label)}:</span> ${_.escape(field.value)}</span>`,
+                `<span class="foundry-supervisor-trace-badge"><span class="foundry-supervisor-trace-label">${_.escape(field.label)}:</span> ${_.escape(field.value)}</span>`,
         )
         .join("");
     return `
-<details class="meridian-supervisor-trace-collapse">
-  <summary class="meridian-supervisor-trace-toggle"><i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i> ${fields.length} trace fields</summary>
-  <div class="meridian-supervisor-traces">${badges}</div>
+<details class="foundry-supervisor-trace-collapse">
+  <summary class="foundry-supervisor-trace-toggle"><i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i> ${fields.length} trace fields</summary>
+  <div class="foundry-supervisor-traces">${badges}</div>
 </details>`;
 }
 
@@ -629,15 +629,15 @@ function render_dispatch_tasks(event: SupervisorEvent): string {
         const role = as_string(item["assigned_role"]).trim() || "worker";
         const status = as_string(item["status"]).trim() || "queued";
         cards.push(`
-<article class="meridian-supervisor-tool-card" data-task-id="${_.escape(task_id)}">
-  <div class="meridian-supervisor-tool-title">${_.escape(task_id)}</div>
-  <div class="meridian-supervisor-tool-subtitle" data-task-role="${_.escape(role)}">${_.escape(role)} · ${_.escape(status)}</div>
+<article class="foundry-supervisor-tool-card" data-task-id="${_.escape(task_id)}">
+  <div class="foundry-supervisor-tool-title">${_.escape(task_id)}</div>
+  <div class="foundry-supervisor-tool-subtitle" data-task-role="${_.escape(role)}">${_.escape(role)} · ${_.escape(status)}</div>
 </article>`);
     }
     if (cards.length === 0) {
         return "";
     }
-    return `<div class="meridian-supervisor-tool-list">${cards.join("")}</div>`;
+    return `<div class="foundry-supervisor-tool-list">${cards.join("")}</div>`;
 }
 
 function payload_details_text(payload: Record<string, unknown>): string {
@@ -672,9 +672,9 @@ function render_payload_details(event: SupervisorEvent): string {
         return "";
     }
     return `
-<details class="meridian-supervisor-event-details">
-  <summary><i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i> Trace details</summary>
-  <pre class="meridian-supervisor-event-details-body">${_.escape(details)}</pre>
+<details class="foundry-supervisor-event-details">
+  <summary><i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i> Trace details</summary>
+  <pre class="foundry-supervisor-event-details-body">${_.escape(details)}</pre>
 </details>`;
 }
 
@@ -747,10 +747,10 @@ function render_thinking_event(event: SupervisorEvent): JQuery {
     const preview = normalize_live_preview(event.content_md, 120);
     const summary_text = preview ? `Thinking: ${_.escape(preview)}` : "Thinking…";
     const html = `
-<article class="meridian-supervisor-event is-thinking" data-supervisor-event-id="${event.id}">
-  <details class="meridian-supervisor-thinking-collapse">
-    <summary><i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i> ${summary_text}</summary>
-    <div class="meridian-supervisor-thinking-body">
+<article class="foundry-supervisor-event is-thinking" data-supervisor-event-id="${event.id}">
+  <details class="foundry-supervisor-thinking-collapse">
+    <summary><i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i> ${summary_text}</summary>
+    <div class="foundry-supervisor-thinking-body">
       ${render_markdown(event.content_md)}
     </div>
   </details>
@@ -788,15 +788,15 @@ function render_tool_event(event: SupervisorEvent): JQuery {
     const tool_name = as_string(event.payload?.["tool_name"] ?? event.payload?.["tool"]).trim() || "tool";
     const {status, icon: status_icon} = infer_tool_status(event);
     const html = `
-<div class="meridian-supervisor-tool-collapse-wrap" data-supervisor-event-id="${event.id}">
-  <details class="meridian-supervisor-tool-collapse">
-    <summary class="meridian-supervisor-tool-trigger">
-      <i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i>
-      <span class="meridian-supervisor-tool-icon">⚙</span>
-      <span class="meridian-supervisor-tool-name">${_.escape(tool_name)}</span>
-      <span class="meridian-supervisor-tool-status">${_.escape(status_icon)} ${_.escape(status)}</span>
+<div class="foundry-supervisor-tool-collapse-wrap" data-supervisor-event-id="${event.id}">
+  <details class="foundry-supervisor-tool-collapse">
+    <summary class="foundry-supervisor-tool-trigger">
+      <i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i>
+      <span class="foundry-supervisor-tool-icon">⚙</span>
+      <span class="foundry-supervisor-tool-name">${_.escape(tool_name)}</span>
+      <span class="foundry-supervisor-tool-status">${_.escape(status_icon)} ${_.escape(status)}</span>
     </summary>
-    <div class="meridian-supervisor-tool-body">
+    <div class="foundry-supervisor-tool-body">
       ${render_markdown(event.content_md)}
     </div>
   </details>
@@ -863,18 +863,18 @@ function render_lifecycle_event(event: SupervisorEvent): JQuery {
     const {icon, css, label} = lifecycle_status_from_event(event);
     const has_body = event.content_md.trim().length > 80;
     const body_section = has_body
-        ? `<details class="meridian-lifecycle-details">
-             <summary class="meridian-lifecycle-details-toggle"><i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i> Details</summary>
-             <div class="meridian-lifecycle-details-body">${render_markdown(event.content_md)}</div>
+        ? `<details class="foundry-lifecycle-details">
+             <summary class="foundry-lifecycle-details-toggle"><i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i> Details</summary>
+             <div class="foundry-lifecycle-details-body">${render_markdown(event.content_md)}</div>
            </details>`
         : "";
 
     const html = `
-<div class="meridian-supervisor-lifecycle-card ${css}" data-supervisor-event-id="${event.id}">
-  <div class="meridian-lifecycle-row">
-    <span class="meridian-lifecycle-icon ${css}">${_.escape(icon)}</span>
-    <span class="meridian-lifecycle-label">${_.escape(label)}</span>
-    <span class="meridian-lifecycle-time">${_.escape(ts)}</span>
+<div class="foundry-supervisor-lifecycle-card ${css}" data-supervisor-event-id="${event.id}">
+  <div class="foundry-lifecycle-row">
+    <span class="foundry-lifecycle-icon ${css}">${_.escape(icon)}</span>
+    <span class="foundry-lifecycle-label">${_.escape(label)}</span>
+    <span class="foundry-lifecycle-time">${_.escape(ts)}</span>
   </div>
   ${body_section}
 </div>`;
@@ -908,10 +908,10 @@ function render_event(event: SupervisorEvent): JQuery {
     const ts = event.ts ? new Date(event.ts).toLocaleTimeString() : "";
     const dispatched = render_dispatch_tasks(event);
     const html = `
-<article class="meridian-supervisor-event ${event_css_class(event)}" data-supervisor-event-id="${event.id}">
-  <header class="meridian-supervisor-event-header">
-    <span class="meridian-supervisor-event-author">${_.escape(label)}</span>
-    <span class="meridian-supervisor-event-meta">${_.escape(ts)}</span>
+<article class="foundry-supervisor-event ${event_css_class(event)}" data-supervisor-event-id="${event.id}">
+  <header class="foundry-supervisor-event-header">
+    <span class="foundry-supervisor-event-author">${_.escape(label)}</span>
+    <span class="foundry-supervisor-event-meta">${_.escape(ts)}</span>
   </header>
   ${render_markdown(event.content_md)}
   ${dispatched}
@@ -927,7 +927,7 @@ function render_event(event: SupervisorEvent): JQuery {
 
 function sync_scroll_bottom_button(): void {
     const $timeline = timeline_selector();
-    const $btn = $("#meridian-supervisor-scroll-bottom");
+    const $btn = $("#foundry-supervisor-scroll-bottom");
     if ($timeline.length === 0 || $btn.length === 0) {
         return;
     }
@@ -963,9 +963,9 @@ function group_intermediate_steps(): void {
             return;
         }
         const wrapper = document.createElement("details");
-        wrapper.className = "meridian-supervisor-steps-group";
+        wrapper.className = "foundry-supervisor-steps-group";
         const summary = document.createElement("summary");
-        summary.innerHTML = `<i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i> ${nodes_to_group.length} intermediate steps`;
+        summary.innerHTML = `<i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i> ${nodes_to_group.length} intermediate steps`;
         wrapper.append(summary);
         const first = nodes_to_group[0];
         if (first) {
@@ -986,8 +986,8 @@ function group_intermediate_steps(): void {
         const is_user = child.classList.contains("is-user");
         const is_supervisor = child.classList.contains("is-supervisor") || child.classList.contains("is-dispatch") || child.classList.contains("is-plan");
         const is_separator = child.tagName === "HR";
-        const is_intermediate = child.classList.contains("is-thinking") || child.classList.contains("is-tool") || child.classList.contains("meridian-supervisor-lifecycle-card") || child.classList.contains("meridian-supervisor-shell-output-card") || child.querySelector(".meridian-supervisor-tool-collapse") !== null;
-        const is_steps_group = child.classList.contains("meridian-supervisor-steps-group");
+        const is_intermediate = child.classList.contains("is-thinking") || child.classList.contains("is-tool") || child.classList.contains("foundry-supervisor-lifecycle-card") || child.classList.contains("foundry-supervisor-shell-output-card") || child.querySelector(".foundry-supervisor-tool-collapse") !== null;
+        const is_steps_group = child.classList.contains("foundry-supervisor-steps-group");
 
         if (is_steps_group) {
             continue;
@@ -1011,11 +1011,11 @@ function group_intermediate_steps(): void {
 }
 
 function root_selector(): JQuery {
-    return $("#meridian-supervisor-sidebar-root");
+    return $("#foundry-supervisor-sidebar-root");
 }
 
 function timeline_selector(): JQuery {
-    return $("#meridian-supervisor-sidebar-timeline");
+    return $("#foundry-supervisor-sidebar-timeline");
 }
 
 function set_status_message(message: string): void {
@@ -1023,11 +1023,11 @@ function set_status_message(message: string): void {
         return;
     }
     state.last_status_message = message;
-    $("#meridian-supervisor-sidebar-status").text(message);
+    $("#foundry-supervisor-sidebar-status").text(message);
 }
 
 function set_warning(message: string): void {
-    const $warning = $("#meridian-supervisor-sidebar-warning");
+    const $warning = $("#foundry-supervisor-sidebar-warning");
     if (!message) {
         $warning.hide().text("");
         return;
@@ -1038,26 +1038,26 @@ function set_warning(message: string): void {
 function render_shell(context: TopicContext): void {
     const topic_title = `${_.escape(context.stream_name)} · ${_.escape(context.topic)}`;
     const html = `
-<div class="meridian-supervisor-sidebar-shell">
-  <div class="meridian-supervisor-sidebar-header">
-    <div class="meridian-supervisor-sidebar-header-row">
-      <div class="meridian-supervisor-sidebar-title" title="${topic_title}">Supervisor</div>
-      <span id="meridian-supervisor-sidebar-status" class="meridian-supervisor-sidebar-status-badge">Connecting…</span>
+<div class="foundry-supervisor-sidebar-shell">
+  <div class="foundry-supervisor-sidebar-header">
+    <div class="foundry-supervisor-sidebar-header-row">
+      <div class="foundry-supervisor-sidebar-title" title="${topic_title}">Supervisor</div>
+      <span id="foundry-supervisor-sidebar-status" class="foundry-supervisor-sidebar-status-badge">Connecting…</span>
     </div>
-    <div class="meridian-supervisor-sidebar-topic" title="${topic_title}">${topic_title}</div>
+    <div class="foundry-supervisor-sidebar-topic" title="${topic_title}">${topic_title}</div>
   </div>
-  <div id="meridian-supervisor-task-dashboard" class="meridian-supervisor-task-dashboard" style="display:none"></div>
-  <div id="meridian-supervisor-sidebar-warning" class="meridian-supervisor-sidebar-warning" style="display:none;"></div>
-  <div id="meridian-supervisor-sidebar-timeline" class="meridian-supervisor-sidebar-timeline scrolling_list">
-    <button type="button" id="meridian-supervisor-scroll-bottom" class="meridian-supervisor-scroll-bottom" style="display:none" aria-label="Scroll to bottom">↓</button>
+  <div id="foundry-supervisor-task-dashboard" class="foundry-supervisor-task-dashboard" style="display:none"></div>
+  <div id="foundry-supervisor-sidebar-warning" class="foundry-supervisor-sidebar-warning" style="display:none;"></div>
+  <div id="foundry-supervisor-sidebar-timeline" class="foundry-supervisor-sidebar-timeline scrolling_list">
+    <button type="button" id="foundry-supervisor-scroll-bottom" class="foundry-supervisor-scroll-bottom" style="display:none" aria-label="Scroll to bottom">↓</button>
   </div>
-  <div class="meridian-supervisor-sidebar-composer">
-    <textarea id="meridian-supervisor-sidebar-input" class="meridian-supervisor-sidebar-input" rows="2" placeholder="Ask anything..."></textarea>
-    <div id="meridian-supervisor-attachments" class="meridian-supervisor-composer-attachments" style="display:none"></div>
-    <div class="meridian-supervisor-composer-actions">
-      <input type="file" id="meridian-supervisor-file-input" multiple style="display:none" />
-      <button type="button" class="meridian-supervisor-composer-attach" id="meridian-supervisor-attach" title="Attach files" aria-label="Attach files">+</button>
-      <button type="button" class="meridian-supervisor-composer-send" id="meridian-supervisor-sidebar-send" title="Send message">↑</button>
+  <div class="foundry-supervisor-sidebar-composer">
+    <textarea id="foundry-supervisor-sidebar-input" class="foundry-supervisor-sidebar-input" rows="2" placeholder="Ask anything..."></textarea>
+    <div id="foundry-supervisor-attachments" class="foundry-supervisor-composer-attachments" style="display:none"></div>
+    <div class="foundry-supervisor-composer-actions">
+      <input type="file" id="foundry-supervisor-file-input" multiple style="display:none" />
+      <button type="button" class="foundry-supervisor-composer-attach" id="foundry-supervisor-attach" title="Attach files" aria-label="Attach files">+</button>
+      <button type="button" class="foundry-supervisor-composer-send" id="foundry-supervisor-sidebar-send" title="Send message">↑</button>
     </div>
   </div>
 </div>`;
@@ -1068,7 +1068,7 @@ function render_shell(context: TopicContext): void {
 
 function render_empty_state(message: string): void {
     root_selector().html(
-        `<div class="meridian-supervisor-sidebar-empty">${_.escape(message)}</div>`,
+        `<div class="foundry-supervisor-sidebar-empty">${_.escape(message)}</div>`,
     );
 }
 
@@ -1095,12 +1095,12 @@ function render_live_row(message: string, mode: LiveRowMode): string {
     const meta = mode === "thinking" ? "Thinking" : mode === "working" ? "Working" : "Live";
     const show_shimmer = mode === "working" || mode === "thinking";
     return `
-<article class="meridian-supervisor-event meridian-supervisor-live-row is-supervisor ${mode_class}" id="meridian-supervisor-live-row">
-  <div class="meridian-supervisor-live-body ${mode_class}">
-    <span class="meridian-supervisor-live-dot" aria-hidden="true"></span>
-    <span class="meridian-supervisor-live-text">${_.escape(message)}</span>
-    <span class="meridian-supervisor-live-meta">${meta}</span>
-  </div>${show_shimmer ? '\n  <div class="meridian-supervisor-live-shimmer" aria-hidden="true"></div>' : ""}
+<article class="foundry-supervisor-event foundry-supervisor-live-row is-supervisor ${mode_class}" id="foundry-supervisor-live-row">
+  <div class="foundry-supervisor-live-body ${mode_class}">
+    <span class="foundry-supervisor-live-dot" aria-hidden="true"></span>
+    <span class="foundry-supervisor-live-text">${_.escape(message)}</span>
+    <span class="foundry-supervisor-live-meta">${meta}</span>
+  </div>${show_shimmer ? '\n  <div class="foundry-supervisor-live-shimmer" aria-hidden="true"></div>' : ""}
 </article>`;
 }
 
@@ -1424,7 +1424,7 @@ function task_status_dot_class(status: string): string {
 }
 
 function sync_dispatch_task_cards(): void {
-    $("#meridian-supervisor-sidebar-timeline .meridian-supervisor-tool-card[data-task-id]").each(
+    $("#foundry-supervisor-sidebar-timeline .foundry-supervisor-tool-card[data-task-id]").each(
         (_idx, elem) => {
             const $card = $(elem);
             const task_id = $card.attr("data-task-id")?.trim() ?? "";
@@ -1440,17 +1440,17 @@ function sync_dispatch_task_cards(): void {
             }
             const role =
                 current.assigned_role ||
-                $card.find(".meridian-supervisor-tool-subtitle").attr("data-task-role")?.trim() ||
+                $card.find(".foundry-supervisor-tool-subtitle").attr("data-task-role")?.trim() ||
                 "worker";
             $card
-                .find(".meridian-supervisor-tool-subtitle")
+                .find(".foundry-supervisor-tool-subtitle")
                 .text(`${role} · ${current.status || "queued"}`);
         },
     );
 }
 
 function sync_task_dashboard(): void {
-    const $dashboard = $("#meridian-supervisor-task-dashboard");
+    const $dashboard = $("#foundry-supervisor-task-dashboard");
     if ($dashboard.length === 0) {
         return;
     }
@@ -1480,24 +1480,24 @@ function sync_task_dashboard(): void {
             const dot = task_status_dot_class(t.status);
             const display_id = t.task_id.length > 24 ? `${t.task_id.slice(0, 21)}…` : t.task_id;
             const label = t.title || display_id;
-            return `<div class="meridian-task-row">
-                <span class="meridian-task-dot ${dot}"></span>
-                <span class="meridian-task-label" title="${_.escape(t.task_id)}">${_.escape(label)}</span>
-                <span class="meridian-task-status-text">${_.escape(t.status)}</span>
+            return `<div class="foundry-task-row">
+                <span class="foundry-task-dot ${dot}"></span>
+                <span class="foundry-task-label" title="${_.escape(t.task_id)}">${_.escape(label)}</span>
+                <span class="foundry-task-status-text">${_.escape(t.status)}</span>
             </div>`;
         })
         .join("");
 
     const html = `
-    <details class="meridian-task-dashboard-collapse" open>
-      <summary class="meridian-task-dashboard-summary">
-        <i class="zulip-icon zulip-icon-chevron-right meridian-collapse-chevron" aria-hidden="true"></i>
-        <span class="meridian-task-dashboard-title">Tasks</span>
-        <span class="meridian-task-dashboard-counts">${done_count}/${total}</span>
-        <span class="meridian-task-dashboard-overall ${overall}">${_.escape(overall_label)}</span>
+    <details class="foundry-task-dashboard-collapse" open>
+      <summary class="foundry-task-dashboard-summary">
+        <i class="zulip-icon zulip-icon-chevron-right foundry-collapse-chevron" aria-hidden="true"></i>
+        <span class="foundry-task-dashboard-title">Tasks</span>
+        <span class="foundry-task-dashboard-counts">${done_count}/${total}</span>
+        <span class="foundry-task-dashboard-overall ${overall}">${_.escape(overall_label)}</span>
       </summary>
-      <div class="meridian-task-dashboard-body">
-        <div class="meridian-task-progress-bar"><div class="meridian-task-progress-fill" style="width:${done_pct}%"></div></div>
+      <div class="foundry-task-dashboard-body">
+        <div class="foundry-task-progress-bar"><div class="foundry-task-progress-fill" style="width:${done_pct}%"></div></div>
         ${rows}
       </div>
     </details>`;
@@ -1512,7 +1512,7 @@ function sync_live_row(): void {
         return;
     }
     const near_bottom = timeline_near_bottom($timeline);
-    const $existing = $("#meridian-supervisor-live-row");
+    const $existing = $("#foundry-supervisor-live-row");
 
     let live_message = "";
     let live_mode: LiveRowMode | undefined;
@@ -1592,7 +1592,7 @@ function append_events(events: SupervisorEvent[]): void {
         if (timeline) {
             if (role === "user" && timeline.children.length > 0) {
                 const separator = document.createElement("hr");
-                separator.className = "meridian-supervisor-turn-separator";
+                separator.className = "foundry-supervisor-turn-separator";
                 timeline.append(separator);
             }
             const event_node = render_event(event).get(0);
@@ -1704,10 +1704,10 @@ function confine_panel_native_wheel(e: WheelEvent): void {
 
 function attach_timeline_wheel_listener(): void {
     const timeline = timeline_selector().get(0);
-    if (!timeline || timeline.dataset["meridianWheelBound"] === "1") {
+    if (!timeline || timeline.dataset["foundryWheelBound"] === "1") {
         return;
     }
-    timeline.dataset["meridianWheelBound"] = "1";
+    timeline.dataset["foundryWheelBound"] = "1";
     timeline.addEventListener("wheel", confine_timeline_native_wheel, {passive: false});
     timeline.addEventListener("scroll", () => {
         sync_scroll_bottom_button();
@@ -1716,10 +1716,10 @@ function attach_timeline_wheel_listener(): void {
 
 function attach_panel_wheel_listener(): void {
     const panel = document.querySelector<HTMLElement>("#right-sidebar-ai-panel");
-    if (!panel || panel.dataset["meridianPanelWheelBound"] === "1") {
+    if (!panel || panel.dataset["foundryPanelWheelBound"] === "1") {
         return;
     }
-    panel.dataset["meridianPanelWheelBound"] = "1";
+    panel.dataset["foundryPanelWheelBound"] = "1";
     panel.addEventListener("wheel", confine_panel_native_wheel, {capture: true, passive: false});
 }
 
@@ -1734,7 +1734,7 @@ function format_file_size(bytes: number): string {
 }
 
 function render_attachment_chips(): void {
-    const $container = $("#meridian-supervisor-attachments");
+    const $container = $("#foundry-supervisor-attachments");
     if (state.pending_attachments.length === 0) {
         $container.hide().empty();
         return;
@@ -1742,10 +1742,10 @@ function render_attachment_chips(): void {
     const chips = state.pending_attachments
         .map(
             (file, index) =>
-                `<span class="meridian-supervisor-attachment-chip" data-attachment-index="${index}">
-                    <span class="meridian-supervisor-attachment-name">${_.escape(file.name)}</span>
-                    <span class="meridian-supervisor-attachment-size">${format_file_size(file.size)}</span>
-                    <button type="button" class="meridian-supervisor-attachment-remove" data-attachment-index="${index}" aria-label="Remove ${_.escape(file.name)}">×</button>
+                `<span class="foundry-supervisor-attachment-chip" data-attachment-index="${index}">
+                    <span class="foundry-supervisor-attachment-name">${_.escape(file.name)}</span>
+                    <span class="foundry-supervisor-attachment-size">${format_file_size(file.size)}</span>
+                    <button type="button" class="foundry-supervisor-attachment-remove" data-attachment-index="${index}" aria-label="Remove ${_.escape(file.name)}">×</button>
                 </span>`,
         )
         .join("");
@@ -1774,14 +1774,14 @@ function remove_attachment(index: number): void {
 function clear_attachments(): void {
     state.pending_attachments = [];
     render_attachment_chips();
-    const file_input = document.getElementById("meridian-supervisor-file-input");
+    const file_input = document.getElementById("foundry-supervisor-file-input");
     if (file_input instanceof HTMLInputElement) {
         file_input.value = "";
     }
 }
 
 function update_send_button_state(): void {
-    const textarea_value = String($("#meridian-supervisor-sidebar-input").val() ?? "").trim();
+    const textarea_value = String($("#foundry-supervisor-sidebar-input").val() ?? "").trim();
     const has_content = textarea_value.length > 0 || state.pending_attachments.length > 0;
     const disabled = state.sending_message || !has_content;
     const label = state.sending_message ? "⋯" : "↑";
@@ -1790,7 +1790,7 @@ function update_send_button_state(): void {
         : has_content
           ? "Send message"
           : "Type a message";
-    $("#meridian-supervisor-sidebar-send").prop("disabled", disabled).text(label).attr("title", title);
+    $("#foundry-supervisor-sidebar-send").prop("disabled", disabled).text(label).attr("title", title);
     sync_live_row();
 }
 
@@ -1946,7 +1946,7 @@ async function poll_session(): Promise<void> {
     state.request_in_flight = true;
     const scope = state.context.topic_scope_id;
     await channel.get({
-        url: `/json/meridian/topics/${encodeURIComponent(scope)}/supervisor/session`,
+        url: `/json/foundry/topics/${encodeURIComponent(scope)}/supervisor/session`,
         data: {
             after_id: state.after_id,
             limit: 250,
@@ -2014,7 +2014,7 @@ function post_message(message: string): void {
     if (!trimmed && !has_files) {
         return;
     }
-    const $input = $("#meridian-supervisor-sidebar-input");
+    const $input = $("#foundry-supervisor-sidebar-input");
     const original_draft = message;
     const sent_files = [...state.pending_attachments];
     state.sending_message = true;
@@ -2040,7 +2040,7 @@ function post_message(message: string): void {
     }
 
     const csrf_token = $('input[name="csrfmiddlewaretoken"]').val() ?? "";
-    const url = `/json/meridian/topics/${encodeURIComponent(scope)}/supervisor/message`;
+    const url = `/json/foundry/topics/${encodeURIComponent(scope)}/supervisor/message`;
 
     const xhr = new XMLHttpRequest();
     xhr.open("POST", url, true);
@@ -2114,7 +2114,7 @@ function open_ai_for_context(context: TopicContext): void {
     attach_panel_wheel_listener();
     void poll_session();
     setTimeout(() => {
-        $("#meridian-supervisor-sidebar-input").trigger("focus");
+        $("#foundry-supervisor-sidebar-input").trigger("focus");
     }, 0);
 }
 
@@ -2170,45 +2170,45 @@ export function initialize(): void {
         open_for_current_topic();
     });
 
-    $("body").on("click", "#meridian-supervisor-sidebar-send", (e) => {
+    $("body").on("click", "#foundry-supervisor-sidebar-send", (e) => {
         e.preventDefault();
-        const message = String($("#meridian-supervisor-sidebar-input").val() ?? "");
+        const message = String($("#foundry-supervisor-sidebar-input").val() ?? "");
         post_message(message);
     });
 
-    $("body").on("wheel", "#meridian-supervisor-sidebar-timeline", (e) => {
+    $("body").on("wheel", "#foundry-supervisor-sidebar-timeline", (e) => {
         confine_timeline_wheel(e);
     });
 
-    $("body").on("scroll", "#meridian-supervisor-sidebar-timeline", () => {
+    $("body").on("scroll", "#foundry-supervisor-sidebar-timeline", () => {
         sync_scroll_bottom_button();
     });
 
-    $("body").on("click", "#meridian-supervisor-scroll-bottom", (e) => {
+    $("body").on("click", "#foundry-supervisor-scroll-bottom", (e) => {
         e.preventDefault();
         scroll_timeline_to_bottom();
         sync_scroll_bottom_button();
     });
 
-    $("body").on("keydown", "#meridian-supervisor-sidebar-input", (e) => {
+    $("body").on("keydown", "#foundry-supervisor-sidebar-input", (e) => {
         if (e.key !== "Enter" || e.shiftKey) {
             return;
         }
         e.preventDefault();
-        const message = String($("#meridian-supervisor-sidebar-input").val() ?? "");
+        const message = String($("#foundry-supervisor-sidebar-input").val() ?? "");
         post_message(message);
     });
 
-    $("body").on("input", "#meridian-supervisor-sidebar-input", () => {
+    $("body").on("input", "#foundry-supervisor-sidebar-input", () => {
         update_send_button_state();
     });
 
-    $("body").on("click", "#meridian-supervisor-attach", (e) => {
+    $("body").on("click", "#foundry-supervisor-attach", (e) => {
         e.preventDefault();
-        $("#meridian-supervisor-file-input").trigger("click");
+        $("#foundry-supervisor-file-input").trigger("click");
     });
 
-    $("body").on("change", "#meridian-supervisor-file-input", function () {
+    $("body").on("change", "#foundry-supervisor-file-input", function () {
         const input = this instanceof HTMLInputElement ? this : undefined;
         if (input?.files && input.files.length > 0) {
             add_attachments(input.files);
@@ -2216,7 +2216,7 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("click", ".meridian-supervisor-attachment-remove", function (e) {
+    $("body").on("click", ".foundry-supervisor-attachment-remove", function (e) {
         e.preventDefault();
         e.stopPropagation();
         const index_str = $(this).attr("data-attachment-index");
@@ -2228,12 +2228,12 @@ export function initialize(): void {
         }
     });
 
-    $("body").on("click", "#meridian-supervisor-sidebar-root [data-meridian-markdown-copy]", function (e) {
+    $("body").on("click", "#foundry-supervisor-sidebar-root [data-foundry-markdown-copy]", function (e) {
         e.preventDefault();
         e.stopPropagation();
         void (async () => {
             const button = this instanceof HTMLButtonElement ? this : undefined;
-            const block = button?.closest(".meridian-markdown-code");
+            const block = button?.closest(".foundry-markdown-code");
             const text = block?.querySelector("pre code, pre")?.textContent ?? "";
             if (!text.trim()) {
                 return;

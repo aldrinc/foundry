@@ -15,12 +15,12 @@
     "outDir": ".tsc-out",
     "noEmit": true,
     "paths": {
-      "@zulip/ui": ["../ui/src/index.ts"],
-      "@zulip/ui/*": ["../ui/src/*"],
-      "@zulip/app": ["../app/src/index.ts"],
-      "@zulip/app/*": ["../app/src/*"],
-      "@zulip/desktop": ["./src/index.tsx"],
-      "@zulip/desktop/*": ["./src/*"]
+      "@foundry/ui": ["../ui/src/index.ts"],
+      "@foundry/ui/*": ["../ui/src/*"],
+      "@foundry/app": ["../app/src/index.ts"],
+      "@foundry/app/*": ["../app/src/*"],
+      "@foundry/desktop": ["./src/index.tsx"],
+      "@foundry/desktop/*": ["./src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],

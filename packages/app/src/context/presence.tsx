@@ -1,6 +1,6 @@
 import { createContext, useContext, onMount, onCleanup, type JSX } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 
 export type PresenceStatus = "active" | "idle" | "offline"
 

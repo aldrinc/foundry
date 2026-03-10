@@ -57,6 +57,7 @@ class AppConfig:
     core_url: str
     core_bootstrap_secret: str
     core_bootstrap_secret_present: bool
+    core_realm_key_override: str
     github_app_name: str
     github_api_url: str
     github_app_id: str
@@ -93,6 +94,25 @@ class AppConfig:
     def public_summary(self) -> dict[str, object]:
         return {
             "environment": self.environment.value,
+            "public_base_url": self.public_base_url,
+            "self_host_mode": self.self_host_mode,
+            "auth_provider": self.auth_provider.value,
+            "oidc_configured": bool(
+                self.oidc_issuer_url and self.oidc_audience and self.oidc_client_id
+            ),
+            "github_app_configured": bool(
+                self.github_app_id
+                and self.github_client_id
+                and self.github_app_private_key_present
+            ),
+            "coder_configured": bool(self.coder_url and self.coder_api_token_present),
+            "stripe_configured": self.stripe_secret_key_present,
+            "workspace_topology": self.workspace_topology.value,
+        }
+
+    def admin_summary(self) -> dict[str, object]:
+        return {
+            "environment": self.environment.value,
             "host": self.host,
             "port": self.port,
             "public_base_url": self.public_base_url,
@@ -107,6 +127,7 @@ class AppConfig:
             "bootstrap_admin_password_present": self.bootstrap_admin_password_present,
             "core_url": self.core_url,
             "core_bootstrap_secret_present": self.core_bootstrap_secret_present,
+            "core_realm_key_override": self.core_realm_key_override,
             "github_app_name": self.github_app_name,
             "github_api_url": self.github_api_url,
             "github_app_configured": bool(
@@ -173,6 +194,10 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         core_bootstrap_secret_present=bool(
             source.get("FOUNDRY_CORE_BOOTSTRAP_SECRET", "").strip()
         ),
+        core_realm_key_override=source.get(
+            "FOUNDRY_CORE_REALM_KEY_OVERRIDE",
+            "",
+        ).strip(),
         github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
         github_api_url=source.get("FOUNDRY_GITHUB_API_URL", "https://api.github.com"),
         github_app_id=source.get("FOUNDRY_GITHUB_APP_ID", ""),

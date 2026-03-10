@@ -21,14 +21,7 @@ This is an initial scaffold created to establish:
 - the confirmed launch decisions as code
 - typed domain models for the first core product concepts
 - a minimal FastAPI app with health and bootstrap metadata endpoints
-
-The core application server is still outside this monorepo today and needs to be imported separately.
-
-The existing internal orchestration implementation still lives under:
-
-- `/Users/aldrinclement/Documents/programming/ideas-space/infra/hetzner-apps/meridian-coder-orchestrator`
-
-That code will be migrated or absorbed into this service incrementally.
+- a session-backed control plane for organization, GitHub, runtime, and workspace management
 
 ## Layout
 
@@ -51,13 +44,15 @@ uvicorn foundry_server.app:app --app-dir src --reload
 ## Example endpoints
 
 - `GET /health`
-- `GET /api/v1/meta/bootstrap`
-- `GET /api/v1/meta/launch-decisions`
+- `GET /api/v1/cloud/me`
+- `GET /api/v1/organizations`
+
+`/api/v1/meta/bootstrap` and `/api/v1/meta/launch-decisions` are restricted to authenticated platform admins.
 
 ## Next implementation steps
 
-1. Add organization and session persistence.
-2. Add OIDC-backed auth flows for cloud and self-host modes.
-3. Add GitHub App installation and repository binding APIs.
-4. Add server-backed runtime and agent settings APIs.
-5. Start migrating orchestration and workspace policy logic from the internal service.
+1. Add OIDC-backed auth flows for cloud and self-host modes.
+2. Replace the current repo-scoped bootstrap token model with short-lived workspace bootstrap credentials.
+3. Add server-backed runtime and agent settings APIs for the remaining desktop settings surface.
+4. Expand organization-level audit logging and security reporting.
+5. Continue migrating orchestration and workspace policy logic into this service.

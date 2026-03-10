@@ -1,5 +1,7 @@
+import { commands } from "@foundry/desktop/bindings"
 import { createMemo, For, Show, createSignal, createEffect, onCleanup } from "solid-js"
 import fuzzysort from "fuzzysort"
+import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
 import type { User, Subscription } from "../context/zulip-sync"
 
@@ -18,14 +20,70 @@ type MentionItem = SpecialMentionEntry | User | Subscription
 export function MentionAutocomplete(props: {
   query: string
   type: "user" | "stream"
+  allowSpecialMentions?: boolean
   onSelect: (text: string) => void
   onClose: () => void
 }) {
   const sync = useZulipSync()
+  const org = useOrg()
   const [selectedIndex, setSelectedIndex] = createSignal(0)
+  const [fallbackUsers, setFallbackUsers] = createSignal<User[]>([])
+  const [fallbackRequested, setFallbackRequested] = createSignal(false)
+
+  const availableUsers = createMemo(() => {
+    const merged = new Map<number, User>()
+    for (const user of sync.store.users) {
+      merged.set(user.user_id, user)
+    }
+    for (const user of fallbackUsers()) {
+      merged.set(user.user_id, user)
+    }
+    return Array.from(merged.values())
+  })
+
+  const candidateOrgIds = () => {
+    const ids = new Set<string>()
+    if (org.orgId) {
+      ids.add(org.orgId)
+    }
+
+    const realmUrl = ((window as any).__FOUNDRY_REALM_URL as string | undefined)?.trim()
+    if (!realmUrl) {
+      return Array.from(ids)
+    }
+
+    const withoutScheme = realmUrl.replace(/^https?:\/\//, "")
+    const withoutTrailingSlash = withoutScheme.replace(/\/+$/, "")
+    ids.add(withoutScheme)
+    ids.add(withoutTrailingSlash)
+    ids.add(withoutTrailingSlash ? `${withoutTrailingSlash}_` : withoutTrailingSlash)
+    ids.add(withoutScheme.replace("/", "_"))
+    return Array.from(ids).filter(Boolean)
+  }
+
+  createEffect(() => {
+    if (props.type !== "user" || fallbackRequested()) return
+    if (availableUsers().filter((user) => user.is_active !== false).length > 1) return
+
+    setFallbackRequested(true)
+
+    void (async () => {
+      for (const candidateOrgId of candidateOrgIds()) {
+        try {
+          const result = await commands.getUsers(candidateOrgId)
+          if (result.status === "ok" && result.data.length > 0) {
+            setFallbackUsers(result.data)
+            return
+          }
+        } catch {
+          // Try the next candidate org id.
+        }
+      }
+    })()
+  })
 
   const specialEntries = createMemo((): SpecialMentionEntry[] => {
-    if (props.type !== "user") return []
+    if (props.type !== "user" || !props.allowSpecialMentions) return []
     const q = props.query.toLowerCase()
     const entries: SpecialMentionEntry[] = []
     if (!q || "all".includes(q) || "everyone".includes(q)) {
@@ -39,7 +97,7 @@ export function MentionAutocomplete(props: {
     if (props.type !== "user") return []
     const q = props.query.toLowerCase()
 
-    const activeUsers = sync.store.users.filter(u => u.is_active !== false)
+    const activeUsers = availableUsers().filter(u => u.is_active !== false)
 
     let userMatches: User[]
     if (!q) {

@@ -19,11 +19,22 @@ from zerver.lib.typed_endpoint import PathOnly, typed_endpoint, typed_endpoint_w
 from zerver.models import UserProfile
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
+def _first_env(*names: str, default: str = "") -> str:
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None:
+            continue
+        value = raw.strip()
+        if value:
+            return value
+    return default
+
+
+def _env_bool(*names: str, default: bool) -> bool:
+    raw = _first_env(*names)
+    if not raw:
         return default
-    return raw.strip().lower() in {"1", "true", "yes", "on", "y"}
+    return raw.lower() in {"1", "true", "yes", "on", "y"}
 
 
 def _boolish(value: str | bool | None, *, default: bool = True) -> bool:
@@ -39,19 +50,19 @@ def _boolish(value: str | bool | None, *, default: bool = True) -> bool:
     return default
 
 
-class MeridianOrchestratorConfigurationError(JsonableError):
+class FoundryOrchestratorConfigurationError(JsonableError):
     code = ErrorCode.BAD_REQUEST
 
     def __init__(self) -> None:
         super().__init__(
             _(
-                "Meridian task orchestration is not configured on this Zulip server."
-                " Set MERIDIAN_CODER_ORCHESTRATOR_URL."
+                "Foundry task orchestration is not configured on this server."
+                " Set FOUNDRY_CODER_ORCHESTRATOR_URL."
             )
         )
 
 
-class MeridianOrchestratorRequestError(JsonableError):
+class FoundryOrchestratorRequestError(JsonableError):
     code = ErrorCode.BAD_REQUEST
 
     def __init__(self, message: str) -> None:
@@ -59,15 +70,15 @@ class MeridianOrchestratorRequestError(JsonableError):
 
 
 def _orchestrator_url() -> str:
-    return os.getenv("MERIDIAN_CODER_ORCHESTRATOR_URL", "").strip().rstrip("/")
+    return _first_env("FOUNDRY_CODER_ORCHESTRATOR_URL").rstrip("/")
 
 
 def _orchestrator_token() -> str:
-    return os.getenv("MERIDIAN_CODER_ORCHESTRATOR_TOKEN", "").strip()
+    return _first_env("FOUNDRY_CODER_ORCHESTRATOR_TOKEN")
 
 
 def _orchestrator_timeout_seconds() -> float:
-    raw = os.getenv("MERIDIAN_CODER_ORCHESTRATOR_TIMEOUT_SECONDS", "25").strip()
+    raw = _first_env("FOUNDRY_CODER_ORCHESTRATOR_TIMEOUT_SECONDS", default="25")
     try:
         value = float(raw)
     except Exception:
@@ -76,7 +87,7 @@ def _orchestrator_timeout_seconds() -> float:
 
 
 def _orchestrator_supervisor_timeout_seconds() -> float:
-    raw = os.getenv("MERIDIAN_CODER_ORCHESTRATOR_SUPERVISOR_TIMEOUT_SECONDS", "140").strip()
+    raw = _first_env("FOUNDRY_CODER_ORCHESTRATOR_SUPERVISOR_TIMEOUT_SECONDS", default="140")
     try:
         value = float(raw)
     except Exception:
@@ -85,11 +96,11 @@ def _orchestrator_supervisor_timeout_seconds() -> float:
 
 
 def _orchestrator_verify_tls() -> bool:
-    return _env_bool("MERIDIAN_CODER_ORCHESTRATOR_VERIFY_TLS", True)
+    return _env_bool("FOUNDRY_CODER_ORCHESTRATOR_VERIFY_TLS", default=True)
 
 
 def _repo_url_map() -> dict[str, str]:
-    raw = os.getenv("MERIDIAN_REPO_URL_MAP_JSON", "").strip()
+    raw = _first_env("FOUNDRY_REPO_URL_MAP_JSON")
     if not raw:
         return {}
     try:
@@ -119,7 +130,6 @@ def _resolve_repo_url(repo_id: str, explicit_repo_url: str | None) -> str:
     base = (
         os.getenv("FOUNDRY_GIT_BASE_URL")
         or os.getenv("GITHUB_BASE_URL")
-        or os.getenv("MERIDIAN_GIT_BASE_URL")
         or "https://github.com"
     ).strip().rstrip("/")
     if not base:
@@ -128,7 +138,7 @@ def _resolve_repo_url(repo_id: str, explicit_repo_url: str | None) -> str:
 
 
 def _default_repo_id() -> str:
-    return os.getenv("MERIDIAN_DEFAULT_REPO_ID", "").strip()
+    return _first_env("FOUNDRY_DEFAULT_REPO_ID")
 
 
 def _normalize_provider_name(value: str) -> str:
@@ -227,7 +237,7 @@ def _orchestrator_request(
 ) -> dict[str, Any]:
     base_url = _orchestrator_url()
     if not base_url:
-        raise MeridianOrchestratorConfigurationError()
+        raise FoundryOrchestratorConfigurationError()
 
     url = f"{base_url}{path}"
     headers: dict[str, str] = {"Content-Type": "application/json"}
@@ -250,8 +260,8 @@ def _orchestrator_request(
                 verify=_orchestrator_verify_tls(),
             )
     except requests.RequestException as exc:
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator request failed: {error}").format(error=str(exc))
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator request failed: {error}").format(error=str(exc))
         ) from exc
 
     response_body_snippet = (response.text or "")[:700]
@@ -265,8 +275,8 @@ def _orchestrator_request(
             detail = str(parsed.get("detail") or parsed.get("msg") or "").strip()
         if not detail:
             detail = response_body_snippet
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator returned {status}: {detail}").format(
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator returned {status}: {detail}").format(
                 status=response.status_code,
                 detail=detail or _("empty error response"),
             )
@@ -275,13 +285,13 @@ def _orchestrator_request(
     try:
         data = response.json()
     except Exception as exc:
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator returned invalid JSON: {error}").format(error=str(exc))
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator returned invalid JSON: {error}").format(error=str(exc))
         ) from exc
 
     if not isinstance(data, dict):
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator returned an unexpected response shape.")
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator returned an unexpected response shape.")
         )
     return data
 
@@ -293,7 +303,7 @@ def _orchestrator_stream_response(
 ) -> StreamingHttpResponse:
     base_url = _orchestrator_url()
     if not base_url:
-        raise MeridianOrchestratorConfigurationError()
+        raise FoundryOrchestratorConfigurationError()
 
     url = f"{base_url}{path}"
     headers: dict[str, str] = {"Accept": "text/event-stream"}
@@ -315,8 +325,8 @@ def _orchestrator_stream_response(
         )
     except requests.RequestException as exc:
         session.close()
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator request failed: {error}").format(error=str(exc))
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator request failed: {error}").format(error=str(exc))
         ) from exc
 
     if response.status_code >= 400:
@@ -328,8 +338,8 @@ def _orchestrator_stream_response(
         detail = response_body_snippet or _("empty error response")
         response.close()
         session.close()
-        raise MeridianOrchestratorRequestError(
-            _("Meridian orchestrator returned {status}: {detail}").format(
+        raise FoundryOrchestratorRequestError(
+            _("Foundry orchestrator returned {status}: {detail}").format(
                 status=response.status_code,
                 detail=detail,
             )
@@ -353,7 +363,7 @@ def _orchestrator_stream_response(
 
 
 @typed_endpoint
-def meridian_create_task(
+def foundry_create_task(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -377,18 +387,18 @@ def meridian_create_task(
     normalized_topic = topic.strip()
     normalized_instruction = instruction.strip()
     if not normalized_topic:
-        raise MeridianOrchestratorRequestError(_("topic is required"))
+        raise FoundryOrchestratorRequestError(_("topic is required"))
     if not normalized_instruction:
-        raise MeridianOrchestratorRequestError(_("instruction is required"))
+        raise FoundryOrchestratorRequestError(_("instruction is required"))
 
     effective_repo_id = str(repo_id or "").strip() or _default_repo_id()
     if not effective_repo_id:
-        raise MeridianOrchestratorRequestError(
-            _("repo_id is required; set MERIDIAN_DEFAULT_REPO_ID or provide repo_id")
+        raise FoundryOrchestratorRequestError(
+            _("repo_id is required; set FOUNDRY_DEFAULT_REPO_ID or provide repo_id")
         )
     effective_repo_url = _resolve_repo_url(effective_repo_id, repo_url)
     if not effective_repo_url:
-        raise MeridianOrchestratorRequestError(_("unable to resolve repo_url"))
+        raise FoundryOrchestratorRequestError(_("unable to resolve repo_url"))
 
     provider_name = _normalize_provider_name(provider or "codex")
     scope_id = _topic_scope_id(int(stream_id), normalized_topic)
@@ -445,7 +455,7 @@ def meridian_create_task(
 
 
 @typed_endpoint
-def meridian_topic_sidebar(
+def foundry_topic_sidebar(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -467,7 +477,7 @@ def meridian_topic_sidebar(
 
 
 @typed_endpoint
-def meridian_topic_events(
+def foundry_topic_events(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -490,7 +500,7 @@ def meridian_topic_events(
 
 
 @typed_endpoint
-def meridian_topic_supervisor_session(
+def foundry_topic_supervisor_session(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -519,7 +529,7 @@ def meridian_topic_supervisor_session(
 
 
 @typed_endpoint
-def meridian_topic_supervisor_session_stream(
+def foundry_topic_supervisor_session_stream(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -543,7 +553,7 @@ def meridian_topic_supervisor_session_stream(
 
 
 @typed_endpoint
-def meridian_topic_supervisor_session_reset(
+def foundry_topic_supervisor_session_reset(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -575,7 +585,7 @@ def meridian_topic_supervisor_session_reset(
 
 
 @typed_endpoint
-def meridian_topic_supervisor_message(
+def foundry_topic_supervisor_message(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -592,7 +602,7 @@ def meridian_topic_supervisor_message(
     encoded_scope = quote(scoped, safe="")
     normalized_message = message.strip()
     if not normalized_message:
-        raise MeridianOrchestratorRequestError(_("message is required"))
+        raise FoundryOrchestratorRequestError(_("message is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_stream_id: int | None = None
@@ -644,7 +654,7 @@ def meridian_topic_supervisor_message(
             )
             payload["topic_transcript"] = transcript
     except Exception as exc:
-        logging.warning("meridian supervisor message transcript fetch failed: %s", exc)
+        logging.warning("foundry supervisor message transcript fetch failed: %s", exc)
 
     response = _orchestrator_request(
         "POST",
@@ -665,7 +675,7 @@ def meridian_topic_supervisor_message(
 
 
 @typed_endpoint
-def meridian_topic_plan_revisions(
+def foundry_topic_plan_revisions(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -691,7 +701,7 @@ def meridian_topic_plan_revisions(
 
 
 @typed_endpoint
-def meridian_topic_plan_current(
+def foundry_topic_plan_current(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -712,7 +722,7 @@ def meridian_topic_plan_current(
 
 
 @typed_endpoint
-def meridian_topic_plan_create(
+def foundry_topic_plan_create(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -762,7 +772,7 @@ def meridian_topic_plan_create(
 
 
 @typed_endpoint
-def meridian_topic_plan_synthesize(
+def foundry_topic_plan_synthesize(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -802,7 +812,7 @@ def meridian_topic_plan_synthesize(
             merged_source["topic_transcript"] = transcript
             merged_source["topic_transcript_count"] = len(transcript)
     except Exception as exc:
-        logging.warning("meridian supervisor transcript fetch failed: %s", exc)
+        logging.warning("foundry supervisor transcript fetch failed: %s", exc)
     payload = {
         "author_id": actor_email,
         "summary": summary.strip(),
@@ -831,7 +841,7 @@ def meridian_topic_plan_synthesize(
 
 
 @typed_endpoint
-def meridian_topic_directive_dispatch(
+def foundry_topic_directive_dispatch(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -885,7 +895,7 @@ def meridian_topic_directive_dispatch(
 
 
 @typed_endpoint_without_parameters
-def meridian_provider_catalog(
+def foundry_provider_catalog(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
@@ -903,7 +913,7 @@ def meridian_provider_catalog(
 
 
 @typed_endpoint_without_parameters
-def meridian_provider_auth_list(
+def foundry_provider_auth_list(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
@@ -921,7 +931,7 @@ def meridian_provider_auth_list(
 
 
 @typed_endpoint
-def meridian_provider_auth_connect(
+def foundry_provider_auth_connect(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -937,7 +947,7 @@ def meridian_provider_auth_connect(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_provider = _normalize_provider_name(provider)
     if not normalized_provider:
-        raise MeridianOrchestratorRequestError(_("provider is required"))
+        raise FoundryOrchestratorRequestError(_("provider is required"))
 
     payload = {
         "auth_mode": (auth_mode or "api_key").strip().lower() or "api_key",
@@ -970,7 +980,7 @@ def meridian_provider_auth_connect(
 
 
 @typed_endpoint
-def meridian_provider_auth_disconnect(
+def foundry_provider_auth_disconnect(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -979,7 +989,7 @@ def meridian_provider_auth_disconnect(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_provider = _normalize_provider_name(provider)
     if not normalized_provider:
-        raise MeridianOrchestratorRequestError(_("provider is required"))
+        raise FoundryOrchestratorRequestError(_("provider is required"))
 
     payload = {
         "actor_user_id": actor_email,
@@ -1004,7 +1014,7 @@ def meridian_provider_auth_disconnect(
 
 
 @typed_endpoint
-def meridian_provider_oauth_start(
+def foundry_provider_oauth_start(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1014,7 +1024,7 @@ def meridian_provider_oauth_start(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_provider = _normalize_provider_name(provider)
     if not normalized_provider:
-        raise MeridianOrchestratorRequestError(_("provider is required"))
+        raise FoundryOrchestratorRequestError(_("provider is required"))
 
     payload = {
         "redirect_uri": (redirect_uri or "").strip() or None,
@@ -1043,7 +1053,7 @@ def meridian_provider_oauth_start(
 
 
 @typed_endpoint
-def meridian_provider_oauth_callback(
+def foundry_provider_oauth_callback(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1055,7 +1065,7 @@ def meridian_provider_oauth_callback(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_state = state.strip()
     if not normalized_state:
-        raise MeridianOrchestratorRequestError(_("state is required"))
+        raise FoundryOrchestratorRequestError(_("state is required"))
 
     payload = {
         "state": normalized_state,
@@ -1070,7 +1080,7 @@ def meridian_provider_oauth_callback(
     detail = "OAuth sign-in completed. You can close this window and continue in Zulip."
     try:
         _orchestrator_request("POST", "/api/providers/oauth/callback", payload=payload)
-    except MeridianOrchestratorRequestError as exc:
+    except FoundryOrchestratorRequestError as exc:
         status = "error"
         detail = str(exc)
 
@@ -1091,7 +1101,7 @@ def meridian_provider_oauth_callback(
 </head>
 <body>
   <div class="card">
-    <h2 class="{status}">Meridian OAuth: {status.upper()}</h2>
+    <h2 class="{status}">Foundry OAuth: {status.upper()}</h2>
     <p id="msg"></p>
     <p>Return to your task dialog and continue.</p>
   </div>
@@ -1100,7 +1110,7 @@ def meridian_provider_oauth_callback(
     const detail = {safe_detail};
     document.getElementById("msg").textContent = detail;
     if (status === "ok" && window.opener) {{
-      try {{ window.opener.postMessage({{source: "meridian_oauth", status, detail}}, "*"); }} catch (e) {{}}
+      try {{ window.opener.postMessage({{source: "foundry_oauth", status, detail}}, "*"); }} catch (e) {{}}
       setTimeout(() => window.close(), 700);
     }}
   </script>
@@ -1110,7 +1120,7 @@ def meridian_provider_oauth_callback(
 
 
 @typed_endpoint_without_parameters
-def meridian_integration_catalog(
+def foundry_integration_catalog(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
@@ -1127,7 +1137,7 @@ def meridian_integration_catalog(
 
 
 @typed_endpoint_without_parameters
-def meridian_integration_list(
+def foundry_integration_list(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
@@ -1147,7 +1157,7 @@ def meridian_integration_list(
 
 
 @typed_endpoint
-def meridian_integration_connect(
+def foundry_integration_connect(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1163,7 +1173,7 @@ def meridian_integration_connect(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_integration = _normalize_integration_name(integration)
     if not normalized_integration:
-        raise MeridianOrchestratorRequestError(_("integration is required"))
+        raise FoundryOrchestratorRequestError(_("integration is required"))
 
     payload = {
         "auth_mode": (auth_mode or "api_key").strip().lower() or "api_key",
@@ -1196,7 +1206,7 @@ def meridian_integration_connect(
 
 
 @typed_endpoint
-def meridian_integration_disconnect(
+def foundry_integration_disconnect(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1205,7 +1215,7 @@ def meridian_integration_disconnect(
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     normalized_integration = _normalize_integration_name(integration)
     if not normalized_integration:
-        raise MeridianOrchestratorRequestError(_("integration is required"))
+        raise FoundryOrchestratorRequestError(_("integration is required"))
 
     payload = {
         "actor_user_id": actor_email,
@@ -1230,7 +1240,7 @@ def meridian_integration_disconnect(
 
 
 @typed_endpoint
-def meridian_integration_policy_update(
+def foundry_integration_policy_update(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1262,7 +1272,7 @@ def meridian_integration_policy_update(
 
 
 @typed_endpoint
-def meridian_task_status(
+def foundry_task_status(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1279,7 +1289,7 @@ def meridian_task_status(
 
 
 @typed_endpoint
-def meridian_task_events(
+def foundry_task_events(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1302,7 +1312,7 @@ def meridian_task_events(
 
 
 @typed_endpoint
-def meridian_task_events_stream(
+def foundry_task_events_stream(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1326,7 +1336,7 @@ def meridian_task_events_stream(
 
 
 @typed_endpoint
-def meridian_task_action(
+def foundry_task_action(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1339,7 +1349,7 @@ def meridian_task_action(
     normalized_task_id = task_id.strip()
     normalized_action = action.strip().lower()
     if not normalized_action:
-        raise MeridianOrchestratorRequestError(_("action is required"))
+        raise FoundryOrchestratorRequestError(_("action is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     payload: dict[str, Any] = {
@@ -1373,7 +1383,7 @@ def meridian_task_action(
 
 
 @typed_endpoint
-def meridian_task_needs_clarification(
+def foundry_task_needs_clarification(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1384,7 +1394,7 @@ def meridian_task_needs_clarification(
     normalized_task_id = task_id.strip()
     normalized_reason = reason.strip()
     if not normalized_reason:
-        raise MeridianOrchestratorRequestError(_("reason is required"))
+        raise FoundryOrchestratorRequestError(_("reason is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     payload: dict[str, Any] = {
@@ -1411,7 +1421,7 @@ def meridian_task_needs_clarification(
 
 
 @typed_endpoint
-def meridian_task_resolve_clarification(
+def foundry_task_resolve_clarification(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1421,7 +1431,7 @@ def meridian_task_resolve_clarification(
     normalized_task_id = task_id.strip()
     normalized_guidance = guidance.strip()
     if not normalized_guidance:
-        raise MeridianOrchestratorRequestError(_("guidance is required"))
+        raise FoundryOrchestratorRequestError(_("guidance is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     payload: dict[str, Any] = {
@@ -1447,7 +1457,7 @@ def meridian_task_resolve_clarification(
 
 
 @typed_endpoint
-def meridian_task_reply(
+def foundry_task_reply(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1457,7 +1467,7 @@ def meridian_task_reply(
     normalized_task_id = task_id.strip()
     normalized_message = message.strip()
     if not normalized_message:
-        raise MeridianOrchestratorRequestError(_("message is required"))
+        raise FoundryOrchestratorRequestError(_("message is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     payload: dict[str, Any] = {
@@ -1483,7 +1493,7 @@ def meridian_task_reply(
 
 
 @typed_endpoint_without_parameters
-def meridian_supervisor_context(
+def foundry_supervisor_context(
     request: HttpRequest,
     user_profile: UserProfile,
 ) -> HttpResponse:
@@ -1501,7 +1511,7 @@ def meridian_supervisor_context(
 
 
 @typed_endpoint
-def meridian_supervisor_memory_append(
+def foundry_supervisor_memory_append(
     request: HttpRequest,
     user_profile: UserProfile,
     *,
@@ -1512,9 +1522,9 @@ def meridian_supervisor_memory_append(
     normalized_title = title.strip()
     normalized_detail = detail.strip()
     if not normalized_title:
-        raise MeridianOrchestratorRequestError(_("title is required"))
+        raise FoundryOrchestratorRequestError(_("title is required"))
     if not normalized_detail:
-        raise MeridianOrchestratorRequestError(_("detail is required"))
+        raise FoundryOrchestratorRequestError(_("detail is required"))
 
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
     payload: dict[str, Any] = {

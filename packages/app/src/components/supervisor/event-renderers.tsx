@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createSignal } from "solid-js"
-import type { SupervisorEvent, JsonValue } from "@zulip/desktop/bindings"
+import type { SupervisorEvent, JsonValue } from "@foundry/desktop/bindings"
 
 // ── Main event dispatcher ──
 

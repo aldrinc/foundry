@@ -1,20 +1,12 @@
 # Foundry Core
 
-This directory is the monorepo home for the renamed Zulip-derived core application server.
+This directory is the monorepo home for the imported core collaboration server.
 
 ## Why this exists
 
-The `foundry` monorepo now contains a sanitized import of the current customized Zulip-derived core application server under [`app/`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/services/foundry-core/app).
+The `foundry` monorepo contains an imported snapshot of the current standardized core server under `app/`.
 
-The imported snapshot was sourced from the current workspace state:
-
-- `/Users/aldrinclement/Documents/programming/ideas-space/.tmp-zulip` appears to contain the customized Zulip-derived server with Meridian task and supervisor integrations.
-- `/Users/aldrinclement/Documents/programming/ideas-space/.tmp-zulip-standardize` appears to contain related standardization work.
-
-The system is still logically split across:
-
-- `foundry/` for the product-facing monorepo and the imported core server snapshot
-- `.tmp-zulip`-family directories for upstream migration and standardization work
+The imported code is still being standardized and rebranded for public release. It remains a separate boundary from the product-facing control plane in `services/foundry-server`.
 
 ## Import notes
 
@@ -32,7 +24,7 @@ Before the Foundry product architecture is complete, the team still needs to:
 
 1. finish renaming and standardizing the imported code as Foundry,
 2. define its boundary relative to `services/foundry-server`,
-3. remove or replace legacy Meridian-specific naming and assumptions,
+3. remove or replace remaining legacy naming and assumptions,
 4. wire it into the public GitHub-hosted build and release path.
 
 ## Intended responsibility

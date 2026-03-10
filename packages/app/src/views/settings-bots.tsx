@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from "solid-js"
 import { useOrg } from "../context/org"
-import { commands } from "@zulip/desktop/bindings"
-import type { Bot } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { Bot } from "@foundry/desktop/bindings"
 
 export function SettingsBots() {
   const org = useOrg()

@@ -1,7 +1,7 @@
 // @refresh reload
 
 import { render } from "solid-js/web"
-import { App, type AsyncStorageWithFlush, type NotifyOptions, type Platform, PlatformProvider } from "@zulip/app"
+import { App, type AsyncStorageWithFlush, type NotifyOptions, type Platform, PlatformProvider } from "@foundry/app"
 import { invoke } from "@tauri-apps/api/core"
 import { resolveResource } from "@tauri-apps/api/path"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
@@ -10,7 +10,7 @@ import { isPermissionGranted, requestPermission, sendNotification } from "@tauri
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { Store } from "@tauri-apps/plugin-store"
-import { publishDeepLinks } from "@zulip/app/zulip-auth"
+import { publishDeepLinks } from "@foundry/app/zulip-auth"
 import { createMenu } from "./menu"
 import "./styles.css"
 

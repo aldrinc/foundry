@@ -53,13 +53,13 @@ class _GitHubApiHandler(BaseHTTPRequestHandler):
                     {
                         "id": 987654,
                         "repository_selection": "selected",
-                        "account": {"login": "aldrinc", "type": "User"},
+                        "account": {"login": "example-org", "type": "Organization"},
                     }
                 ]
             )
             return
 
-        if self.path == "/repos/aldrinc/foundry/installation":
+        if self.path == "/repos/example-org/foundry/installation":
             self._write_json(
                 {
                     "id": 987654,
@@ -70,7 +70,7 @@ class _GitHubApiHandler(BaseHTTPRequestHandler):
                         "workflows": "write",
                         "metadata": "read",
                     },
-                    "account": {"login": "aldrinc", "type": "Organization"},
+                    "account": {"login": "example-org", "type": "Organization"},
                 }
             )
             return
@@ -90,7 +90,7 @@ class _GitHubApiHandler(BaseHTTPRequestHandler):
                         "metadata": "read",
                     },
                     "repositories": [
-                        {"full_name": "aldrinc/foundry", "private": True},
+                        {"full_name": "example-org/foundry", "private": True},
                     ],
                 }
             )
@@ -122,10 +122,24 @@ class GitHubAppTests(unittest.TestCase):
         self.addCleanup(lambda: Path(handle.name).unlink(missing_ok=True))
         return Path(handle.name)
 
+    def _login_admin(self, client: TestClient) -> None:
+        response = client.post(
+            "/login",
+            data={
+                "email": "platform-admin@foundry.test",
+                "password": "bootstrap-password",
+            },
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 303)
+
     def test_app_jwt_contains_expected_claims(self) -> None:
         private_key_path = self._write_private_key()
         config = load_config(
             {
+                "FOUNDRY_AUTH_PROVIDER": "local_password",
+                "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "platform-admin@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "bootstrap-password",
                 "FOUNDRY_GITHUB_APP_ID": "3048941",
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
@@ -143,6 +157,9 @@ class GitHubAppTests(unittest.TestCase):
         private_key_path = self._write_private_key()
         config = load_config(
             {
+                "FOUNDRY_AUTH_PROVIDER": "local_password",
+                "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "platform-admin@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "bootstrap-password",
                 "FOUNDRY_GITHUB_APP_ID": "3048941",
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
@@ -174,6 +191,9 @@ class GitHubAppTests(unittest.TestCase):
 
         config = load_config(
             {
+                "FOUNDRY_AUTH_PROVIDER": "local_password",
+                "FOUNDRY_BOOTSTRAP_ADMIN_EMAIL": "platform-admin@foundry.test",
+                "FOUNDRY_BOOTSTRAP_ADMIN_PASSWORD": "bootstrap-password",
                 "FOUNDRY_GITHUB_APP_ID": "3048941",
                 "FOUNDRY_GITHUB_CLIENT_ID": "Iv23test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": str(private_key_path),
@@ -184,19 +204,20 @@ class GitHubAppTests(unittest.TestCase):
 
         app = create_app(config)
         with TestClient(app) as client:
+            self._login_admin(client)
             app_response = client.get("/api/v1/github/app")
             installations_response = client.get("/api/v1/github/installations")
-            binding_response = client.get("/api/v1/github/repositories/aldrinc/foundry/binding")
+            binding_response = client.get("/api/v1/github/repositories/example-org/foundry/binding")
 
         self.assertEqual(app_response.status_code, 200)
         self.assertEqual(app_response.json()["slug"], "foundry")
         self.assertEqual(installations_response.status_code, 200)
-        self.assertEqual(installations_response.json()[0]["account_login"], "aldrinc")
+        self.assertEqual(installations_response.json()[0]["account_login"], "example-org")
         self.assertEqual(binding_response.status_code, 200)
         payload = binding_response.json()
-        self.assertEqual(payload["repository"], "aldrinc/foundry")
+        self.assertEqual(payload["repository"], "example-org/foundry")
         self.assertEqual(payload["installation"]["id"], 987654)
-        self.assertEqual(payload["installation"]["account_login"], "aldrinc")
+        self.assertEqual(payload["installation"]["account_login"], "example-org")
         self.assertEqual(payload["installation"]["permissions"]["contents"], "write")
 
     def test_clone_token_endpoint_requires_bootstrap_secret(self) -> None:
@@ -219,17 +240,20 @@ class GitHubAppTests(unittest.TestCase):
         )
 
         app = create_app(config)
+        expected_token = hashlib.sha256(
+            "bootstrap-secret:example-org/foundry".encode("utf-8")
+        ).hexdigest()
         with TestClient(app) as client:
-            unauthorized = client.post("/api/v1/github/repositories/aldrinc/foundry/clone-token")
+            unauthorized = client.post("/api/v1/github/repositories/example-org/foundry/clone-token")
             authorized = client.post(
-                "/api/v1/github/repositories/aldrinc/foundry/clone-token",
-                headers={"X-Foundry-Workspace-Bootstrap-Secret": "bootstrap-secret"},
+                "/api/v1/github/repositories/example-org/foundry/clone-token",
+                headers={"X-Foundry-Workspace-Bootstrap-Token": expected_token},
             )
 
         self.assertEqual(unauthorized.status_code, 401)
         self.assertEqual(authorized.status_code, 200)
         payload = authorized.json()
-        self.assertEqual(payload["repository"], "aldrinc/foundry")
+        self.assertEqual(payload["repository"], "example-org/foundry")
         self.assertEqual(payload["installation_id"], 987654)
         self.assertEqual(payload["permissions"]["contents"], "write")
         self.assertEqual(payload["token"], "ghs_fake")

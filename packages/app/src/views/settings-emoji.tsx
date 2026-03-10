@@ -1,8 +1,8 @@
 import { createSignal, createMemo, onMount, For, Show } from "solid-js"
 import { useOrg } from "../context/org"
 import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
-import type { RealmEmoji } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { RealmEmoji } from "@foundry/desktop/bindings"
 
 export function SettingsEmoji() {
   const org = useOrg()

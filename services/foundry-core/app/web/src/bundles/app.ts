@@ -57,7 +57,7 @@ import "../../styles/typing_notifications.css";
 import "../../styles/dark_theme.css";
 import "../../styles/user_status.css";
 import "../../styles/widgets.css";
-import "../../styles/meridian_tasks.css";
+import "../../styles/foundry_tasks.css";
 import "../../styles/print.css";
 import "../../styles/inbox.css";
 import "../../styles/color_picker.css";

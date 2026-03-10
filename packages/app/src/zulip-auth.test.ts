@@ -28,7 +28,7 @@ function createStorage() {
 
 describe("normalizeServerUrl", () => {
   test("drops a trailing slash from canonical realm URLs", () => {
-    expect(normalizeServerUrl("https://zulip.meridian.cv/")).toBe("https://zulip.meridian.cv")
+    expect(normalizeServerUrl("https://chat.example.invalid/")).toBe("https://chat.example.invalid")
   })
 
   test("keeps non-URL input stable enough for validation errors", () => {
@@ -39,13 +39,13 @@ describe("normalizeServerUrl", () => {
 describe("external auth URL building", () => {
   test("appends the OTP to the provider login path", () => {
     const url = buildExternalAuthUrl(
-      "https://zulip.meridian.cv",
+      "https://chat.example.invalid",
       { login_url: "/accounts/login/social/oidc/keycloak" },
       "abcd",
     )
 
     expect(url).toBe(
-      "https://zulip.meridian.cv/accounts/login/social/oidc/keycloak?mobile_flow_otp=abcd",
+      "https://chat.example.invalid/accounts/login/social/oidc/keycloak?mobile_flow_otp=abcd",
     )
   })
 })
@@ -56,7 +56,7 @@ describe("SSO callback handling", () => {
     const otp = "1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd"
     const apiKey = Array.from({ length: 32 }, () => "a").join("")
 
-    savePendingSso(storage, "https://zulip.meridian.cv/", otp)
+    savePendingSso(storage, "https://chat.example.invalid/", otp)
 
     const hexApiKey = apiKey
       .split("")
@@ -70,14 +70,14 @@ describe("SSO callback handling", () => {
     expect(decryptOtpEncryptedApiKey(encrypted, otp)).toBe(apiKey)
 
     const completed = completePendingSso(storage, {
-      realm: "https://zulip.meridian.cv",
+      realm: "https://chat.example.invalid",
       email: "alice@example.com",
       otpEncryptedApiKey: encrypted,
       userId: 42,
     })
 
     expect(completed).toEqual({
-      serverUrl: "https://zulip.meridian.cv",
+      serverUrl: "https://chat.example.invalid",
       email: "alice@example.com",
       apiKey,
     })
@@ -87,10 +87,10 @@ describe("SSO callback handling", () => {
   test("parses the Zulip deep link payload", () => {
     expect(
       parseSsoCallbackUrl(
-        "zulip://login?realm=https%3A%2F%2Fzulip.meridian.cv&email=alice%40example.com&otp_encrypted_api_key=abcd&user_id=7",
+        "zulip://login?realm=https%3A%2F%2Fchat.example.invalid&email=alice%40example.com&otp_encrypted_api_key=abcd&user_id=7",
       ),
     ).toEqual({
-      realm: "https://zulip.meridian.cv",
+      realm: "https://chat.example.invalid",
       email: "alice@example.com",
       otpEncryptedApiKey: "abcd",
       userId: 7,

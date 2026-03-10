@@ -1,6 +1,6 @@
 import { For, Show, createSignal } from "solid-js"
 import { useSupervisor } from "../../context/supervisor"
-import type { SupervisorTask } from "@zulip/desktop/bindings"
+import type { SupervisorTask } from "@foundry/desktop/bindings"
 
 const STATUS_COLORS: Record<string, string> = {
   running: "bg-[var(--status-success)]",

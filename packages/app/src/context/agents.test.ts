@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
   getProviderConnectionStatus,

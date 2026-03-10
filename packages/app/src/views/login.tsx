@@ -1,11 +1,11 @@
 import { createSignal, For, Show, onCleanup, onMount } from "solid-js"
 import { usePlatform } from "../context/platform"
-import { commands } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
 import type {
   ExternalAuthenticationMethod,
   LoginResult,
   ServerSettings,
-} from "@zulip/desktop/bindings"
+} from "@foundry/desktop/bindings"
 import {
   completePendingSso,
   consumePendingDeepLinks,

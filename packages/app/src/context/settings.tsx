@@ -1,7 +1,7 @@
 import { createContext, useContext, createSignal, onMount, type JSX } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
-import { commands } from "@zulip/desktop/bindings"
-import type { DesktopSettings, DesktopCapabilities } from "@zulip/desktop/bindings"
+import { commands } from "@foundry/desktop/bindings"
+import type { DesktopSettings, DesktopCapabilities } from "@foundry/desktop/bindings"
 import {
   buildServerSettingsPatch,
   mergeServerSettings,

@@ -23,7 +23,7 @@ describe("sanitizeEventId", () => {
         expect(sanitizeEventId("chat.zulip.org")).toBe("chat_zulip_org");
     });
     test("handles IP-based org_ids (sslip.io style)", () => {
-        expect(sanitizeEventId("zulip-dev-live.5.161.60.86.sslip.io")).toBe("zulip-dev-live_5_161_60_86_sslip_io");
+        expect(sanitizeEventId("chat-dev.203.0.113.10.sslip.io")).toBe("chat-dev_203_0_113_10_sslip_io");
     });
     test("preserves already-valid characters", () => {
         expect(sanitizeEventId("my-org_123")).toBe("my-org_123");
@@ -57,7 +57,7 @@ describe("sanitizeEventId", () => {
 describe("supervisor event name format", () => {
     const orgIds = [
         "chat.zulip.org",
-        "zulip-dev-live.5.161.60.86.sslip.io",
+        "chat-dev.203.0.113.10.sslip.io",
         "localhost",
         "my-company.zulipchat.com",
     ];
@@ -88,7 +88,7 @@ describe("unsanitized org_ids with dots produce invalid Tauri event names", () =
     test("demonstrates the bug that was fixed", () => {
         // This test documents the exact failure mode:
         // When org_id contains dots, the event name is invalid for Tauri
-        const orgId = "zulip-dev-live.5.161.60.86.sslip.io";
+        const orgId = "chat-dev.203.0.113.10.sslip.io";
         const unsanitizedEventName = `supervisor:${orgId}:connected`;
         // The unsanitized name is INVALID (contains dots)
         expect(isValidTauriEventName(unsanitizedEventName)).toBe(false);

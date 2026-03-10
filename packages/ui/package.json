@@ -1,12 +1,12 @@
 {
-  "name": "@zulip/ui",
+  "name": "@foundry/ui",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
-    "dev": "tsc -p tsconfig.json --watch",
-    "build": "tsc -p tsconfig.json",
+    "dev": "tsc --noEmit -p tsconfig.json --watch",
+    "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import type { FoundryProviderAuth } from "@zulip/desktop/bindings"
+import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
 import {
   createAgentFromTemplate,
   DELEGATE_TEMPLATES,
@@ -118,9 +118,9 @@ export function SettingsAgents() {
           <div>
             <h3 class="text-sm font-semibold text-[var(--text-primary)]">Moltis Runtime</h3>
             <div class="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-              Provider account state comes from Meridian. Connected accounts are usable immediately, while delegate
-              definitions remain stored locally and injected into Supervisor requests until native Meridian agent sync
-              endpoints land.
+              Provider account state comes from the Foundry server. Connected accounts are usable immediately, while
+              delegate definitions remain stored locally and injected into Supervisor requests until server-backed agent
+              sync endpoints land.
             </div>
           </div>
           <button
@@ -405,9 +405,9 @@ export function SettingsAgents() {
             </Show>
 
             <div class="flex items-center justify-between gap-3">
-              <div class="text-[11px] text-[var(--text-tertiary)]">
-                Saved delegates are applied to outgoing Supervisor requests immediately. Native Meridian agent sync is
-                the remaining gap.
+            <div class="text-[11px] text-[var(--text-tertiary)]">
+                Saved delegates are applied to outgoing Supervisor requests immediately. Server-backed agent sync is the
+                remaining gap.
               </div>
               <button
                 class="px-3 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity"

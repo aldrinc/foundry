@@ -10,7 +10,7 @@ export * as teamchat_message_adapter from "./adapters/messages.ts";
 export * as teamchat_sidebar_adapter from "./adapters/sidebar.ts";
 export * as teamchat_composer_adapter from "./adapters/composer.ts";
 export * as teamchat_events_adapter from "./adapters/events.ts";
-export * as teamchat_meridian_adapter from "./adapters/meridian.ts";
+export * as teamchat_foundry_adapter from "./adapters/foundry.ts";
 export * as teamchat_navigation_actions from "./actions/navigation.ts";
 export * as teamchat_message_actions from "./actions/messages.ts";
 export * as teamchat_composer_actions from "./actions/composer.ts";
