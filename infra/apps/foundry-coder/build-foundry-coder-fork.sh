@@ -13,15 +13,18 @@ UPSTREAM_REPOSITORY="${CODER_UPSTREAM_REPOSITORY:-https://github.com/coder/coder
 GO_VERSION="${GO_VERSION:-1.25.7}"
 NODE_VERSION="${NODE_VERSION:-22.14.0}"
 PATCH_FILE="${SCRIPT_DIR}/coder-agpl-org-create.patch"
+PROVISIONERS_PATCH_FILE="${SCRIPT_DIR}/coder-agpl-provisioners.patch"
 BUILD_ROOT="${FOUNDRY_CODER_BUILD_ROOT:-/opt/foundry/build/foundry-coder}"
 GO_ROOT="/opt/foundry/tools/go-${GO_VERSION}"
 NODE_ROOT="/opt/foundry/tools/node-v${NODE_VERSION}"
 SOURCE_DIR="${BUILD_ROOT}/source"
 
-if [[ ! -f "${PATCH_FILE}" ]]; then
-  echo "missing patch file: ${PATCH_FILE}" >&2
-  exit 1
-fi
+for patch_file in "${PATCH_FILE}" "${PROVISIONERS_PATCH_FILE}"; do
+  if [[ ! -f "${patch_file}" ]]; then
+    echo "missing patch file: ${patch_file}" >&2
+    exit 1
+  fi
+done
 
 mkdir -p "${BUILD_ROOT}" "$(dirname "${OUTPUT_BINARY}")" /opt/foundry/tools
 
@@ -73,6 +76,7 @@ git -C "${SOURCE_DIR}" checkout --detach "${UPSTREAM_REF}"
 git -C "${SOURCE_DIR}" reset --hard "${UPSTREAM_REF}"
 git -C "${SOURCE_DIR}" clean -fdx
 git -C "${SOURCE_DIR}" apply "${PATCH_FILE}"
+git -C "${SOURCE_DIR}" apply "${PROVISIONERS_PATCH_FILE}"
 
 corepack enable
 

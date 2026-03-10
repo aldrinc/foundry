@@ -100,6 +100,73 @@ class CoderClient:
             "is_default": bool(payload.get("is_default", False)),
         }
 
+    def get_template(
+        self, organization_name: str, template_name: str
+    ) -> dict[str, object] | None:
+        try:
+            payload = self._request_dict(
+                "GET",
+                f"/api/v2/organizations/{organization_name}/templates/{template_name}",
+            )
+        except CoderRequestError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+        return {
+            "id": str(payload.get("id", "")),
+            "name": str(payload.get("name", "")),
+            "display_name": str(payload.get("display_name", "")),
+            "organization_id": str(payload.get("organization_id", "")),
+            "organization_name": str(payload.get("organization_name", organization_name)),
+        }
+
+    def create_provisioner_key(
+        self,
+        organization_id: str,
+        *,
+        name: str,
+        tags: dict[str, str],
+    ) -> dict[str, object]:
+        payload = self._request_dict(
+            "POST",
+            f"/api/v2/organizations/{organization_id}/provisionerkeys",
+            json_payload={
+                "name": name,
+                "tags": tags,
+            },
+        )
+        return {
+            "key": str(payload.get("key", "")),
+        }
+
+    def list_provisioner_key_daemons(
+        self, organization_id: str
+    ) -> list[dict[str, object]]:
+        payload = self._request_list(
+            "GET",
+            f"/api/v2/organizations/{organization_id}/provisionerkeys/daemons",
+        )
+        return [
+            {
+                "key_name": str(item.get("key", {}).get("name", "")),
+                "key_tags": {
+                    str(key): str(value)
+                    for key, value in item.get("key", {}).get("tags", {}).items()
+                }
+                if isinstance(item.get("key", {}).get("tags", {}), dict)
+                else {},
+                "daemons": [
+                    {
+                        "id": str(daemon.get("id", "")),
+                        "name": str(daemon.get("name", "")),
+                    }
+                    for daemon in item.get("daemons", [])
+                    if isinstance(daemon, dict)
+                ],
+            }
+            for item in payload
+        ]
+
     def list_workspaces(self) -> list[dict[str, object]]:
         payload = self._request_dict("GET", "/api/v2/workspaces?q=")
         workspaces = payload.get("workspaces", [])

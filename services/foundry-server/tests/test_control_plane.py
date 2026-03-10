@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import os
+import shutil
 import socketserver
 import sys
 import tempfile
@@ -150,6 +152,15 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
     ]
     create_status_code = 403
     create_error_message = "Multiple Organizations is a Premium feature. Contact sales!"
+    published_templates_state_path = ""
+    provisioners_state_path = ""
+
+    @classmethod
+    def _organization_by_id(cls, organization_id: str) -> dict[str, object] | None:
+        return next(
+            (item for item in cls.organizations if str(item["id"]) == organization_id),
+            None,
+        )
 
     def _write_json(self, payload: dict[str, object] | list[dict[str, object]]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
@@ -219,6 +230,77 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
             self._write_json(self.organizations)
             return
 
+        match = re.fullmatch(
+            r"/api/v2/organizations/([^/]+)/provisionerkeys/daemons",
+            self.path,
+        )
+        if match is not None:
+            organization_id = match.group(1)
+            organization = self._organization_by_id(organization_id)
+            if organization is None:
+                self.send_error(404)
+                return
+            started = set()
+            if self.provisioners_state_path:
+                try:
+                    started = set(
+                        json.loads(Path(self.provisioners_state_path).read_text())
+                    )
+                except FileNotFoundError:
+                    started = set()
+            organization_name = str(organization["name"])
+            daemons: list[dict[str, object]] = []
+            if organization_name in started:
+                daemons.append(
+                    {
+                        "id": f"daemon-{organization_name}",
+                        "name": f"foundry-provisionerd-{organization_name}",
+                    }
+                )
+            self._write_json(
+                [
+                    {
+                        "key": {
+                            "name": f"foundry-{organization_name}",
+                            "tags": {
+                                "scope": "organization",
+                                "owner": "",
+                            },
+                        },
+                        "daemons": daemons,
+                    }
+                ]
+            )
+            return
+
+        match = re.fullmatch(
+            r"/api/v2/organizations/([^/]+)/templates/([^/]+)",
+            self.path,
+        )
+        if match is not None:
+            organization_name, template_name = match.groups()
+            published = set()
+            if self.published_templates_state_path:
+                try:
+                    published = set(
+                        json.loads(Path(self.published_templates_state_path).read_text())
+                    )
+                except FileNotFoundError:
+                    published = set()
+            if organization_name in published and template_name == "foundry-hetzner-workspace":
+                self._write_json(
+                    {
+                        "id": f"template-{organization_name}",
+                        "name": template_name,
+                        "display_name": "",
+                        "organization_id": f"org-{organization_name}",
+                        "organization_name": organization_name,
+                    }
+                )
+                return
+            self.send_error(404)
+            return
+
         self.send_error(404)
 
     def do_POST(self) -> None:  # noqa: N802
@@ -239,6 +321,23 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
             else:
                 encoded = json.dumps({"message": self.create_error_message}).encode("utf-8")
                 self.send_response(self.create_status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
+
+        match = re.fullmatch(
+            r"/api/v2/organizations/([^/]+)/provisionerkeys",
+            self.path,
+        )
+        if match is not None:
+            organization_id = match.group(1)
+            if self._organization_by_id(organization_id) is None:
+                self.send_error(404)
+                return
+            encoded = json.dumps({"key": f"pk-{organization_id}"}).encode("utf-8")
+            self.send_response(201)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
@@ -286,6 +385,134 @@ class ControlPlaneTests(unittest.TestCase):
         database_handle = tempfile.NamedTemporaryFile("wb", delete=False)
         database_handle.close()
         self.addCleanup(lambda: Path(database_handle.name).unlink(missing_ok=True))
+        template_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(template_dir, ignore_errors=True))
+        (template_dir / "main.tf").write_text('terraform { required_version = ">= 1.8.0" }\n')
+        published_templates_state = tempfile.NamedTemporaryFile("w", delete=False)
+        published_templates_state.write("[]")
+        published_templates_state.flush()
+        published_templates_state.close()
+        self.addCleanup(lambda: Path(published_templates_state.name).unlink(missing_ok=True))
+        provisioners_state = tempfile.NamedTemporaryFile("w", delete=False)
+        provisioners_state.write("[]")
+        provisioners_state.flush()
+        provisioners_state.close()
+        self.addCleanup(lambda: Path(provisioners_state.name).unlink(missing_ok=True))
+        fake_docker = Path(tempfile.mkdtemp()) / "docker"
+        fake_docker.write_text(
+            """#!/usr/bin/env python3
+from pathlib import Path
+import json
+import os
+import sys
+
+args = sys.argv[1:]
+if not args:
+    raise SystemExit(1)
+
+if args[0] == "inspect":
+    if "-f" in args:
+        target = args[-1]
+        state_path = Path(os.environ["FAKE_CODER_PROVISIONERS"])
+        provisioners = set(json.loads(state_path.read_text()))
+        if target == "foundry-coder":
+            print("true")
+            raise SystemExit(0)
+        if target in {f"foundry-provisionerd-{org}" for org in provisioners}:
+            print("true")
+            raise SystemExit(0)
+        raise SystemExit(1)
+    target = args[1]
+    if target == "foundry-coder":
+        payload = [
+            {
+                "Config": {"Image": "foundry-coder:dev"},
+                "NetworkSettings": {"Networks": {"foundry-coder_default": {}}},
+            }
+        ]
+        print(json.dumps(payload))
+        raise SystemExit(0)
+    state_path = Path(os.environ["FAKE_CODER_PROVISIONERS"])
+    provisioners = set(json.loads(state_path.read_text()))
+    if target in {f"foundry-provisionerd-{org}" for org in provisioners}:
+        print(json.dumps([{"State": {"Running": True}}]))
+        raise SystemExit(0)
+    raise SystemExit(1)
+
+if args[0] == "rm":
+    target = args[-1]
+    state_path = Path(os.environ["FAKE_CODER_PROVISIONERS"])
+    provisioners = set(json.loads(state_path.read_text()))
+    suffix = "foundry-provisionerd-"
+    if target.startswith(suffix):
+        provisioners.discard(target.removeprefix(suffix))
+        state_path.write_text(json.dumps(sorted(provisioners)))
+    raise SystemExit(0)
+
+if args[0] == "run":
+    state_path = Path(os.environ["FAKE_CODER_PROVISIONERS"])
+    provisioners = set(json.loads(state_path.read_text()))
+    org = ""
+    for index, token in enumerate(args):
+        if token in {"--org", "-O"} and index + 1 < len(args):
+            org = args[index + 1]
+            break
+    if not org:
+        for index, token in enumerate(args):
+            if token == "--name" and index + 1 < len(args):
+                name = args[index + 1]
+                suffix = "foundry-provisionerd-"
+                if name.startswith(suffix):
+                    org = name.removeprefix(suffix)
+                break
+    if org:
+        provisioners.add(org)
+        state_path.write_text(json.dumps(sorted(provisioners)))
+    print("fake-provisioner-container")
+    raise SystemExit(0)
+
+if args[0] == "cp":
+    raise SystemExit(0)
+
+if args[0] != "exec":
+    raise SystemExit(0)
+
+cursor = 1
+while cursor < len(args) and args[cursor].startswith("-"):
+    flag = args[cursor]
+    cursor += 1
+    if flag in {"-e", "-u"} and cursor < len(args):
+        cursor += 1
+
+if cursor >= len(args):
+    raise SystemExit(0)
+
+cursor += 1  # container name
+command = args[cursor:]
+if command[:3] == ["rm", "-rf", "/tmp/foundry-hetzner-workspace"]:
+    raise SystemExit(0)
+if command[:3] == ["mkdir", "-p", "/tmp/codercli"]:
+    raise SystemExit(0)
+if command[:2] == ["/opt/coder", "login"]:
+    raise SystemExit(0)
+if command[:3] == ["/opt/coder", "templates", "push"]:
+    org = ""
+    for index, token in enumerate(command):
+        if token == "--org" and index + 1 < len(command):
+            org = command[index + 1]
+            break
+    state_path = Path(os.environ["FAKE_CODER_PUBLISHED_TEMPLATES"])
+    published = set(json.loads(state_path.read_text()))
+    published.add(org)
+    state_path.write_text(json.dumps(sorted(published)))
+    raise SystemExit(0)
+
+raise SystemExit(0)
+"""
+        )
+        fake_docker.chmod(0o755)
+        self.addCleanup(lambda: fake_docker.unlink(missing_ok=True))
+        self.addCleanup(lambda: shutil.rmtree(fake_docker.parent, ignore_errors=True))
         _ControlPlaneCoreApiHandler.tenant_members = {}
         _ControlPlaneCoderApiHandler.organizations = [
             {
@@ -300,6 +527,8 @@ class ControlPlaneTests(unittest.TestCase):
         _ControlPlaneCoderApiHandler.create_error_message = (
             "Multiple Organizations is a Premium feature. Contact sales!"
         )
+        _ControlPlaneCoderApiHandler.published_templates_state_path = published_templates_state.name
+        _ControlPlaneCoderApiHandler.provisioners_state_path = provisioners_state.name
 
         server = _ThreadingControlPlaneGitHubApiServer(
             ("127.0.0.1", 0),
@@ -345,9 +574,24 @@ class ControlPlaneTests(unittest.TestCase):
                 "FOUNDRY_GITHUB_API_URL": f"http://127.0.0.1:{server.server_address[1]}",
                 "FOUNDRY_CODER_URL": f"http://127.0.0.1:{coder_server.server_address[1]}",
                 "FOUNDRY_CODER_API_TOKEN": "coder-test-token",
+                "FOUNDRY_CODER_CONTAINER_NAME": "foundry-coder",
+                "FOUNDRY_CODER_TEMPLATE_NAME": "foundry-hetzner-workspace",
+                "FOUNDRY_CODER_TEMPLATE_SOURCE_DIR": str(template_dir),
+                "FOUNDRY_CODER_INTERNAL_URL": "http://127.0.0.1:7080",
+                "FOUNDRY_HCLOUD_TOKEN": "hcloud-test-token",
+                "FOUNDRY_WORKSPACE_PRIVATE_NETWORK_ID": "network-1",
+                "FOUNDRY_WORKSPACE_FIREWALL_IDS": "firewall-1",
+                "FOUNDRY_WORKSPACE_SSH_KEY_IDS": "ssh-key-1",
                 "FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET": "bootstrap-secret",
             }
         )
+        original_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{fake_docker.parent}:{original_path}"
+        os.environ["FAKE_CODER_PUBLISHED_TEMPLATES"] = published_templates_state.name
+        os.environ["FAKE_CODER_PROVISIONERS"] = provisioners_state.name
+        self.addCleanup(lambda: os.environ.__setitem__("PATH", original_path))
+        self.addCleanup(lambda: os.environ.pop("FAKE_CODER_PUBLISHED_TEMPLATES", None))
+        self.addCleanup(lambda: os.environ.pop("FAKE_CODER_PROVISIONERS", None))
         return TestClient(create_app(config))
 
     def test_create_organization_initializes_defaults(self) -> None:
@@ -421,7 +665,10 @@ class ControlPlaneTests(unittest.TestCase):
             self.assertEqual(payload["coder_binding"]["status"], "ready")
             self.assertEqual(payload["coder_binding"]["name"], "acme")
             self.assertEqual(payload["coder_binding"]["display_name"], "Acme")
-            self.assertEqual(payload["coder_binding"]["detail"], "Coder organization provisioned.")
+            self.assertEqual(
+                payload["coder_binding"]["detail"],
+                "Coder organization, provisioner, and template ready.",
+            )
 
     def test_runtime_settings_round_trip(self) -> None:
         with self._create_client() as client:

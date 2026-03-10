@@ -4,6 +4,7 @@ import json
 import hmac
 import sqlite3
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
@@ -15,6 +16,16 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from .coder_client import CoderClient, CoderConfigurationError, CoderRequestError
+from .coder_provisioner_manager import (
+    CoderProvisionerManager,
+    CoderProvisionerManagerConfigurationError,
+    CoderProvisionerManagerError,
+)
+from .coder_template_publisher import (
+    CoderTemplatePublisher,
+    CoderTemplatePublisherConfigurationError,
+    CoderTemplatePublisherError,
+)
 from .config import AppConfig, load_config
 from .core_client import (
     FoundryCoreClient,
@@ -108,6 +119,20 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             client = CoderClient.from_config(server_config)
             app.state.coder_client = client
         return client
+
+    def get_coder_template_publisher() -> CoderTemplatePublisher:
+        publisher = getattr(app.state, "coder_template_publisher", None)
+        if publisher is None:
+            publisher = CoderTemplatePublisher.from_config(server_config)
+            app.state.coder_template_publisher = publisher
+        return publisher
+
+    def get_coder_provisioner_manager() -> CoderProvisionerManager:
+        manager = getattr(app.state, "coder_provisioner_manager", None)
+        if manager is None:
+            manager = CoderProvisionerManager.from_config(server_config)
+            app.state.coder_provisioner_manager = manager
+        return manager
 
     def get_core_client() -> FoundryCoreClient:
         client = getattr(app.state, "core_client", None)
@@ -504,32 +529,137 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 coder_organization_id=str(existing["id"]),
                 name=str(existing["name"]),
                 display_name=str(existing["display_name"] or organization.display_name),
-                status=ProvisioningStatus.READY,
+                status=ProvisioningStatus.PENDING,
                 detail="Coder organization already exists.",
+            )
+        else:
+            try:
+                created = client.create_organization(organization.slug, organization.display_name)
+                binding = CoderOrganizationBinding(
+                    organization_id=organization.organization_id,
+                    coder_organization_id=str(created["id"]),
+                    name=str(created["name"]),
+                    display_name=str(created["display_name"] or organization.display_name),
+                    status=ProvisioningStatus.PENDING,
+                    detail="Coder organization provisioned.",
+                )
+            except CoderRequestError as exc:
+                status = ProvisioningStatus.BLOCKED if exc.status_code == 403 else ProvisioningStatus.ERROR
+                binding = CoderOrganizationBinding(
+                    organization_id=organization.organization_id,
+                    coder_organization_id="",
+                    name=organization.slug,
+                    display_name=organization.display_name,
+                    status=status,
+                    detail=exc.detail,
+                )
+                get_store().put_coder_organization_binding(binding)
+                return binding
+
+        try:
+            existing_daemons = client.list_provisioner_key_daemons(binding.coder_organization_id)
+        except CoderRequestError as exc:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.ERROR,
+                detail=f"Coder organization ready, but provisioner lookup failed. {exc.detail}",
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        if not any(item["daemons"] for item in existing_daemons):
+            try:
+                provisioner_manager = get_coder_provisioner_manager()
+            except CoderProvisionerManagerConfigurationError as exc:
+                binding = replace(
+                    binding,
+                    status=ProvisioningStatus.BLOCKED,
+                    detail=f"Coder organization ready, but provisioner startup is not configured. {exc}",
+                )
+                get_store().put_coder_organization_binding(binding)
+                return binding
+
+            try:
+                provisioner_manager.ensure_organization_provisioner(
+                    organization_id=binding.coder_organization_id,
+                    organization_name=binding.name,
+                )
+            except CoderProvisionerManagerError as exc:
+                binding = replace(
+                    binding,
+                    status=ProvisioningStatus.ERROR,
+                    detail=f"Coder organization ready, but provisioner startup failed. {exc}",
+                )
+                get_store().put_coder_organization_binding(binding)
+                return binding
+
+        try:
+            existing_template = client.get_template(binding.name, binding.template_name)
+        except CoderRequestError as exc:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.ERROR,
+                detail=f"Coder organization ready, but template lookup failed. {exc.detail}",
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        if existing_template is not None:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.READY,
+                detail="Coder organization, provisioner, and template already exist.",
             )
             get_store().put_coder_organization_binding(binding)
             return binding
 
         try:
-            created = client.create_organization(organization.slug, organization.display_name)
-            binding = CoderOrganizationBinding(
-                organization_id=organization.organization_id,
-                coder_organization_id=str(created["id"]),
-                name=str(created["name"]),
-                display_name=str(created["display_name"] or organization.display_name),
-                status=ProvisioningStatus.READY,
-                detail="Coder organization provisioned.",
+            publisher = get_coder_template_publisher()
+        except CoderTemplatePublisherConfigurationError as exc:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.BLOCKED,
+                detail=f"Coder organization ready, but template publishing is not configured. {exc}",
             )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        try:
+            publisher.publish_to_organization(binding.name)
+        except CoderTemplatePublisherError as exc:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.ERROR,
+                detail=f"Coder organization ready, but template publication failed. {exc}",
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        try:
+            existing_template = client.get_template(binding.name, binding.template_name)
         except CoderRequestError as exc:
-            status = ProvisioningStatus.BLOCKED if exc.status_code == 403 else ProvisioningStatus.ERROR
-            binding = CoderOrganizationBinding(
-                organization_id=organization.organization_id,
-                coder_organization_id="",
-                name=organization.slug,
-                display_name=organization.display_name,
-                status=status,
-                detail=exc.detail,
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.ERROR,
+                detail=f"Coder organization ready, but template verification failed. {exc.detail}",
             )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        if existing_template is None:
+            binding = replace(
+                binding,
+                status=ProvisioningStatus.ERROR,
+                detail="Coder organization ready, but the managed template was not visible after publication.",
+            )
+            get_store().put_coder_organization_binding(binding)
+            return binding
+
+        binding = replace(
+            binding,
+            status=ProvisioningStatus.READY,
+            detail="Coder organization, provisioner, and template ready.",
+        )
         get_store().put_coder_organization_binding(binding)
         return binding
 

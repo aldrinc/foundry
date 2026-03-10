@@ -68,6 +68,19 @@ class AppConfig:
     coder_url: str
     coder_api_token: str
     coder_api_token_present: bool
+    coder_container_name: str
+    coder_template_name: str
+    coder_template_source_dir: str
+    coder_internal_url: str
+    coder_provisioner_container_prefix: str
+    coder_provisioner_key_dir: str
+    coder_provisioner_cache_dir: str
+    coder_provisioner_startup_timeout_seconds: int
+    hcloud_token: str
+    hcloud_token_present: bool
+    workspace_private_network_id: str
+    workspace_firewall_ids: str
+    workspace_ssh_key_ids: str
     workspace_bootstrap_secret: str
     workspace_bootstrap_secret_present: bool
     stripe_secret_key_present: bool
@@ -106,6 +119,18 @@ class AppConfig:
             "coder_url": self.coder_url,
             "coder_configured": bool(self.coder_url and self.coder_api_token_present),
             "coder_api_token_present": self.coder_api_token_present,
+            "coder_container_name": self.coder_container_name,
+            "coder_template_name": self.coder_template_name,
+            "coder_template_source_dir": self.coder_template_source_dir,
+            "coder_internal_url": self.coder_internal_url,
+            "coder_provisioner_container_prefix": self.coder_provisioner_container_prefix,
+            "coder_provisioner_key_dir": self.coder_provisioner_key_dir,
+            "coder_provisioner_cache_dir": self.coder_provisioner_cache_dir,
+            "coder_provisioner_startup_timeout_seconds": self.coder_provisioner_startup_timeout_seconds,
+            "hcloud_token_present": self.hcloud_token_present,
+            "workspace_private_network_id": self.workspace_private_network_id,
+            "workspace_firewall_ids": self.workspace_firewall_ids,
+            "workspace_ssh_key_ids": self.workspace_ssh_key_ids,
             "workspace_bootstrap_secret_present": self.workspace_bootstrap_secret_present,
             "stripe_configured": self.stripe_secret_key_present,
             "stripe_webhook_secret_present": self.stripe_webhook_secret_present,
@@ -163,6 +188,39 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
         coder_url=source.get("FOUNDRY_CODER_URL", "").rstrip("/"),
         coder_api_token=source.get("FOUNDRY_CODER_API_TOKEN", ""),
         coder_api_token_present=bool(source.get("FOUNDRY_CODER_API_TOKEN", "").strip()),
+        coder_container_name=source.get("FOUNDRY_CODER_CONTAINER_NAME", "foundry-coder"),
+        coder_template_name=source.get(
+            "FOUNDRY_CODER_TEMPLATE_NAME", "foundry-hetzner-workspace"
+        ),
+        coder_template_source_dir=source.get(
+            "FOUNDRY_CODER_TEMPLATE_SOURCE_DIR",
+            "/opt/foundry/coder-templates/foundry-hetzner-workspace",
+        ),
+        coder_internal_url=source.get(
+            "FOUNDRY_CODER_INTERNAL_URL", "http://127.0.0.1:7080"
+        ),
+        coder_provisioner_container_prefix=source.get(
+            "FOUNDRY_CODER_PROVISIONER_CONTAINER_PREFIX",
+            "foundry-provisionerd",
+        ),
+        coder_provisioner_key_dir=source.get(
+            "FOUNDRY_CODER_PROVISIONER_KEY_DIR",
+            "./data/coder-provisioner-keys",
+        ),
+        coder_provisioner_cache_dir=source.get(
+            "FOUNDRY_CODER_PROVISIONER_CACHE_DIR",
+            "./data/coder-provisioner-cache",
+        ),
+        coder_provisioner_startup_timeout_seconds=_env_int(
+            source, "FOUNDRY_CODER_PROVISIONER_STARTUP_TIMEOUT_SECONDS", 60
+        ),
+        hcloud_token=source.get("FOUNDRY_HCLOUD_TOKEN", ""),
+        hcloud_token_present=bool(source.get("FOUNDRY_HCLOUD_TOKEN", "").strip()),
+        workspace_private_network_id=source.get(
+            "FOUNDRY_WORKSPACE_PRIVATE_NETWORK_ID", ""
+        ),
+        workspace_firewall_ids=source.get("FOUNDRY_WORKSPACE_FIREWALL_IDS", ""),
+        workspace_ssh_key_ids=source.get("FOUNDRY_WORKSPACE_SSH_KEY_IDS", ""),
         workspace_bootstrap_secret=source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", ""),
         workspace_bootstrap_secret_present=bool(
             source.get("FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET", "").strip()
