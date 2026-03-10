@@ -74,7 +74,7 @@ class CoderClient:
         ]
 
     def list_organizations(self) -> list[dict[str, object]]:
-        payload = self._request_list("GET", "/api/v2/organizations")
+        payload = self._request_list("GET", "/api/v2/users/me/organizations")
         return [
             {
                 "id": str(item.get("id", "")),

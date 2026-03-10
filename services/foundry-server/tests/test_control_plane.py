@@ -139,6 +139,18 @@ class _ControlPlaneCoreApiHandler(BaseHTTPRequestHandler):
 
 
 class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
+    organizations: list[dict[str, object]] = [
+        {
+            "id": "org-default",
+            "name": "coder",
+            "display_name": "Coder",
+            "description": "Builtin default organization.",
+            "is_default": True,
+        }
+    ]
+    create_status_code = 403
+    create_error_message = "Multiple Organizations is a Premium feature. Contact sales!"
+
     def _write_json(self, payload: dict[str, object] | list[dict[str, object]]) -> None:
         encoded = json.dumps(payload).encode("utf-8")
         self.send_response(200)
@@ -203,28 +215,30 @@ class _ControlPlaneCoderApiHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if self.path == "/api/v2/organizations":
-            self._write_json(
-                [
-                    {
-                        "id": "org-default",
-                        "name": "coder",
-                        "display_name": "Coder",
-                        "description": "Builtin default organization.",
-                        "is_default": True,
-                    }
-                ]
-            )
+        if self.path == "/api/v2/users/me/organizations":
+            self._write_json(self.organizations)
             return
 
         self.send_error(404)
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path == "/api/v2/organizations":
-            encoded = json.dumps(
-                {"message": "Multiple Organizations is a Premium feature. Contact sales!"}
-            ).encode("utf-8")
-            self.send_response(403)
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            if self.create_status_code == 201:
+                created = {
+                    "id": f"org-{payload.get('name', 'created')}",
+                    "name": str(payload.get("name", "")),
+                    "display_name": str(payload.get("display_name", "")),
+                    "description": str(payload.get("description", "")),
+                    "is_default": False,
+                }
+                self.organizations.append(created)
+                encoded = json.dumps(created).encode("utf-8")
+                self.send_response(201)
+            else:
+                encoded = json.dumps({"message": self.create_error_message}).encode("utf-8")
+                self.send_response(self.create_status_code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(encoded)))
             self.end_headers()
@@ -273,6 +287,19 @@ class ControlPlaneTests(unittest.TestCase):
         database_handle.close()
         self.addCleanup(lambda: Path(database_handle.name).unlink(missing_ok=True))
         _ControlPlaneCoreApiHandler.tenant_members = {}
+        _ControlPlaneCoderApiHandler.organizations = [
+            {
+                "id": "org-default",
+                "name": "coder",
+                "display_name": "Coder",
+                "description": "Builtin default organization.",
+                "is_default": True,
+            }
+        ]
+        _ControlPlaneCoderApiHandler.create_status_code = 403
+        _ControlPlaneCoderApiHandler.create_error_message = (
+            "Multiple Organizations is a Premium feature. Contact sales!"
+        )
 
         server = _ThreadingControlPlaneGitHubApiServer(
             ("127.0.0.1", 0),
@@ -370,6 +397,31 @@ class ControlPlaneTests(unittest.TestCase):
             )
             self.assertEqual(payload["coder_binding"]["status"], "blocked")
             self.assertIn("Premium feature", payload["coder_binding"]["detail"])
+
+    def test_signup_provisions_coder_binding_when_coder_allows_org_creation(self) -> None:
+        with self._create_client() as client:
+            _ControlPlaneCoderApiHandler.create_status_code = 201
+            signup_response = client.post(
+                "/signup",
+                data={
+                    "display_name": "Owner",
+                    "email": "owner@example.com",
+                    "password": "owner-password",
+                    "organization_name": "Acme",
+                    "organization_slug": "acme",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(signup_response.status_code, 303)
+            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+
+            detail_response = client.get(f"/api/v1/cloud/organizations/{organization_id}")
+            self.assertEqual(detail_response.status_code, 200)
+            payload = detail_response.json()
+            self.assertEqual(payload["coder_binding"]["status"], "ready")
+            self.assertEqual(payload["coder_binding"]["name"], "acme")
+            self.assertEqual(payload["coder_binding"]["display_name"], "Acme")
+            self.assertEqual(payload["coder_binding"]["detail"], "Coder organization provisioned.")
 
     def test_runtime_settings_round_trip(self) -> None:
         with self._create_client() as client:

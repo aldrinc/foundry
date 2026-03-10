@@ -2,12 +2,13 @@
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
-  echo "usage: $0 <host> <coder-url>" >&2
+  echo "usage: $0 <host> <coder-url> [coder-org]" >&2
   exit 1
 fi
 
 HOST="$1"
 CODER_URL="$2"
+CODER_ORG="${3:-coder}"
 
 if [[ -z "${FOUNDRY_HCLOUD_TOKEN:-}" ]]; then
   echo "FOUNDRY_HCLOUD_TOKEN is required" >&2
@@ -37,7 +38,7 @@ rsync -az --delete \
   "${TEMPLATE_SRC}" "root@${HOST}:${REMOTE_TEMPLATE_DIR}/"
 
 ssh -i ~/.ssh/hetzner_prod -o StrictHostKeyChecking=accept-new "root@${HOST}" \
-  "CODER_URL='${CODER_URL}' REMOTE_TEMPLATE_DIR='${REMOTE_TEMPLATE_DIR}' FOUNDRY_HCLOUD_TOKEN='${FOUNDRY_HCLOUD_TOKEN}' FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET='${FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET}' WORKSPACE_PRIVATE_NETWORK_ID='${WORKSPACE_PRIVATE_NETWORK_ID}' WORKSPACE_FIREWALL_IDS='${WORKSPACE_FIREWALL_IDS}' WORKSPACE_SSH_KEY_IDS='${WORKSPACE_SSH_KEY_IDS}' FOUNDRY_SERVER_URL='${FOUNDRY_SERVER_URL}' bash -s" <<'EOF'
+  "CODER_URL='${CODER_URL}' CODER_ORG='${CODER_ORG}' REMOTE_TEMPLATE_DIR='${REMOTE_TEMPLATE_DIR}' FOUNDRY_HCLOUD_TOKEN='${FOUNDRY_HCLOUD_TOKEN}' FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET='${FOUNDRY_WORKSPACE_BOOTSTRAP_SECRET}' WORKSPACE_PRIVATE_NETWORK_ID='${WORKSPACE_PRIVATE_NETWORK_ID}' WORKSPACE_FIREWALL_IDS='${WORKSPACE_FIREWALL_IDS}' WORKSPACE_SSH_KEY_IDS='${WORKSPACE_SSH_KEY_IDS}' FOUNDRY_SERVER_URL='${FOUNDRY_SERVER_URL}' bash -s" <<'EOF'
 set -euo pipefail
 
 token="$(cat /etc/foundry/coder-admin.token)"
@@ -53,6 +54,7 @@ docker exec \
     mkdir -p "$HOME"
     /opt/coder login http://127.0.0.1:7080 --token "$CODER_API_TOKEN" --use-token-as-session >/dev/null
     /opt/coder templates push foundry-hetzner-workspace \
+      --org "'"${CODER_ORG}"'" \
       --directory /tmp/foundry-hetzner-workspace \
       --ignore-lockfile \
       --yes \

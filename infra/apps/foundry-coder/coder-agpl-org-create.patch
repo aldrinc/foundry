@@ -1,0 +1,243 @@
+diff --git a/coderd/coderd.go b/coderd/coderd.go
+index 73cb711..96e2ff1 100644
+--- a/coderd/coderd.go
++++ b/coderd/coderd.go
+@@ -1189,6 +1189,7 @@ func New(options *Options) *API {
+ 			r.Use(
+ 				apiKeyMiddleware,
+ 			)
++			r.Post("/", api.postOrganizations)
+ 			r.Get("/", api.organizations)
+ 			r.Route("/{organization}", func(r chi.Router) {
+ 				r.Use(
+diff --git a/coderd/organizations.go b/coderd/organizations.go
+index fb3b18a..ef20388 100644
+--- a/coderd/organizations.go
++++ b/coderd/organizations.go
+@@ -1,12 +1,22 @@
+ package coderd
+ 
+ import (
++	"database/sql"
++	"fmt"
+ 	"net/http"
+ 
++	"github.com/google/uuid"
++	"golang.org/x/xerrors"
++
++	"github.com/coder/coder/v2/coderd/audit"
+ 	"github.com/coder/coder/v2/coderd/database"
+ 	"github.com/coder/coder/v2/coderd/database/db2sdk"
++	"github.com/coder/coder/v2/coderd/database/dbauthz"
++	"github.com/coder/coder/v2/coderd/database/dbtime"
+ 	"github.com/coder/coder/v2/coderd/httpapi"
+ 	"github.com/coder/coder/v2/coderd/httpmw"
++	"github.com/coder/coder/v2/coderd/rbac"
++	"github.com/coder/coder/v2/coderd/rbac/rolestore"
+ 	"github.com/coder/coder/v2/coderd/util/slice"
+ 	"github.com/coder/coder/v2/codersdk"
+ )
+@@ -50,3 +60,128 @@ func (*API) organization(rw http.ResponseWriter, r *http.Request) {
+ 
+ 	httpapi.Write(ctx, rw, http.StatusOK, db2sdk.Organization(organization))
+ }
++
++// @Summary Create organization
++// @ID create-organization
++// @Security CoderSessionToken
++// @Accept json
++// @Produce json
++// @Tags Organizations
++// @Param request body codersdk.CreateOrganizationRequest true "Create organization request"
++// @Success 201 {object} codersdk.Organization
++// @Router /organizations [post]
++func (api *API) postOrganizations(rw http.ResponseWriter, r *http.Request) {
++	var (
++		organizationID    = uuid.New()
++		ctx               = r.Context()
++		apiKey            = httpmw.APIKey(r)
++		auditor           = api.Auditor.Load()
++		aReq, commitAudit = audit.InitRequest[database.Organization](rw, &audit.RequestParams{
++			Audit:          *auditor,
++			Log:            api.Logger,
++			Request:        r,
++			Action:         database.AuditActionCreate,
++			OrganizationID: organizationID,
++		})
++	)
++	aReq.Old = database.Organization{}
++	defer commitAudit()
++
++	var req codersdk.CreateOrganizationRequest
++	if !httpapi.Read(ctx, rw, r, &req) {
++		return
++	}
++
++	if req.Name == codersdk.DefaultOrganization {
++		httpapi.Write(ctx, rw, http.StatusBadRequest, codersdk.Response{
++			Message: fmt.Sprintf("Organization name %q is reserved.", codersdk.DefaultOrganization),
++		})
++		return
++	}
++
++	_, err := api.Database.GetOrganizationByName(ctx, database.GetOrganizationByNameParams{
++		Name:    req.Name,
++		Deleted: false,
++	})
++	if err == nil {
++		httpapi.Write(ctx, rw, http.StatusConflict, codersdk.Response{
++			Message: "Organization already exists with that name.",
++		})
++		return
++	}
++	if !xerrors.Is(err, sql.ErrNoRows) {
++		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
++			Message: fmt.Sprintf("Internal error fetching organization %q.", req.Name),
++			Detail:  err.Error(),
++		})
++		return
++	}
++
++	var organization database.Organization
++	err = api.Database.InTx(func(tx database.Store) error {
++		err := tx.AcquireLock(ctx, database.LockIDReconcileSystemRoles)
++		if err != nil {
++			return xerrors.Errorf("acquire system roles reconciliation lock: %w", err)
++		}
++
++		if req.DisplayName == "" {
++			req.DisplayName = req.Name
++		}
++
++		organization, err = tx.InsertOrganization(ctx, database.InsertOrganizationParams{
++			ID:          organizationID,
++			Name:        req.Name,
++			DisplayName: req.DisplayName,
++			Description: req.Description,
++			Icon:        req.Icon,
++			CreatedAt:   dbtime.Now(),
++			UpdatedAt:   dbtime.Now(),
++		})
++		if err != nil {
++			return xerrors.Errorf("create organization: %w", err)
++		}
++
++		sysCtx := dbauthz.AsSystemRestricted(ctx)
++		_, _, err = rolestore.ReconcileOrgMemberRole(sysCtx, tx, database.CustomRole{
++			Name: rbac.RoleOrgMember(),
++			OrganizationID: uuid.NullUUID{
++				UUID:  organizationID,
++				Valid: true,
++			},
++		}, organization.WorkspaceSharingDisabled)
++		if err != nil {
++			return xerrors.Errorf(
++				"reconcile organization-member role for organization %s: %w",
++				organizationID,
++				err,
++			)
++		}
++
++		_, err = tx.InsertOrganizationMember(ctx, database.InsertOrganizationMemberParams{
++			OrganizationID: organization.ID,
++			UserID:         apiKey.UserID,
++			CreatedAt:      dbtime.Now(),
++			UpdatedAt:      dbtime.Now(),
++			Roles:          []string{},
++		})
++		if err != nil {
++			return xerrors.Errorf("create organization member: %w", err)
++		}
++
++		_, err = tx.InsertAllUsersGroup(ctx, organization.ID)
++		if err != nil {
++			return xerrors.Errorf("create %q group: %w", database.EveryoneGroup, err)
++		}
++		return nil
++	}, nil)
++	if err != nil {
++		httpapi.Write(ctx, rw, http.StatusInternalServerError, codersdk.Response{
++			Message: "Internal error creating organization.",
++			Detail:  err.Error(),
++		})
++		return
++	}
++
++	aReq.New = organization
++	httpapi.Write(ctx, rw, http.StatusCreated, db2sdk.Organization(organization))
++}
+diff --git a/coderd/organizations_test.go b/coderd/organizations_test.go
+index c6a26c1..75278f6 100644
+--- a/coderd/organizations_test.go
++++ b/coderd/organizations_test.go
+@@ -37,3 +37,31 @@ func TestOrganizationByUserAndName(t *testing.T) {
+ 		require.NoError(t, err)
+ 	})
+ }
++
++func TestCreateOrganization(t *testing.T) {
++	t.Parallel()
++
++	client := coderdtest.New(t, nil)
++	user := coderdtest.CreateFirstUser(t, client)
++	ctx := testutil.Context(t, testutil.WaitLong)
++
++	created, err := client.CreateOrganization(ctx, codersdk.CreateOrganizationRequest{
++		Name:        "foundry-qa",
++		DisplayName: "Foundry QA",
++		Description: "Created from the AGPL control plane path.",
++	})
++	require.NoError(t, err)
++	require.Equal(t, "foundry-qa", created.Name)
++	require.Equal(t, "Foundry QA", created.DisplayName)
++	require.False(t, created.IsDefault)
++
++	found, err := client.OrganizationByUserAndName(ctx, codersdk.Me, created.Name)
++	require.NoError(t, err)
++	require.Equal(t, created.ID, found.ID)
++
++	orgs, err := client.OrganizationsByUser(ctx, codersdk.Me)
++	require.NoError(t, err)
++	require.Len(t, orgs, 2)
++	require.Equal(t, user.OrganizationID, orgs[0].ID)
++	require.Equal(t, created.ID, orgs[1].ID)
++}
+diff --git a/enterprise/coderd/coderd.go b/enterprise/coderd/coderd.go
+index a897711..c1d4a76 100644
+--- a/enterprise/coderd/coderd.go
++++ b/enterprise/coderd/coderd.go
+@@ -301,7 +301,6 @@ func New(ctx context.Context, options *Options) (_ *API, err error) {
+ 		r.Group(func(r chi.Router) {
+ 			r.Use(
+ 				apiKeyMiddleware,
+-				api.RequireFeatureMW(codersdk.FeatureMultipleOrganizations),
+ 			)
+ 			r.Post("/organizations", api.postOrganizations)
+ 		})
+diff --git a/enterprise/coderd/organizations_test.go b/enterprise/coderd/organizations_test.go
+index e7b01b0..9dafe84 100644
+--- a/enterprise/coderd/organizations_test.go
++++ b/enterprise/coderd/organizations_test.go
+@@ -543,3 +543,22 @@ func TestPostOrganizationsByUser(t *testing.T) {
+ 		require.Equal(t, "new-org", o.DisplayName) // should match the given `Name`
+ 	})
+ }
++
++func TestPostOrganizationsWithoutPremiumLicense(t *testing.T) {
++	t.Parallel()
++
++	client, _ := coderdenttest.New(t, nil)
++	ctx := testutil.Context(t, testutil.WaitLong)
++
++	//nolint:gocritic // only owners can create orgs
++	o, err := client.CreateOrganization(ctx, codersdk.CreateOrganizationRequest{
++		Name:        "foundry-no-license",
++		DisplayName: "Foundry No License",
++		Description: "Organization creation should remain available in the Foundry fork.",
++	})
++	require.NoError(t, err)
++	require.Equal(t, "foundry-no-license", o.Name)
++	require.Equal(t, "Foundry No License", o.DisplayName)
++	require.Equal(t, "Organization creation should remain available in the Foundry fork.", o.Description)
++	require.False(t, o.IsDefault)
++}
