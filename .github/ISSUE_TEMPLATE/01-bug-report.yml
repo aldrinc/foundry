@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible bug, regression, or broken release artifact.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for someone outside your environment to reproduce it.
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      options:
+        - Desktop app
+        - Control-plane server
+        - Collaboration core
+        - Build or release pipeline
+        - Documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Foundry version
+      description: Include the desktop version, server revision, or commit if known.
+      placeholder: 0.1.1
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, deployment mode, browser, or device details.
+      placeholder: macOS 15.3, desktop app, Apple Silicon
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Logs, screenshots, or other artifacts
+      description: Redact secrets before pasting logs.

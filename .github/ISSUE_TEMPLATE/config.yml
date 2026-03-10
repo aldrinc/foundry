@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Support and triage guide
+    url: https://github.com/aldrinc/foundry/blob/main/SUPPORT.md
+    about: Start here for bugs, feature requests, security reports, and licensing questions.
+  - name: Security policy
+    url: https://github.com/aldrinc/foundry/security/policy
+    about: Use private reporting paths for vulnerabilities.
+  - name: Licensing map
+    url: https://github.com/aldrinc/foundry/blob/main/LICENSING.md
+    about: Review license boundaries before opening licensing questions.

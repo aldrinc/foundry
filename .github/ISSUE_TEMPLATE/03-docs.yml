@@ -1,0 +1,29 @@
+name: Documentation improvement
+description: Suggest a fix or addition for the public docs, setup guides, or README.
+title: "[Docs]: "
+labels:
+  - documentation
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Docs area
+      options:
+        - README
+        - Desktop distribution
+        - OTA updates
+        - Server setup
+        - Architecture docs
+        - Contributing or support
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is missing or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement

@@ -1,38 +1,63 @@
 # Foundry
 
-Foundry is a cross-platform desktop app plus a hosted or self-hosted control plane for GitHub-backed coding workflows. This repo contains the desktop app, shared UI packages, the control-plane service, and an imported snapshot of the standardized core collaboration server.
+Foundry is a source-available desktop client and control-plane stack for GitHub-backed coding workflows. This repository includes the cross-platform desktop app, shared UI packages, the Foundry control-plane service, and the imported collaboration-core snapshot that backs the product.
 
-## Workspace
+## Why Foundry
 
-- `packages/app`: shared SolidJS application code
-- `packages/desktop`: Tauri desktop shell and native bridge
-- `packages/ui`: shared UI primitives
-- `services/foundry-server`: product-facing control-plane scaffold for orgs, auth, billing, GitHub, runtime, and workspace domains
-- `services/foundry-core`: imported core application server snapshot under `app/`
-- `docs`: release, packaging, and repository guidance
+- Cross-platform desktop client with native integrations, packaging, and OTA update support
+- GitHub-backed workflow model for org setup, repositories, runtime coordination, and workspace automation
+- Shared application and UI packages for shipping the same product surface across desktop targets
+- Self-hosting path for teams that want to run Foundry inside their own environment
 
-## Development
+## Project Status
+
+Foundry is in an early public release phase.
+
+- Desktop release artifacts are published through [GitHub Releases](https://github.com/aldrinc/foundry/releases).
+- The desktop updater path is wired through signed Tauri updater metadata.
+- The server and infra layers are usable, but they are still being standardized for a cleaner public self-hosting experience.
+- Foundry-authored code is source-available under Elastic License 2.0, not an OSI open-source license. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
+
+## Get Foundry
+
+Download the latest desktop builds from [GitHub Releases](https://github.com/aldrinc/foundry/releases).
+
+Current release targets:
+
+- macOS Apple Silicon and Intel
+- Windows x64
+- Linux `.deb` and `.rpm`
+
+Build and updater details:
+
+- [docs/desktop-distribution.md](docs/desktop-distribution.md)
+- [docs/desktop-ota-updates.md](docs/desktop-ota-updates.md)
+- [docs/faq.md](docs/faq.md)
+- [docs/README.md](docs/README.md)
+- [CHANGELOG.md](CHANGELOG.md)
+
+## Quickstart
+
+From the repo root:
 
 ```bash
 bun install
-bun test
+bun run test
+bun run typecheck
 bun run build
 bun run bundle:desktop
 ```
 
-The control-plane service lives under `services/foundry-server`. See its local README for setup and run instructions.
+Additional useful commands:
 
-The imported core application server snapshot lives under `services/foundry-core/app`. The boundary between `foundry-core` and `foundry-server` is documented in `services/foundry-core/README.md`.
+```bash
+bun run lint:eslint
+bun run check:rust
+bun run bundle:desktop:macos
+cd services/foundry-server && pytest
+```
 
-## Code Quality
-
-Foundry uses a mixed repo-hygiene setup:
-
-- `pre-commit` runs fast local checks for secrets, file hygiene, typos, Solid ESLint, and Rust formatting. Biome and `mdformat` remain available as manual cleanup hooks while the imported core snapshot is still being standardized.
-- `.githooks/pre-push` keeps the existing publish-safety secret scan and adds the heavier TypeScript, Rust lint, and Rust compile checks.
-- The current CI workflow file lives in `.github/workflows/ci.yml` and runs on GitHub Actions.
-
-Install the local hooks once per clone:
+If you want local hooks enabled:
 
 ```bash
 python3 -m pip install --user pre-commit
@@ -40,50 +65,43 @@ git config core.hooksPath .githooks
 pre-commit install --hook-type pre-commit
 ```
 
-Useful local commands:
+## Repository Guide
 
-```bash
-bun run lint
-bun run typecheck
-bun run check:rust
-bun run bundle:desktop
-bun run bundle:desktop:macos
-```
+- `packages/app`: shared SolidJS application code
+- `packages/desktop`: Tauri shell, native bridge, desktop packaging, and updater integration
+- `packages/ui`: shared UI primitives
+- `services/foundry-server`: Foundry control-plane service for orgs, auth, GitHub, runtime, and workspace domains
+- `services/foundry-core`: imported collaboration-core snapshot under `app/`
+- `docs`: packaging, release, and repository guidance
 
-## Desktop Distribution
+Component-specific setup notes:
 
-Foundry can now be packaged locally from the repo root into installable desktop artifacts.
+- [docs/README.md](docs/README.md)
+- [services/foundry-server/README.md](services/foundry-server/README.md)
+- [services/foundry-core/README.md](services/foundry-core/README.md)
 
-```bash
-bun install
-bun run test
-bun run typecheck
-bun run lint:eslint
-bun run check:rust
-bun run bundle:desktop
-```
+## Quality and Release Safety
 
-On macOS, `bun run bundle:desktop:macos` produces:
+Foundry uses layered repo hygiene checks before code ships:
 
-- `packages/desktop/src-tauri/target/release/bundle/macos/Foundry.app`
-- `packages/desktop/src-tauri/target/release/bundle/dmg/Foundry_<version>_<arch>.dmg`
+- `pre-commit` for secrets, file hygiene, typos, Solid linting, and Rust formatting
+- `.githooks/pre-push` for the heavier secret, TypeScript, and Rust checks
+- GitHub Actions CI in [.github/workflows/ci.yml](.github/workflows/ci.yml)
+- Signed desktop release publishing in [.github/workflows/release-desktop.yml](.github/workflows/release-desktop.yml)
 
-The root bundle commands now expect a Tauri updater signing key. They will automatically use `~/.foundry/keys/foundry-updater.key` on this machine, or you can set `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PATH` explicitly.
+The secret scan lives in [scripts/check-secrets.sh](scripts/check-secrets.sh), with additional configuration in [.gitleaks.toml](.gitleaks.toml).
 
-Use the `.dmg` for internal team distribution. The updater metadata is signed, but the app bundle itself is still unsigned and not notarized, so macOS Gatekeeper hardening is still a follow-up if you want friction-free installs outside the team.
+## Community
 
-The full step-by-step packaging notes live in `docs/desktop-distribution.md`.
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [SUPPORT.md](SUPPORT.md)
+- [SECURITY.md](SECURITY.md)
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 
-For over-the-air desktop updates through GitHub Releases, see `docs/desktop-ota-updates.md`.
+## Public Launch Checklist
 
-## Safe Publishing
-
-The repo is configured to keep build output, local tool state, `.env` files, and common credential file types out of version control. The secret scan lives in `scripts/check-secrets.sh`, with `gitleaks` configuration in `.gitleaks.toml`, and is reused both locally and in CI.
+The remaining launch work is tracked in [docs/public-launch-checklist.md](docs/public-launch-checklist.md).
 
 ## License
 
-Foundry-authored code in this repository is released under Elastic License 2.0, with additional component-level notices for imported third-party code. See `LICENSE` and `LICENSING.md`.
-
-## Publishing Note
-
-This project is being prepared for public GitHub hosting. Any remaining internal publishing references should be treated as migration debt and removed before release.
+Foundry-authored code in this repository is released under Elastic License 2.0, with component-level exceptions for imported third-party code. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
