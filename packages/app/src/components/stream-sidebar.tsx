@@ -10,6 +10,7 @@ import { PersonalMenu } from "./personal-menu"
 import { OrgSwitcher } from "./org-switcher"
 import type { SavedServerStatus } from "@zulip/desktop/bindings"
 import { getUnreadTotalCount } from "../context/unread-state"
+import { buildTopicSidebarSections, isResolvedTopicName, resolveTopicName, unresolveTopicName } from "./topic-sidebar-state"
 
 export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: () => void | Promise<void>; onSwitchOrg?: (server: SavedServerStatus) => void }) {
   const sync = useZulipSync()
@@ -239,6 +240,11 @@ function StreamItem(props: {
   const [topicsLoaded, setTopicsLoaded] = createSignal(false)
   const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; type: "stream" | "topic"; topicName?: string } | null>(null)
   const [moveDialog, setMoveDialog] = createSignal<{ topicName: string } | null>(null)
+  const topicSections = createMemo(() => buildTopicSidebarSections(
+    props.stream.stream_id,
+    topics(),
+    sync.store.unreadItems,
+  ))
 
   /** Fetch topics if not already loaded */
   const ensureTopicsLoaded = async () => {
@@ -366,22 +372,38 @@ function StreamItem(props: {
 
   const handleResolveToggle = async (topicName: string) => {
     setContextMenu(null)
-    const isResolved = topicName.startsWith("\u2705 ")
+    const isResolved = isResolvedTopicName(topicName)
+    const nextTopicName = isResolved ? unresolveTopicName(topicName) : resolveTopicName(topicName)
     // Need an anchor message — get the latest message in this topic
     try {
-      const narrowFilters = [
-        { operator: "stream", operand: props.stream.name, negated: false },
-        { operator: "topic", operand: topicName, negated: false },
-      ]
-      const result = await commands.getMessages(org.orgId, narrowFilters, "newest", 1, 0)
-      if (result.status === "ok" && result.data.messages.length > 0) {
-        const anchorId = result.data.messages[result.data.messages.length - 1].id
-        await commands.setTopicResolved(org.orgId, {
-          anchor_message_id: anchorId,
-          topic_name: topicName,
-          resolved: !isResolved,
-        })
+      let anchorId = topics().find((topic) => topic.name === topicName)?.max_id
+
+      if (!anchorId) {
+        const narrowFilters = [
+          { operator: "stream", operand: props.stream.name, negated: false },
+          { operator: "topic", operand: topicName, negated: false },
+        ]
+        const result = await commands.getMessages(org.orgId, narrowFilters, "newest", 1, 0)
+        if (result.status === "ok" && result.data.messages.length > 0) {
+          anchorId = result.data.messages[result.data.messages.length - 1].id
+        }
       }
+
+      if (!anchorId) {
+        return
+      }
+
+      await commands.setTopicResolved(org.orgId, {
+        anchor_message_id: anchorId,
+        topic_name: topicName,
+        resolved: !isResolved,
+      })
+
+      setTopics((currentTopics) => currentTopics.map((topic) => (
+        topic.name === topicName
+          ? { ...topic, name: nextTopicName }
+          : topic
+      )))
     } catch (e) {
       console.error("Failed to resolve/unresolve topic:", e)
     }
@@ -480,11 +502,11 @@ function StreamItem(props: {
           </Show>
 
           {/* Empty state when no topics exist */}
-          <Show when={topicsLoaded() && topics().length === 0 && !loadingTopics() && !topicError()}>
+          <Show when={topicsLoaded() && topicSections().active.length === 0 && topicSections().completed.length === 0 && !loadingTopics() && !topicError()}>
             <div class="text-[10px] text-[var(--text-tertiary)] px-3 py-1">No topics yet</div>
           </Show>
 
-          <For each={topics()}>
+          <For each={topicSections().active}>
             {(topic) => (
               <div
                 class="group/topic w-full flex items-center gap-2 px-3 py-1 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--background-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
@@ -495,8 +517,55 @@ function StreamItem(props: {
                 onClick={() => handleTopicClick(topic.name)}
                 onContextMenu={(e) => openContextMenu(e, "topic", topic.name)}
               >
-                <span class="flex-1 truncate">{topic.name}</span>
+                <span class="flex-1 truncate">{topic.label}</span>
+                <Show when={topic.unreadCount > 0}>
+                  <span class="text-[10px] font-medium text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10 px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
+                    {topic.unreadCount}
+                  </span>
+                </Show>
                 {/* Topic hover ellipsis */}
+                <span
+                  class="w-4 h-4 items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer hidden group-hover/topic:flex shrink-0"
+                  onClick={(e) => openContextMenu(e, "topic", topic.name)}
+                >
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                    <circle cx="2.5" cy="6" r="1" fill="currentColor" />
+                    <circle cx="6" cy="6" r="1" fill="currentColor" />
+                    <circle cx="9.5" cy="6" r="1" fill="currentColor" />
+                  </svg>
+                </span>
+              </div>
+            )}
+          </For>
+
+          <Show when={topicSections().completed.length > 0}>
+            <div class="px-3 pt-2 pb-1">
+              <span class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+                Completed
+              </span>
+            </div>
+          </Show>
+
+          <For each={topicSections().completed}>
+            {(topic) => (
+              <div
+                class="group/topic w-full flex items-center gap-2 px-3 py-1 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--background-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
+                classList={{
+                  "text-[var(--text-primary)] bg-[var(--background-surface)]":
+                    nav.activeNarrow() === `stream:${props.stream.stream_id}/topic:${topic.name}`,
+                }}
+                onClick={() => handleTopicClick(topic.name)}
+                onContextMenu={(e) => openContextMenu(e, "topic", topic.name)}
+              >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" class="shrink-0 text-[var(--text-tertiary)]">
+                  <path d="M2 6l2.2 2.2L10 2.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="flex-1 truncate">{topic.label}</span>
+                <Show when={topic.unreadCount > 0}>
+                  <span class="text-[10px] font-medium text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10 px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
+                    {topic.unreadCount}
+                  </span>
+                </Show>
                 <span
                   class="w-4 h-4 items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--text-primary)] cursor-pointer hidden group-hover/topic:flex shrink-0"
                   onClick={(e) => openContextMenu(e, "topic", topic.name)}
@@ -601,7 +670,7 @@ function StreamItem(props: {
               })()}
               <div class="my-1 border-t border-[var(--border-default)]" />
               <ContextMenuItem
-                label={ctx().topicName!.startsWith("\u2705 ") ? "Unresolve topic" : "Resolve topic"}
+                label={isResolvedTopicName(ctx().topicName!) ? "Unresolve topic" : "Resolve topic"}
                 onClick={() => handleResolveToggle(ctx().topicName!)}
               />
               <ContextMenuItem

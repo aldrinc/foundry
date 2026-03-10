@@ -68,9 +68,13 @@ On macOS, `bun run bundle:desktop:macos` produces:
 - `packages/desktop/src-tauri/target/release/bundle/macos/Foundry.app`
 - `packages/desktop/src-tauri/target/release/bundle/dmg/Foundry_<version>_<arch>.dmg`
 
-Use the `.dmg` for internal team distribution. The current process creates unsigned local artifacts, so macOS Gatekeeper/notarization hardening is still a follow-up if you want friction-free installs outside the team.
+The root bundle commands now expect a Tauri updater signing key. They will automatically use `~/.foundry/keys/foundry-updater.key` on this machine, or you can set `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PATH` explicitly.
+
+Use the `.dmg` for internal team distribution. The updater metadata is signed, but the app bundle itself is still unsigned and not notarized, so macOS Gatekeeper hardening is still a follow-up if you want friction-free installs outside the team.
 
 The full step-by-step packaging notes live in [`docs/desktop-distribution.md`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/docs/desktop-distribution.md).
+
+For over-the-air desktop updates through GitHub Releases, see [`docs/desktop-ota-updates.md`](/Users/aldrinclement/Documents/programming/ideas-space/foundry/docs/desktop-ota-updates.md).
 
 ## Safe Publishing
 

@@ -2,6 +2,7 @@
 
 import { render } from "solid-js/web"
 import { App, type AsyncStorageWithFlush, type NotifyOptions, type Platform, PlatformProvider } from "@zulip/app"
+import { invoke } from "@tauri-apps/api/core"
 import { resolveResource } from "@tauri-apps/api/path"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
 import { type as ostype } from "@tauri-apps/plugin-os"
@@ -28,6 +29,14 @@ function getNotificationSoundPath() {
     return undefined
   })
   return notificationSoundPathPromise
+}
+
+async function playNativeNotificationSound() {
+  try {
+    await invoke("play_notification_sound")
+  } catch (error) {
+    console.warn("Notification audio playback failed", error)
+  }
 }
 
 async function initializeDeepLinkHandling() {
@@ -228,6 +237,54 @@ const createPlatform = (): Platform => {
       return (result as { path?: string }).path ?? null
     },
 
+    async onWindowDragDrop(listener) {
+      const window = getCurrentWindow()
+      return window.onDragDropEvent((event) => {
+        const payload = event.payload as
+          | { type: "enter"; paths: string[]; position: { x: number; y: number } }
+          | { type: "over"; position: { x: number; y: number } }
+          | { type: "drop"; paths: string[]; position: { x: number; y: number } }
+          | { type: "leave" }
+
+        if (payload.type === "enter") {
+          void listener({
+            type: "enter",
+            paths: payload.paths,
+            position: {
+              x: payload.position.x,
+              y: payload.position.y,
+            },
+          })
+          return
+        }
+
+        if (payload.type === "over") {
+          void listener({
+            type: "over",
+            position: {
+              x: payload.position.x,
+              y: payload.position.y,
+            },
+          })
+          return
+        }
+
+        if (payload.type === "drop") {
+          void listener({
+            type: "drop",
+            paths: payload.paths,
+            position: {
+              x: payload.position.x,
+              y: payload.position.y,
+            },
+          })
+          return
+        }
+
+        void listener({ type: "leave" })
+      })
+    },
+
     // Notifications
     async notify(title: string, description?: string, options?: NotifyOptions) {
       try {
@@ -246,18 +303,27 @@ const createPlatform = (): Platform => {
 
         const win = getCurrentWindow()
         const focused = await win.isFocused().catch(() => document.hasFocus())
-        if (focused) return
+        const showSystemNotification = options?.showWhenFocused === true || !focused
 
-        // macOS expects system sound names (e.g. "Glass"), not file paths
-        const sound = options?.silent
+        const osType = ostype()
+        if (!options?.silent && osType === "macos") {
+          await playNativeNotificationSound()
+        }
+
+        if (!showSystemNotification) {
+          return
+        }
+
+        const sound = options?.silent || osType === "macos"
           ? undefined
-          : (ostype() === "macos" ? "Glass" : await getNotificationSoundPath())
+          : await getNotificationSoundPath()
+        const silent = osType === "macos" ? true : options?.silent
 
-        console.log("[Notify] Sending notification:", { title, silent: options?.silent, hasSound: !!sound })
+        console.log("[Notify] Sending notification:", { title, silent, hasSound: !!sound })
         sendNotification({
           title,
           body: description ?? "",
-          silent: options?.silent,
+          silent,
           sound,
           extra: options?.href ? { href: options.href } : undefined,
         })

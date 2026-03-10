@@ -7,6 +7,7 @@ import { SupervisorProvider } from "./context/supervisor"
 import { SettingsProvider, useSettings } from "./context/settings"
 import { PresenceProvider } from "./context/presence"
 import { getUnreadTotalCount } from "./context/unread-state"
+import { usePlatform } from "./context/platform"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
 import { SettingsView } from "./views/settings"
@@ -233,10 +234,12 @@ function AppShell(props: {
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
-  const { store: settingsStore } = useSettings()
+  const { store: settingsStore, capabilities } = useSettings()
+  const platform = usePlatform()
   const [showSettings, setShowSettings] = createSignal(false)
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
+  let autoUpdateCheckStarted = false
 
   const handleLogout = async () => {
     try {
@@ -320,6 +323,31 @@ function AppShell(props: {
   createEffect(() => {
     const total = getUnreadTotalCount(sync.store.unreadItems)
     commands.setUnreadBadgeCount(total > 0 ? total : null).catch(() => {})
+  })
+
+  createEffect(() => {
+    const caps = capabilities()
+    if (autoUpdateCheckStarted || !caps?.updater || !settingsStore.autoUpdate) {
+      return
+    }
+    if (!platform.checkUpdate || !platform.update) {
+      return
+    }
+
+    autoUpdateCheckStarted = true
+    window.setTimeout(() => {
+      void (async () => {
+        try {
+          const result = await platform.checkUpdate!()
+          if (!result.updateAvailable) {
+            return
+          }
+          await platform.update!()
+        } catch (error) {
+          console.warn("[Updater] automatic update check failed", error)
+        }
+      })()
+    }, 3000)
   })
 
   // ── Settings-driven behavior effects ──

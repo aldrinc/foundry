@@ -1,3 +1,6 @@
+#[cfg(target_os = "macos")]
+use std::process::Command;
+
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_store::StoreExt;
 
@@ -279,9 +282,53 @@ pub fn set_unread_badge_count(app: AppHandle, count: Option<i64>) -> Result<(), 
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Main window not available".to_string())?;
-    window
-        .set_badge_count(count)
-        .map_err(|e| format!("Failed to update badge count: {}", e))
+    let badge_label = count
+        .filter(|value| *value > 0)
+        .map(|value| value.to_string());
+    let tooltip = match count.filter(|value| *value > 0) {
+        Some(value) => format!("Foundry ({value} unread)"),
+        None => "Foundry".to_string(),
+    };
+
+    if let Some(tray) = app.tray_by_id(crate::TRAY_ID) {
+        if let Err(error) = tray.set_tooltip(Some(tooltip)) {
+            tracing::warn!(?error, "Failed to update tray tooltip");
+        }
+    }
+
+    app.run_on_main_thread(move || {
+        if let Err(error) = window.set_badge_count(count) {
+            tracing::warn!(?error, "Failed to update badge count");
+        }
+
+        #[cfg(target_os = "macos")]
+        if let Err(error) = window.set_badge_label(badge_label) {
+            tracing::warn!(?error, "Failed to update badge label");
+        }
+    })
+    .map_err(|e| format!("Failed to schedule unread badge update: {}", e))
+}
+
+/// Play the bundled desktop notification sound from the native layer.
+#[tauri::command]
+#[specta::specta]
+pub fn play_notification_sound(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let sound_path = app
+            .path()
+            .resource_dir()
+            .map_err(|e| format!("Failed to resolve resource directory: {}", e))?
+            .join("notifications")
+            .join("default.wav");
+
+        Command::new("afplay")
+            .arg(&sound_path)
+            .spawn()
+            .map_err(|e| format!("Failed to launch notification sound: {}", e))?;
+    }
+
+    Ok(())
 }
 
 /// Report native/backend feature support for frontend planning and gating.

@@ -3,7 +3,7 @@
   "productName": "Foundry",
   "identifier": "org.foundry.desktop",
   "mainBinaryName": "Foundry",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -37,6 +37,7 @@
       "icons/icon.ico"
     ],
     "active": true,
+    "createUpdaterArtifacts": true,
     "resources": {
       "resources/notifications/default.wav": "notifications/default.wav"
     },
@@ -46,6 +47,15 @@
     "deep-link": {
       "desktop": {
         "schemes": ["foundry", "zulip"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFDN0FCQTRDQ0E5OTJERjcKUldUM0xabktUTHA2SEVYbC9oZE1SWXJyeXZSTnZNdlpxTHBBR09CcWZaSWFHNTE5a2V4S3dqTFUK",
+      "endpoints": [
+        "https://github.com/aldrinc/foundry/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

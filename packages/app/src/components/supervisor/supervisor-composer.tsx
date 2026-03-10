@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup } from "solid-js"
+import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { commands } from "@zulip/desktop/bindings"
 import { useSupervisor } from "../../context/supervisor"
 import { useOrg } from "../../context/org"
@@ -17,11 +17,14 @@ export function SupervisorComposer() {
   const [showFormatBar, setShowFormatBar] = createSignal(false)
   const [showEmojiPicker, setShowEmojiPicker] = createSignal(false)
   const [uploading, setUploading] = createSignal(false)
+  const [uploadLabel, setUploadLabel] = createSignal("")
   const [uploadError, setUploadError] = createSignal("")
   const [dragOver, setDragOver] = createSignal(false)
   const [showOptionsMenu, setShowOptionsMenu] = createSignal(false)
 
   let textareaRef!: HTMLTextAreaElement
+  let composeRef!: HTMLDivElement
+  let nativeDropRegistered = false
 
   const modKey = () => platform.os === "macos" ? "⌘" : "Ctrl"
 
@@ -93,12 +96,13 @@ export function SupervisorComposer() {
   }
 
   const uploadSingleFile = async (filePath: string) => {
+    const fileName = filePath.split("/").pop() || "file"
     setUploading(true)
+    setUploadLabel(fileName)
     setUploadError("")
     try {
       const result = await commands.uploadFile(org.orgId, filePath)
       if (result.status === "ok") {
-        const fileName = filePath.split("/").pop() || "file"
         const markdown = `[${fileName}](${result.data.url})`
         const current = text()
         setText(current ? `${current}\n${markdown}` : markdown)
@@ -107,8 +111,33 @@ export function SupervisorComposer() {
       }
     } catch {
       setUploadError("Upload failed")
+    } finally {
+      setUploading(false)
+      setUploadLabel("")
     }
-    setUploading(false)
+  }
+
+  const uploadFilePaths = async (paths: string[]) => {
+    for (const path of paths) {
+      await uploadSingleFile(path)
+    }
+  }
+
+  const extractDroppedFiles = (dataTransfer?: DataTransfer | null): File[] => {
+    const directFiles = Array.from(dataTransfer?.files || [])
+    if (directFiles.length > 0) {
+      return directFiles
+    }
+
+    return Array.from(dataTransfer?.items || [])
+      .map((item) => item.kind === "file" ? item.getAsFile() : null)
+      .filter((file): file is File => file !== null)
+  }
+
+  const isInsideCompose = (x: number, y: number): boolean => {
+    if (!composeRef) return false
+    const bounds = composeRef.getBoundingClientRect()
+    return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom
   }
 
   // ── Drag-and-drop (counter pattern to avoid child-element flicker) ──
@@ -117,6 +146,7 @@ export function SupervisorComposer() {
 
   const handleDragEnter = (e: DragEvent) => {
     if (!canUpload()) return
+    if (nativeDropRegistered) return
     e.preventDefault()
     dragCounter++
     setDragOver(true)
@@ -125,9 +155,13 @@ export function SupervisorComposer() {
   const handleDragOver = (e: DragEvent) => {
     if (!canUpload()) return
     e.preventDefault()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "copy"
+    }
   }
 
   const handleDragLeave = (e: DragEvent) => {
+    if (nativeDropRegistered) return
     e.preventDefault()
     dragCounter--
     if (dragCounter <= 0) {
@@ -141,11 +175,12 @@ export function SupervisorComposer() {
     dragCounter = 0
     setDragOver(false)
     if (!canUpload()) return
+    if (nativeDropRegistered) return
 
-    const files = e.dataTransfer?.files
-    if (!files || files.length === 0) return
+    const files = extractDroppedFiles(e.dataTransfer)
+    if (files.length === 0) return
 
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       const path = (file as any).path
       if (path) {
         await uploadSingleFile(path)
@@ -170,22 +205,25 @@ export function SupervisorComposer() {
 
   // Upload a File/Blob by saving to temp then uploading
   const uploadBlobFile = async (file: File) => {
+    const fileName = file.name || "pasted-file"
     setUploading(true)
+    setUploadLabel(fileName)
     setUploadError("")
     try {
       const buffer = await file.arrayBuffer()
       const bytes = Array.from(new Uint8Array(buffer))
-      const fileName = file.name || "pasted-file"
       const tempResult = await commands.saveTempFile(fileName, bytes)
       if (tempResult.status === "error") {
         setUploadError(tempResult.error || "Failed to save temp file")
         setUploading(false)
+        setUploadLabel("")
         return
       }
       await uploadSingleFile(tempResult.data)
     } catch {
       setUploadError("Upload failed")
       setUploading(false)
+      setUploadLabel("")
     }
   }
 
@@ -214,6 +252,50 @@ export function SupervisorComposer() {
     setShowEmojiPicker(false)
   }
 
+  onMount(() => {
+    if (!platform.onWindowDragDrop) {
+      return
+    }
+
+    let dispose: (() => void) | undefined
+
+    void platform.onWindowDragDrop(async (event) => {
+      if (!canUpload()) return
+
+      if (event.type === "leave") {
+        setDragOver(false)
+        return
+      }
+
+      if (!isInsideCompose(event.position.x, event.position.y)) {
+        if (event.type !== "drop") {
+          setDragOver(false)
+        }
+        return
+      }
+
+      if (event.type === "enter" || event.type === "over") {
+        setDragOver(true)
+        return
+      }
+
+      if (event.type === "drop" && event.paths.length > 0) {
+        setDragOver(false)
+        await uploadFilePaths(event.paths)
+      }
+    }).then((unlisten) => {
+      nativeDropRegistered = true
+      dispose = unlisten
+    }).catch(() => {
+      nativeDropRegistered = false
+    })
+
+    onCleanup(() => {
+      nativeDropRegistered = false
+      dispose?.()
+    })
+  })
+
   return (
     <div
       class="bg-[var(--background-surface)] px-3 py-2"
@@ -226,6 +308,7 @@ export function SupervisorComposer() {
 
       {/* Unified compose container */}
       <div
+        ref={composeRef!}
         class="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-input)] transition-shadow"
         classList={{
           "ring-2 ring-[var(--interactive-primary)]": dragOver(),
@@ -257,6 +340,19 @@ export function SupervisorComposer() {
               textareaRef={textareaRef}
               onInsert={handleFormatInsert}
             />
+          </div>
+        </Show>
+
+        <Show when={uploading()}>
+          <div
+            class="flex items-center gap-2 px-3 py-2 border-t border-[var(--border-default)] bg-[var(--interactive-primary)]/5 text-[var(--interactive-primary)]"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin shrink-0" />
+            <span class="text-xs font-medium truncate">
+              Uploading {uploadLabel()}...
+            </span>
           </div>
         </Show>
 
@@ -319,11 +415,6 @@ export function SupervisorComposer() {
                 </div>
               </Show>
             </div>
-
-            {/* Upload spinner */}
-            <Show when={uploading()}>
-              <span class="text-[10px] text-[var(--text-tertiary)] ml-1">Uploading...</span>
-            </Show>
           </div>
 
           {/* Right side — send hint + options menu + send button */}

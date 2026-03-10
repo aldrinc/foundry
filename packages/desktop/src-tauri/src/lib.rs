@@ -38,7 +38,7 @@ impl Default for AppState {
 pub const SETTINGS_STORE: &str = "foundry.settings.dat";
 pub const SERVERS_KEY: &str = "servers";
 
-const TRAY_ID: &str = "foundry-tray";
+pub const TRAY_ID: &str = "foundry-tray";
 const TRAY_MENU_SHOW: &str = "tray-show";
 const TRAY_MENU_QUIT: &str = "tray-quit";
 
@@ -213,6 +213,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         server::set_desktop_settings,
         server::get_desktop_capabilities,
         server::set_unread_badge_count,
+        server::play_notification_sound,
         server::get_config,
         server::set_config,
         // Foundry supervisor commands

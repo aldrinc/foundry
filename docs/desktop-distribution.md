@@ -42,6 +42,14 @@ bun run bundle:desktop:macos
 
 Both commands call the Tauri build in `packages/desktop`, so the frontend is rebuilt before the native bundle is produced.
 
+Because updater artifacts are enabled, the bundle step now also needs a Tauri updater signing key. The root scripts automatically use:
+
+- `TAURI_SIGNING_PRIVATE_KEY`, if it is already set
+- `TAURI_SIGNING_PRIVATE_KEY_PATH`, if it is already set
+- `~/.foundry/keys/foundry-updater.key`, if present on the local machine
+
+If none of those are available, the bundle command will exit with a clear error before building. For passwordless keys, the wrapper also sets an explicit empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so non-interactive local builds do not hang or fail on a prompt.
+
 ## Artifact Locations
 
 macOS output is written under:
@@ -53,4 +61,4 @@ For internal team distribution, share the `.dmg`.
 
 ## Current Limitation
 
-These bundles are local unsigned artifacts. They are suitable for internal testing and distribution, but they are not yet code signed or notarized for friction-free public macOS installation.
+These bundles include signed updater metadata, but the app bundle itself is still unsigned. They are suitable for internal testing and distribution, but they are not yet code signed or notarized for friction-free public macOS installation.

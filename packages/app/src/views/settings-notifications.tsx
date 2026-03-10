@@ -3,20 +3,67 @@ import { useSettings } from "../context/settings"
 import { usePlatform } from "../context/platform"
 import { SettingToggle, SettingRow } from "./settings-general"
 
+type TestNotificationState = "idle" | "sending" | "success" | "error"
+
+const [testNotificationState, setTestNotificationState] = createSignal<TestNotificationState>("idle")
+let testNotificationResetTimer: ReturnType<typeof setTimeout> | undefined
+
+const clearTestNotificationResetTimer = () => {
+  if (testNotificationResetTimer) {
+    clearTimeout(testNotificationResetTimer)
+    testNotificationResetTimer = undefined
+  }
+}
+
+const scheduleTestNotificationReset = () => {
+  clearTestNotificationResetTimer()
+  testNotificationResetTimer = setTimeout(() => {
+    setTestNotificationState("idle")
+    testNotificationResetTimer = undefined
+  }, 2500)
+}
+
 export function SettingsNotifications() {
   const { store, setSetting } = useSettings()
   const platform = usePlatform()
-  const [testStatus, setTestStatus] = createSignal("")
 
   const handleTestNotification = async () => {
-    setTestStatus("Sending...")
+    clearTestNotificationResetTimer()
+    setTestNotificationState("sending")
     try {
-      await platform.notify("Test Notification", "If you see this, notifications are working!")
-      setTestStatus("Sent! Check your OS notifications.")
-    } catch (err) {
-      setTestStatus(`Error: ${err}`)
+      await platform.notify("Test Notification", "If you see this, notifications are working!", {
+        silent: store.muteAllSounds || !store.notifSound,
+        showWhenFocused: true,
+      })
+      setTestNotificationState("success")
+    } catch {
+      setTestNotificationState("error")
     }
-    setTimeout(() => setTestStatus(""), 5000)
+    scheduleTestNotificationReset()
+  }
+
+  const testButtonLabel = () => {
+    switch (testNotificationState()) {
+      case "sending":
+        return "Sending..."
+      case "success":
+        return "Sent"
+      case "error":
+        return "Failed"
+      default:
+        return "Send test"
+    }
+  }
+
+  const testButtonClass = () => {
+    switch (testNotificationState()) {
+      case "success":
+        return "bg-[var(--status-success)] text-white"
+      case "error":
+        return "bg-[var(--status-error)] text-white"
+      default:
+        return "bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] hover:bg-[var(--interactive-primary-hover)]"
+    }
   }
 
   return (
@@ -92,17 +139,24 @@ export function SettingsNotifications() {
       <hr class="border-[var(--border-default)]" />
 
       <SettingRow label="Test notifications" description="Send a test notification to verify your setup">
-        <div class="flex items-center gap-2">
-          <button
-            class="text-xs bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] px-3 py-1.5 rounded-[var(--radius-sm)] hover:bg-[var(--interactive-primary-hover)] transition-colors"
-            onClick={handleTestNotification}
-          >
-            Send test
-          </button>
-          {testStatus() && (
-            <span class="text-[10px] text-[var(--text-tertiary)]">{testStatus()}</span>
+        <button
+          class={`inline-flex min-w-[7.5rem] items-center justify-center gap-1.5 rounded-[var(--radius-sm)] px-3 py-1.5 text-xs transition-colors ${testButtonClass()}`}
+          disabled={testNotificationState() === "sending"}
+          onClick={handleTestNotification}
+        >
+          <span>{testButtonLabel()}</span>
+          {testNotificationState() === "success" && (
+            <svg aria-hidden="true" class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <path d="M3.5 8.5 6.5 11.5 12.5 4.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
           )}
-        </div>
+          {testNotificationState() === "error" && (
+            <svg aria-hidden="true" class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
+              <path d="M4.5 4.5 11.5 11.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+              <path d="M11.5 4.5 4.5 11.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+          )}
+        </button>
       </SettingRow>
     </div>
   )

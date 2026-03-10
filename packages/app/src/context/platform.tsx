@@ -25,6 +25,7 @@ export interface Platform {
     title?: string
     multiple?: boolean
   }): Promise<string | string[] | null>
+  onWindowDragDrop?(listener: (event: WindowDragDropEvent) => void | Promise<void>): Promise<() => void>
 
   // Notifications
   notify(title: string, description?: string, options?: NotifyOptions): Promise<void>
@@ -53,7 +54,32 @@ export interface AsyncStorageWithFlush {
 export interface NotifyOptions {
   href?: string
   silent?: boolean
+  showWhenFocused?: boolean
 }
+
+export interface WindowDragDropPosition {
+  x: number
+  y: number
+}
+
+export type WindowDragDropEvent =
+  | {
+      type: "enter"
+      paths: string[]
+      position: WindowDragDropPosition
+    }
+  | {
+      type: "over"
+      position: WindowDragDropPosition
+    }
+  | {
+      type: "drop"
+      paths: string[]
+      position: WindowDragDropPosition
+    }
+  | {
+      type: "leave"
+    }
 
 const PlatformContext = createContext<Platform>()
 

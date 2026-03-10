@@ -96,10 +96,10 @@ export function SettingsApp() {
 
       <SettingToggle
         label="Beta updates"
-        description={caps()?.updater === false ? "Not yet available — updater not configured" : "Opt in to receive beta releases"}
+        description={caps()?.updater === false ? "Not yet available — updater not configured" : "Reserved until a separate beta update feed is configured"}
         checked={store.betaUpdates}
         onChange={(v) => setSetting("betaUpdates", v)}
-        disabled={caps() ? !caps()!.updater : false}
+        disabled={true}
       />
 
       <hr class="border-[var(--border-default)]" />
