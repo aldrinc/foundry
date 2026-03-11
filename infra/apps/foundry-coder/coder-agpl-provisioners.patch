@@ -25,7 +25,7 @@ index 3d9347b..70c9d31 100644
 @@ -36,6 +36,33 @@ import (
  	"github.com/coder/coder/v2/testutil"
  )
- 
+
 +func TestProvisionerDaemonServeWithoutPremiumLicense(t *testing.T) {
 +	t.Parallel()
 +
@@ -63,7 +63,7 @@ index daca662..fcd6392 100644
 @@ -135,6 +135,29 @@ func TestProvisionerKeys(t *testing.T) {
  	require.ErrorContains(t, err, "reserved")
  }
- 
+
 +func TestProvisionerKeysWithoutPremiumLicense(t *testing.T) {
 +	t.Parallel()
 +
@@ -89,4 +89,3 @@ index daca662..fcd6392 100644
 +
  func TestGetProvisionerKey(t *testing.T) {
  	t.Parallel()
- 
