@@ -55,6 +55,7 @@ set -euo pipefail
 
 mkdir -p "${DEST}" "${OVERRIDES_DEST}"
 rm -rf "${DEST}/.git"
+git init -q "${DEST}"
 chown -R 1000:1000 "${DEST}"
 chown -R root:root "${OVERRIDES_DEST}"
 chmod +x "${OVERRIDES_DEST}/dev-live-entrypoint.sh"

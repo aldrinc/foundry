@@ -61,6 +61,10 @@ run_as_zulip() {
   su -s /bin/bash -c "$1" zulip
 }
 
+ensure_git_safe_directory() {
+  run_as_zulip "git config --global --add safe.directory '${REPO_ROOT}'"
+}
+
 ensure_repo_permissions() {
   mkdir -p "${REPO_ROOT}/var/log"
   chown -R zulip:zulip "${REPO_ROOT}"
@@ -111,6 +115,7 @@ ensure_provisioned() {
 seed_source_if_needed
 apply_override_files
 ensure_repo_permissions
+ensure_git_safe_directory
 
 log "Starting local service dependencies for run-dev."
 ensure_provisioned
