@@ -30,8 +30,12 @@ function writeJson(path, value) {
   writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
 }
 
+function normalizeText(text) {
+  return text.replace(/\r\n/g, "\n")
+}
+
 function readCargoTomlVersion() {
-  const text = readFileSync(files.cargoToml, "utf8")
+  const text = normalizeText(readFileSync(files.cargoToml, "utf8"))
   const match = text.match(/^version = "([^"]+)"$/m)
   if (!match) {
     throw new Error(`Could not find package version in ${files.cargoToml}`)
@@ -40,7 +44,7 @@ function readCargoTomlVersion() {
 }
 
 function writeCargoTomlVersion(version) {
-  const text = readFileSync(files.cargoToml, "utf8")
+  const text = normalizeText(readFileSync(files.cargoToml, "utf8"))
   const next = text.replace(/^version = "([^"]+)"$/m, `version = "${version}"`)
   if (next === text) {
     throw new Error(`Could not update package version in ${files.cargoToml}`)
@@ -49,7 +53,7 @@ function writeCargoTomlVersion(version) {
 }
 
 function readCargoLockVersion() {
-  const text = readFileSync(files.cargoLock, "utf8")
+  const text = normalizeText(readFileSync(files.cargoLock, "utf8"))
   const match = text.match(/\[\[package\]\]\nname = "foundry-desktop"\nversion = "([^"]+)"/)
   if (!match) {
     throw new Error(`Could not find foundry-desktop version in ${files.cargoLock}`)
@@ -58,7 +62,7 @@ function readCargoLockVersion() {
 }
 
 function writeCargoLockVersion(version) {
-  const text = readFileSync(files.cargoLock, "utf8")
+  const text = normalizeText(readFileSync(files.cargoLock, "utf8"))
   const next = text.replace(
     /(\[\[package\]\]\nname = "foundry-desktop"\nversion = ")([^"]+)(")/,
     `$1${version}$3`,
