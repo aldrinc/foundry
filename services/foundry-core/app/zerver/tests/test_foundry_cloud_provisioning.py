@@ -4,11 +4,32 @@ import json
 from unittest.mock import patch
 
 from zerver.lib.test_classes import ZulipTestCase
+from zerver.lib.onboarding import InitialDirectMessageIDs
 from zerver.models import UserProfile
 from zerver.models.realms import get_realm
 
 
 class FoundryCloudProvisioningTest(ZulipTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        onboarding_stream_patcher = patch("zerver.lib.onboarding.send_initial_realm_messages")
+        onboarding_direct_patcher = patch(
+            "zerver.lib.onboarding.send_initial_direct_messages_to_user",
+            return_value=InitialDirectMessageIDs(
+                welcome_bot_intro_message_id=0,
+                welcome_bot_custom_message_id=None,
+            ),
+        )
+        notify_new_user_patcher = patch("zerver.actions.create_user.notify_new_user")
+
+        onboarding_stream_patcher.start()
+        onboarding_direct_patcher.start()
+        notify_new_user_patcher.start()
+
+        self.addCleanup(onboarding_stream_patcher.stop)
+        self.addCleanup(onboarding_direct_patcher.stop)
+        self.addCleanup(notify_new_user_patcher.stop)
+
     @patch("zerver.views.foundry_cloud._bootstrap_secret", return_value="core-secret")
     def test_provision_tenant_creates_realm_and_owner(self, mock_secret: object) -> None:
         result = self.client_post(
@@ -131,8 +152,7 @@ class FoundryCloudProvisioningTest(ZulipTestCase):
             content_type="application/json",
             headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
         )
-        self.assert_json_success(result)
-        payload = self.json_response(result)
+        payload = self.assert_json_success(result)
 
         root_realm.refresh_from_db()
         self.assertEqual(payload["realm"]["id"], root_realm.id)
