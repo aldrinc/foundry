@@ -59,7 +59,7 @@ chown -R root:root "${OVERRIDES_DEST}"
 chmod +x "${OVERRIDES_DEST}/dev-live-entrypoint.sh"
 
 cd /opt/meridian/apps/zulip-dev
-docker compose --profile dev-live up -d zulip-dev-live
+docker compose --profile dev-live up -d --force-recreate zulip-dev-live
 
 for attempt in $(seq 1 60); do
   if curl -fsS http://127.0.0.1:18084/health >/dev/null; then
