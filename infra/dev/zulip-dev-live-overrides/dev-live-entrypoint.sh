@@ -61,6 +61,31 @@ run_as_zulip() {
   su -s /bin/bash -c "$1" zulip
 }
 
+ensure_repo_permissions() {
+  mkdir -p "${REPO_ROOT}/var/log"
+  chown -R zulip:zulip "${REPO_ROOT}"
+}
+
+generated_assets_present() {
+  local required_paths=(
+    ".venv/bin/python3"
+    "web/generated/pygments_data.json"
+    "web/generated/supported_browser_regex.ts"
+    "web/generated/timezones.json"
+    "static/generated/emoji/emoji_codes.json"
+    "var/log"
+  )
+
+  local relative_path
+  for relative_path in "${required_paths[@]}"; do
+    if [ ! -e "${REPO_ROOT}/${relative_path}" ]; then
+      return 1
+    fi
+  done
+
+  return 0
+}
+
 start_runtime_dependencies() {
   start_service postgresql "postgres" "pg_ctlcluster 16 main start"
   start_service redis-server "redis-server" "redis-server --daemonize yes --bind 127.0.0.1 --port 6379"
@@ -70,7 +95,8 @@ start_runtime_dependencies() {
 
 ensure_provisioned() {
   local sentinel="${REPO_ROOT}/.dev-live-provisioned"
-  if [ -f "${sentinel}" ] && [ -x "${REPO_ROOT}/.venv/bin/python3" ]; then
+  ensure_repo_permissions
+  if [ -f "${sentinel}" ] && generated_assets_present; then
     return
   fi
 
@@ -84,6 +110,7 @@ ensure_provisioned() {
 
 seed_source_if_needed
 apply_override_files
+ensure_repo_permissions
 
 log "Starting local service dependencies for run-dev."
 ensure_provisioned
