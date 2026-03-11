@@ -282,9 +282,6 @@ pub fn set_unread_badge_count(app: AppHandle, count: Option<i64>) -> Result<(), 
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "Main window not available".to_string())?;
-    let badge_label = count
-        .filter(|value| *value > 0)
-        .map(|value| value.to_string());
     let tooltip = match count.filter(|value| *value > 0) {
         Some(value) => format!("Foundry ({value} unread)"),
         None => "Foundry".to_string(),
@@ -302,8 +299,13 @@ pub fn set_unread_badge_count(app: AppHandle, count: Option<i64>) -> Result<(), 
         }
 
         #[cfg(target_os = "macos")]
-        if let Err(error) = window.set_badge_label(badge_label) {
-            tracing::warn!(?error, "Failed to update badge label");
+        {
+            let badge_label = count
+                .filter(|value| *value > 0)
+                .map(|value| value.to_string());
+            if let Err(error) = window.set_badge_label(badge_label) {
+                tracing::warn!(?error, "Failed to update badge label");
+            }
         }
     })
     .map_err(|e| format!("Failed to schedule unread badge update: {}", e))
@@ -312,10 +314,10 @@ pub fn set_unread_badge_count(app: AppHandle, count: Option<i64>) -> Result<(), 
 /// Play the bundled desktop notification sound from the native layer.
 #[tauri::command]
 #[specta::specta]
-pub fn play_notification_sound(app: AppHandle) -> Result<(), String> {
+pub fn play_notification_sound(_app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let sound_path = app
+        let sound_path = _app
             .path()
             .resource_dir()
             .map_err(|e| format!("Failed to resolve resource directory: {}", e))?
