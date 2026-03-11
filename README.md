@@ -30,6 +30,13 @@ The screenshots above were captured from the live demo dev stack and show the tw
 - `Foundry Core` is the collaboration surface where teams coordinate work, review progress, and keep delivery visible.
 - `Foundry Desktop` packages the product as a native app with local integrations and release distribution.
 
+## Start Here
+
+- Want desktop builds? Head to [GitHub Releases](https://github.com/aldrinc/foundry/releases).
+- Want local setup? Start with [Quickstart](#quickstart).
+- Want the repo tour? Use [What Ships In This Repo](#what-ships-in-this-repo).
+- Want system context? Read [docs/README.md](docs/README.md) and [docs/architecture/README.md](docs/architecture/README.md).
+
 ## What Ships In This Repo
 
 | Path | Purpose |
