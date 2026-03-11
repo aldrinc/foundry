@@ -73,6 +73,10 @@ def _orchestrator_url() -> str:
     return _first_env("FOUNDRY_CODER_ORCHESTRATOR_URL").rstrip("/")
 
 
+def _orchestrator_configured() -> bool:
+    return bool(_orchestrator_url())
+
+
 def _orchestrator_token() -> str:
     return _first_env("FOUNDRY_CODER_ORCHESTRATOR_TOKEN")
 
@@ -139,6 +143,48 @@ def _resolve_repo_url(repo_id: str, explicit_repo_url: str | None) -> str:
 
 def _default_repo_id() -> str:
     return _first_env("FOUNDRY_DEFAULT_REPO_ID")
+
+
+def _empty_sidebar_payload(topic_scope_id: str) -> dict[str, Any]:
+    return {
+        "topic_scope_id": topic_scope_id,
+        "task_count": 0,
+        "counts": {},
+        "tasks": [],
+    }
+
+
+def _empty_provider_catalog_payload() -> dict[str, Any]:
+    return {
+        "providers": [],
+        "allowed_providers": [],
+        "default_provider": "",
+    }
+
+
+def _empty_integration_catalog_payload() -> dict[str, Any]:
+    return {
+        "integrations": [],
+        "default_policy": {
+            "enabled_integrations": [],
+            "auto_topic_transcript": True,
+            "auto_repo_context": True,
+            "allow_external_integrations": True,
+        },
+    }
+
+
+def _empty_integration_list_payload() -> dict[str, Any]:
+    return {
+        "integrations": [],
+        "policy": {
+            "enabled_integrations": [],
+            "auto_topic_transcript": True,
+            "auto_repo_context": True,
+            "allow_external_integrations": True,
+        },
+        "stored_policy": None,
+    }
 
 
 def _normalize_provider_name(value: str) -> str:
@@ -464,6 +510,16 @@ def foundry_topic_sidebar(
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "topic_scope_id": scoped,
+                "sidebar": _empty_sidebar_payload(scoped),
+                "raw": {},
+            },
+        )
     encoded_scope = quote(scoped, safe="")
     response = _orchestrator_request(
         "GET",
@@ -510,6 +566,18 @@ def foundry_topic_supervisor_session(
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "topic_scope_id": scoped,
+                "session": None,
+                "events": [],
+                "next_after_id": int(after_id),
+                "raw": {},
+            },
+        )
     encoded_scope = quote(scoped, safe="")
     response = _orchestrator_request(
         "GET",
@@ -684,6 +752,16 @@ def foundry_topic_plan_revisions(
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "topic_scope_id": scoped,
+                "plan_revisions": [],
+                "raw": {},
+            },
+        )
     encoded_scope = quote(scoped, safe="")
     response = _orchestrator_request(
         "GET",
@@ -709,6 +787,16 @@ def foundry_topic_plan_current(
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "topic_scope_id": scoped,
+                "plan_revision": None,
+                "raw": {},
+            },
+        )
     encoded_scope = quote(scoped, safe="")
     response = _orchestrator_request("GET", f"/api/topics/{encoded_scope}/plan/current")
     return json_success(
@@ -900,6 +988,18 @@ def foundry_provider_catalog(
     user_profile: UserProfile,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
+    if not _orchestrator_configured():
+        empty = _empty_provider_catalog_payload()
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "providers": empty["providers"],
+                "allowed_providers": empty["allowed_providers"],
+                "default_provider": empty["default_provider"],
+                "raw": empty,
+            },
+        )
     response = _orchestrator_request("GET", "/api/providers")
     return json_success(
         request,
@@ -918,6 +1018,16 @@ def foundry_provider_auth_list(
     user_profile: UserProfile,
 ) -> HttpResponse:
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "user_id": actor_email,
+                "providers": [],
+                "raw": {"providers": []},
+            },
+        )
     encoded_user = quote(actor_email, safe="")
     response = _orchestrator_request("GET", f"/api/users/{encoded_user}/providers/auth")
     return json_success(
@@ -1125,6 +1235,17 @@ def foundry_integration_catalog(
     user_profile: UserProfile,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
+    if not _orchestrator_configured():
+        empty = _empty_integration_catalog_payload()
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "integrations": empty["integrations"],
+                "default_policy": empty["default_policy"],
+                "raw": empty,
+            },
+        )
     response = _orchestrator_request("GET", "/api/integrations")
     return json_success(
         request,
@@ -1142,6 +1263,19 @@ def foundry_integration_list(
     user_profile: UserProfile,
 ) -> HttpResponse:
     actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
+    if not _orchestrator_configured():
+        empty = _empty_integration_list_payload()
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "user_id": actor_email,
+                "integrations": empty["integrations"],
+                "policy": empty["policy"],
+                "stored_policy": empty["stored_policy"],
+                "raw": empty,
+            },
+        )
     encoded_user = quote(actor_email, safe="")
     response = _orchestrator_request("GET", f"/api/users/{encoded_user}/integrations")
     return json_success(
@@ -1498,6 +1632,17 @@ def foundry_supervisor_context(
     user_profile: UserProfile,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "soul": None,
+                "memory_tail": [],
+                "paths": {},
+                "raw": {},
+            },
+        )
     response = _orchestrator_request("GET", "/api/supervisor/context")
     return json_success(
         request,
