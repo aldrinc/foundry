@@ -32,6 +32,28 @@ export function resolveMessageUrl(url: string, serverUrl?: string): string {
   }
 }
 
+export function getUserUploadDownloadUrl(url: string, serverUrl?: string): string | undefined {
+  const resolved = resolveMessageUrl(url, serverUrl)
+  if (!resolved) return undefined
+
+  try {
+    const parsed = new URL(resolved)
+
+    if (serverUrl) {
+      const realm = new URL(serverUrl)
+      if (parsed.origin !== realm.origin) return undefined
+    }
+
+    if (!parsed.pathname.startsWith("/user_uploads/")) return undefined
+    if (parsed.pathname.startsWith("/user_uploads/download/")) return parsed.toString()
+
+    parsed.pathname = `/user_uploads/download/${parsed.pathname.slice("/user_uploads/".length)}`
+    return parsed.toString()
+  } catch {
+    return undefined
+  }
+}
+
 export function sanitizeMessageHtml(html: string, serverUrl?: string): string {
   const sanitized = DOMPurify.sanitize(html, {
     ALLOWED_TAGS,

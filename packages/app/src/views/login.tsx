@@ -243,6 +243,10 @@ export function LoginView(props: {
                   onKeyDown={(e) => e.key === "Enter" && handleConnect()}
                   autofocus
                 />
+                <p class="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Use your tenant organization URL here. Configure the Foundry assistant backend URL
+                  separately after login in Settings &gt; Servers.
+                </p>
               </div>
 
               <Show when={error()}>

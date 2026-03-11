@@ -15,6 +15,7 @@ const AUTH_CALLBACK_EVENT: &str = "deep-link://new-url";
 const AUTH_WINDOW_LABEL_PREFIX: &str = "sso-auth-";
 const FOUNDRY_SERVER_URL_KEY: &str = "foundry_server_url";
 const DEFAULT_FOUNDRY_SERVER_URL: &str = "http://127.0.0.1:8090";
+const FOUNDRY_CLOUD_LOGIN_TITLE: &str = "Foundry Cloud Login";
 const MAX_PRIORITY_CANDIDATES: usize = 8;
 const MAX_PRIORITY_MESSAGES: u32 = 8;
 const MAX_DISCOVERY_MESSAGES: u32 = 80;
@@ -36,6 +37,26 @@ fn next_auth_window_label() -> String {
         "{AUTH_WINDOW_LABEL_PREFIX}{}",
         AUTH_WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed)
     )
+}
+
+fn looks_like_foundry_cloud_login_html(body: &str) -> bool {
+    body.contains(FOUNDRY_CLOUD_LOGIN_TITLE)
+}
+
+async fn explain_server_settings_error(client: &ZulipClient, error: String) -> String {
+    if !error.contains("404") {
+        return error;
+    }
+
+    match client.get_unauth("/login").send().await {
+        Ok(response) if response.status().is_success() => match response.text().await {
+            Ok(body) if looks_like_foundry_cloud_login_html(&body) => {
+                "This URL is a Foundry server control plane, not a tenant organization URL. Use your organization URL here, then configure the Assistant backend URL separately in Settings > Servers.".to_string()
+            }
+            _ => error,
+        },
+        _ => error,
+    }
 }
 
 fn is_sso_callback_url(url: &Url) -> bool {
@@ -736,7 +757,10 @@ pub async fn get_server_settings(
 ) -> Result<ServerSettings, String> {
     let settings = load_desktop_settings(&app)?;
     let client = ZulipClient::with_desktop_settings(&url, "", "", settings)?;
-    client.server_settings().await
+    match client.server_settings().await {
+        Ok(server_settings) => Ok(server_settings),
+        Err(error) => Err(explain_server_settings_error(&client, error).await),
+    }
 }
 
 /// Authenticate with a Zulip server and start the event queue
@@ -1279,7 +1303,8 @@ fn get_current_user_id(state: &AppState, org_id: &str) -> Result<Option<u64>, St
 #[cfg(test)]
 mod tests {
     use super::{
-        infer_priority_status, is_sso_callback_url, strip_html, truncate_text,
+        infer_priority_status, is_sso_callback_url, looks_like_foundry_cloud_login_html,
+        strip_html, truncate_text,
         InboxPriorityCandidate, PriorityMessageContext,
     };
     use tauri::Url;
@@ -1300,6 +1325,16 @@ mod tests {
     fn ignores_regular_https_navigation() {
         let url = Url::parse("https://accounts.google.com/o/oauth2/auth").unwrap();
         assert!(!is_sso_callback_url(&url));
+    }
+
+    #[test]
+    fn detects_foundry_cloud_login_markup() {
+        assert!(looks_like_foundry_cloud_login_html(
+            "<html><head><title>Foundry Cloud Login</title></head></html>"
+        ));
+        assert!(!looks_like_foundry_cloud_login_html(
+            "<html><head><title>Log in | Zulip Dev</title></head></html>"
+        ));
     }
 
     #[test]

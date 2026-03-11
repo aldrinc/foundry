@@ -329,7 +329,7 @@ export function SettingsServers(props: {
         <div class="p-3 bg-[var(--background-base)] rounded-[var(--radius-md)] border border-[var(--border-default)] space-y-3">
           <Show when={addStep() === "url"}>
             <div>
-              <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Server URL</label>
+              <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Organization URL</label>
               <input
                 type="text"
                 class="w-full text-xs bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
@@ -338,6 +338,9 @@ export function SettingsServers(props: {
                 onInput={(e) => setNewUrl(e.currentTarget.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCheckServer()}
               />
+              <p class="mt-2 text-[10px] text-[var(--text-tertiary)]">
+                Use your Zulip tenant URL here. The Assistant backend URL above is configured separately.
+              </p>
             </div>
             <button
               class="px-3 py-1.5 text-xs rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 disabled:opacity-50"

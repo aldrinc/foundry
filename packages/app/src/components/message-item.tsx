@@ -6,6 +6,7 @@ import { usePlatform } from "../context/platform"
 import { commands } from "@foundry/desktop/bindings"
 import { MessageActions } from "./message-actions"
 import {
+  getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
   hydrateAuthenticatedMessageImages,
   resolveMessageUrl,
@@ -113,7 +114,13 @@ export function MessageItem(props: {
 
     event.preventDefault()
     event.stopPropagation()
-    platform.openLink(resolveMessageUrl(href, serverUrl()))
+
+    const resolvedHref = resolveMessageUrl(href, serverUrl())
+    const downloadHref = shouldOpenUserUploadAsDownload(link)
+      ? getUserUploadDownloadUrl(href, serverUrl())
+      : undefined
+
+    platform.openLink(downloadHref || resolvedHref)
   }
 
   createEffect(() => {
@@ -286,6 +293,12 @@ export function MessageItem(props: {
       />
     </div>
   )
+}
+
+function shouldOpenUserUploadAsDownload(link: HTMLAnchorElement): boolean {
+  if (link.classList.contains("foundry-image-gallery-open")) return false
+  if (link.classList.contains("foundry-image-lightbox-link")) return false
+  return !link.querySelector("img, video, audio")
 }
 
 /** Group identical reactions and count them, tracking user IDs */

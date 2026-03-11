@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { parseHTML } from "linkedom"
 import {
   findImageCarouselRanges,
+  getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
   normalizeGalleryIndex,
   resolveAuthenticatedMediaUrl,
@@ -80,6 +81,30 @@ describe("resolveMessageUrl", () => {
 
   test("leaves relative urls alone when the realm url is unavailable", () => {
     expect(resolveMessageUrl("/user_uploads/1/file.png")).toBe("/user_uploads/1/file.png")
+  })
+})
+
+describe("getUserUploadDownloadUrl", () => {
+  test("rewrites same-origin upload links to the download endpoint", () => {
+    expect(
+      getUserUploadDownloadUrl("/user_uploads/1/path/stage-3-agent-architecture-spec.md", "https://chat.example.com"),
+    ).toBe("https://chat.example.com/user_uploads/download/1/path/stage-3-agent-architecture-spec.md")
+  })
+
+  test("preserves upload links that already target the download endpoint", () => {
+    expect(
+      getUserUploadDownloadUrl("https://chat.example.com/user_uploads/download/1/path/file.md", "https://chat.example.com"),
+    ).toBe("https://chat.example.com/user_uploads/download/1/path/file.md")
+  })
+
+  test("ignores upload links on a different origin", () => {
+    expect(
+      getUserUploadDownloadUrl("https://files.example.com/user_uploads/1/path/file.md", "https://chat.example.com"),
+    ).toBeUndefined()
+  })
+
+  test("ignores non-upload links", () => {
+    expect(getUserUploadDownloadUrl("/help", "https://chat.example.com")).toBeUndefined()
   })
 })
 
