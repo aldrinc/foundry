@@ -1,26 +1,50 @@
 # Foundry
 
-Foundry is a source-available desktop client and control-plane stack for GitHub-backed coding workflows. This repository includes the cross-platform desktop app, shared UI packages, the Foundry control-plane service, and the imported collaboration-core snapshot that backs the product.
+Foundry is a source-available desktop client and control-plane stack for GitHub-backed coding workflows. It brings together org provisioning, provider auth, runtime policy, workspace orchestration, and a collaboration-native product surface for teams shipping software with AI in the loop.
+
+This repository includes the desktop app, shared UI packages, the Foundry control-plane service, the collaboration-core snapshot that powers the tenant app, and the infra needed to run the stack.
+
+> Foundry-authored code is source-available under Elastic License 2.0. It is not an OSI open-source license. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
+
+![Foundry Cloud organization dashboard](docs/images/readme/cloud-org-dashboard.png)
 
 ## Why Foundry
 
-- Cross-platform desktop client with native integrations, packaging, and OTA update support
-- GitHub-backed workflow model for org setup, repositories, runtime coordination, and workspace automation
-- Shared application and UI packages for shipping the same product surface across desktop targets
-- Self-hosting path for teams that want to run Foundry inside their own environment
+- One place to configure organizations, runtime defaults, workspace policy, and provider access.
+- A desktop client with native packaging, updater support, and local system integrations.
+- Collaboration-first execution, where work stays visible in shared topics instead of disappearing into isolated terminals.
+- A self-hosting path for teams that want the full product inside their own environment.
 
-## Project Status
+## Product Snapshot
 
-Foundry is in an early public release phase.
+![Foundry collaboration workspace](docs/images/readme/tenant-collaboration.png)
 
-- Desktop release artifacts are published through [GitHub Releases](https://github.com/aldrinc/foundry/releases).
-- The desktop updater path is wired through signed Tauri updater metadata.
-- The server and infra layers are usable, but they are still being standardized for a cleaner public self-hosting experience.
-- Foundry-authored code is source-available under Elastic License 2.0, not an OSI open-source license. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
+The screenshots above were captured from the live demo dev stack and show the two halves of the product:
+
+- Foundry Cloud for org setup, runtime policy, and workspace control.
+- The tenant app for day-to-day collaboration, delegated work, and supervisor-driven execution.
+
+## Architecture At A Glance
+
+- `Foundry Cloud` is the control plane for organizations, memberships, provider auth, runtime defaults, and workspace policy.
+- `Foundry Core` is the collaboration surface where teams coordinate work, review progress, and keep delivery visible.
+- `Foundry Desktop` packages the product as a native app with local integrations and release distribution.
+
+## What Ships In This Repo
+
+| Path | Purpose |
+| --- | --- |
+| `packages/app` | Shared SolidJS application code used across the product surface |
+| `packages/desktop` | Tauri desktop shell, native bridge, packaging, and updater integration |
+| `packages/ui` | Shared UI primitives and design building blocks |
+| `services/foundry-server` | Control-plane service for orgs, auth, GitHub, runtime, and workspace domains |
+| `services/foundry-core` | Imported collaboration-core snapshot used by the tenant app |
+| `infra` | Dev deploy scripts, coder integration, and infrastructure templates |
+| `docs` | Packaging, architecture, FAQ, and launch guidance |
 
 ## Get Foundry
 
-Download the latest desktop builds from [GitHub Releases](https://github.com/aldrinc/foundry/releases).
+Desktop builds are published through [GitHub Releases](https://github.com/aldrinc/foundry/releases).
 
 Current release targets:
 
@@ -28,17 +52,9 @@ Current release targets:
 - Windows x64
 - Linux `.deb` and `.rpm`
 
-Build and updater details:
-
-- [docs/desktop-distribution.md](docs/desktop-distribution.md)
-- [docs/desktop-ota-updates.md](docs/desktop-ota-updates.md)
-- [docs/faq.md](docs/faq.md)
-- [docs/README.md](docs/README.md)
-- [CHANGELOG.md](CHANGELOG.md)
-
 ## Quickstart
 
-From the repo root:
+From the repository root:
 
 ```bash
 bun install
@@ -48,7 +64,7 @@ bun run build
 bun run bundle:desktop
 ```
 
-Additional useful commands:
+Useful follow-up commands:
 
 ```bash
 bun run lint:eslint
@@ -65,31 +81,34 @@ git config core.hooksPath .githooks
 pre-commit install --hook-type pre-commit
 ```
 
-## Repository Guide
-
-- `packages/app`: shared SolidJS application code
-- `packages/desktop`: Tauri shell, native bridge, desktop packaging, and updater integration
-- `packages/ui`: shared UI primitives
-- `services/foundry-server`: Foundry control-plane service for orgs, auth, GitHub, runtime, and workspace domains
-- `services/foundry-core`: imported collaboration-core snapshot under `app/`
-- `docs`: packaging, release, and repository guidance
-
-Component-specific setup notes:
+## Documentation
 
 - [docs/README.md](docs/README.md)
+- [docs/faq.md](docs/faq.md)
+- [docs/desktop-distribution.md](docs/desktop-distribution.md)
+- [docs/desktop-ota-updates.md](docs/desktop-ota-updates.md)
 - [services/foundry-server/README.md](services/foundry-server/README.md)
 - [services/foundry-core/README.md](services/foundry-core/README.md)
 
-## Quality and Release Safety
+## Quality And Release Safety
 
-Foundry uses layered repo hygiene checks before code ships:
+Foundry uses layered checks before code ships:
 
 - `pre-commit` for secrets, file hygiene, typos, Solid linting, and Rust formatting
-- `.githooks/pre-push` for the heavier secret, TypeScript, and Rust checks
+- `.githooks/pre-push` for heavier TypeScript, Rust, and secret checks
 - GitHub Actions CI in [.github/workflows/ci.yml](.github/workflows/ci.yml)
 - Signed desktop release publishing in [.github/workflows/release-desktop.yml](.github/workflows/release-desktop.yml)
 
 The secret scan lives in [scripts/check-secrets.sh](scripts/check-secrets.sh), with additional configuration in [.gitleaks.toml](.gitleaks.toml).
+
+## Project Status
+
+Foundry is in an early public release phase.
+
+- Desktop release artifacts are published through GitHub Releases.
+- The desktop updater path is wired through signed Tauri updater metadata.
+- The server and infra layers are usable, but the public self-hosting path is still being standardized.
+- The remaining launch work is tracked in [docs/public-launch-checklist.md](docs/public-launch-checklist.md).
 
 ## Community
 
@@ -97,10 +116,6 @@ The secret scan lives in [scripts/check-secrets.sh](scripts/check-secrets.sh), w
 - [SUPPORT.md](SUPPORT.md)
 - [SECURITY.md](SECURITY.md)
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-
-## Public Launch Checklist
-
-The remaining launch work is tracked in [docs/public-launch-checklist.md](docs/public-launch-checklist.md).
 
 ## License
 

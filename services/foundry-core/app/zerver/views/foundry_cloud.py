@@ -49,7 +49,7 @@ def _role_from_value(value: str) -> int:
     if normalized == "owner":
         return UserProfile.ROLE_REALM_OWNER
     if normalized in {"admin", "runtime_admin", "billing_admin"}:
-        return UserProfile.ROLE_REALM_ADMIN
+        return UserProfile.ROLE_REALM_ADMINISTRATOR
     return UserProfile.ROLE_MEMBER
 
 

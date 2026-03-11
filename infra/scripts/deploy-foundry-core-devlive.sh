@@ -22,6 +22,7 @@ fi
 
 HOST="$1"
 CORE_PUBLIC_URL="${2:-}"
+FOUNDRY_CLOUD_BOOTSTRAP_SECRET="${FOUNDRY_CLOUD_BOOTSTRAP_SECRET:-}"
 if [[ -z "${CORE_PUBLIC_URL}" ]]; then
   if ! CORE_PUBLIC_URL="$(derive_core_url "${HOST}")"; then
     echo "core-public-url is required when host is not an IPv4 address" >&2
@@ -50,7 +51,7 @@ rsync -az --delete \
   "${OVERRIDES_SRC}" "root@${HOST}:${OVERRIDES_DEST}/"
 
 ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-  "DEST='${DEST}' OVERRIDES_DEST='${OVERRIDES_DEST}' CORE_PUBLIC_URL='${CORE_PUBLIC_URL}' bash -s" <<'EOF'
+  "DEST='${DEST}' OVERRIDES_DEST='${OVERRIDES_DEST}' CORE_PUBLIC_URL='${CORE_PUBLIC_URL}' FOUNDRY_CLOUD_BOOTSTRAP_SECRET='${FOUNDRY_CLOUD_BOOTSTRAP_SECRET}' bash -s" <<'EOF'
 set -euo pipefail
 
 mkdir -p "${DEST}" "${OVERRIDES_DEST}"
@@ -59,6 +60,68 @@ git init -q "${DEST}"
 chown -R 1000:1000 "${DEST}"
 chown -R root:root "${OVERRIDES_DEST}"
 chmod +x "${OVERRIDES_DEST}/dev-live-entrypoint.sh"
+mkdir -p /etc/foundry
+
+if [[ -z "${FOUNDRY_CLOUD_BOOTSTRAP_SECRET}" ]]; then
+  if [[ -f /etc/foundry/core-bootstrap.secret ]]; then
+    FOUNDRY_CLOUD_BOOTSTRAP_SECRET="$(cat /etc/foundry/core-bootstrap.secret)"
+  else
+    FOUNDRY_CLOUD_BOOTSTRAP_SECRET="$(openssl rand -hex 32)"
+    printf '%s\n' "${FOUNDRY_CLOUD_BOOTSTRAP_SECRET}" > /etc/foundry/core-bootstrap.secret
+    chmod 600 /etc/foundry/core-bootstrap.secret
+  fi
+fi
+
+python3 - <<'PY'
+from pathlib import Path
+
+compose_path = Path("/opt/meridian/apps/zulip-dev/compose.override.yaml")
+secret = Path("/etc/foundry/core-bootstrap.secret").read_text(encoding="utf-8").strip()
+needle = '      FOUNDRY_CLOUD_BOOTSTRAP_SECRET: "'
+
+content = compose_path.read_text(encoding="utf-8")
+lines = content.splitlines()
+updated = []
+in_dev_live = False
+in_environment = False
+inserted = False
+
+for line in lines:
+    stripped = line.strip()
+    if line.startswith("  zulip-dev-live:"):
+        in_dev_live = True
+        in_environment = False
+    elif in_dev_live and line.startswith("  ") and not line.startswith("    "):
+        if in_environment and not inserted:
+            updated.append(f'      FOUNDRY_CLOUD_BOOTSTRAP_SECRET: "{secret}"')
+            inserted = True
+        in_dev_live = False
+        in_environment = False
+    if in_dev_live and stripped == "environment:":
+        in_environment = True
+    elif in_environment and line.startswith("    ") and not line.startswith("      "):
+        if not inserted:
+            updated.append(f'      FOUNDRY_CLOUD_BOOTSTRAP_SECRET: "{secret}"')
+            inserted = True
+        in_environment = False
+    if in_dev_live and in_environment and stripped.startswith("FOUNDRY_CLOUD_BOOTSTRAP_SECRET:"):
+        if not inserted:
+            updated.append(f'      FOUNDRY_CLOUD_BOOTSTRAP_SECRET: "{secret}"')
+            inserted = True
+        continue
+    updated.append(line)
+
+if in_environment and not inserted:
+    updated.append(f'      FOUNDRY_CLOUD_BOOTSTRAP_SECRET: "{secret}"')
+    inserted = True
+
+if not inserted:
+    raise SystemExit("Failed to inject FOUNDRY_CLOUD_BOOTSTRAP_SECRET into compose.override.yaml")
+
+next_content = "\n".join(updated) + "\n"
+if next_content != content:
+    compose_path.write_text(next_content, encoding="utf-8")
+PY
 
 cd /opt/meridian/apps/zulip-dev
 docker compose --profile dev-live up -d --force-recreate zulip-dev-live

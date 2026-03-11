@@ -72,6 +72,44 @@ class FoundryCloudProvisioningTest(ZulipTestCase):
         self.assertEqual(teammate.role, UserProfile.ROLE_MEMBER)
 
     @patch("zerver.views.foundry_cloud._bootstrap_secret", return_value="core-secret")
+    def test_sync_member_maps_admin_roles(self, mock_secret: object) -> None:
+        self.client_post(
+            "/api/v1/foundry/cloud/tenants/provision",
+            info=json.dumps(
+                {
+                    "organization_id": "org-1",
+                    "realm_subdomain": "acme-admin-sync",
+                    "realm_name": "Acme Admin Sync",
+                    "owner_email": "owner@acme.test",
+                    "owner_full_name": "Owner User",
+                    "owner_password": "owner-password",
+                    "role": "owner",
+                }
+            ),
+            content_type="application/json",
+            headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
+        )
+
+        result = self.client_post(
+            "/api/v1/foundry/cloud/tenants/acme-admin-sync/members/sync",
+            info=json.dumps(
+                {
+                    "email": "runtime-admin@acme.test",
+                    "full_name": "Runtime Admin",
+                    "password": "runtime-admin-password",
+                    "role": "runtime_admin",
+                }
+            ),
+            content_type="application/json",
+            headers={"X-Foundry-Core-Bootstrap-Secret": "core-secret"},
+        )
+        self.assert_json_success(result)
+
+        realm = get_realm("acme-admin-sync")
+        admin = UserProfile.objects.get(realm=realm, delivery_email="runtime-admin@acme.test")
+        self.assertEqual(admin.role, UserProfile.ROLE_REALM_ADMINISTRATOR)
+
+    @patch("zerver.views.foundry_cloud._bootstrap_secret", return_value="core-secret")
     def test_provision_tenant_reuses_root_realm(self, mock_secret: object) -> None:
         root_realm = get_realm("zulip")
         root_realm.string_id = ""

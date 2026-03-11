@@ -49,6 +49,27 @@ uvicorn foundry_server.app:app --app-dir src --reload
 
 `/api/v1/meta/bootstrap` and `/api/v1/meta/launch-decisions` are restricted to authenticated platform admins.
 
+## Demo data
+
+To seed the Foundry control plane with a demo company that is using Foundry to
+build Foundry itself:
+
+```bash
+cd services/foundry-server
+python3 scripts/seed_demo_company.py
+```
+
+That provisions the `Foundry Labs` organization, five demo engineers, runtime
+settings, workspace pool settings, and the matching tenant realm in Foundry
+Core.
+
+Then seed the tenant collaboration data from the core checkout:
+
+```bash
+cd services/foundry-core/app
+FOUNDRY_DEMO_REALM_SUBDOMAIN=foundry-labs ./manage.py shell < tools/seed_demo_company.py
+```
+
 ## Next implementation steps
 
 1. Add OIDC-backed auth flows for cloud and self-host modes.
