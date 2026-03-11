@@ -12,9 +12,10 @@
     "bundle:desktop": "bun scripts/run-desktop-bundle.mjs",
     "bundle:desktop:macos": "bun scripts/run-desktop-bundle.mjs --bundles app,dmg",
     "check:desktop-version": "bun scripts/desktop-version.mjs check",
+    "screenshots:readme": "bun scripts/capture-readme-screenshots.mjs",
     "install:desktop:macos:unsigned": "bun scripts/install-unsigned-macos-app.mjs",
     "test": "bun test packages/app/src",
-    "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src",
+    "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src packages/cloud/src",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "check:rust": "cd packages/desktop/src-tauri && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",
@@ -27,6 +28,7 @@
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
     "libsodium-wrappers-sumo": "^0.7.15",
+    "playwright": "^1.50.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }

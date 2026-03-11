@@ -14,6 +14,7 @@ from fastapi import Body
 from fastapi import FastAPI
 from fastapi import Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .coder_client import CoderClient, CoderConfigurationError, CoderRequestError
@@ -74,7 +75,9 @@ from .store import FoundryStore
 
 def create_app(config: AppConfig | None = None) -> FastAPI:
     server_config = config or load_config()
-    templates = Jinja2Templates(directory=str(Path(__file__).with_name("templates")))
+    templates_dir = Path(__file__).with_name("templates")
+    static_dir = Path(__file__).with_name("static")
+    templates = Jinja2Templates(directory=str(templates_dir))
     session_cookie_name = "foundry_session"
 
     app = FastAPI(
@@ -85,6 +88,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.config = server_config
     app.state.store = FoundryStore(server_config.database_path)
     app.state.store.migrate()
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     def ensure_bootstrap_admin() -> None:
         if server_config.auth_provider.value != "local_password":
@@ -458,6 +462,66 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "status": binding.status.value,
             "detail": binding.detail,
         }
+
+    def build_cloud_dashboard_payload(user: PlatformUser) -> dict[str, object]:
+        coder_status: dict[str, object] | None = None
+        if user.is_platform_admin and server_config.coder_url and server_config.coder_api_token_present:
+            try:
+                coder_status = fetch_coder_status()
+            except HTTPException:
+                coder_status = None
+        return {
+            "current_user": serialize_user(user),
+            "organizations": [serialize_organization(item) for item in allowed_organizations_for_user(user)],
+            "coder_status": coder_status,
+        }
+
+    def build_cloud_organization_payload(organization_id: str) -> dict[str, object]:
+        organization = require_organization(organization_id)
+        memberships = get_store().list_memberships(organization_id)
+        return {
+            "organization": serialize_organization(organization),
+            "members": [
+                serialize_member_record(item)
+                for item in sort_memberships(memberships)
+            ],
+            "runtime_settings": serialize_runtime_settings(
+                get_store().get_runtime_settings(organization_id) or default_runtime_settings(organization_id)
+            ),
+            "workspace_pool": serialize_workspace_pool(
+                get_store().get_workspace_pool(organization_id) or default_workspace_pool(organization_id)
+            ),
+            "github_installation": serialize_github_installation(
+                get_store().get_github_installation(organization_id)
+            ),
+            "core_binding": serialize_core_binding(get_store().get_core_realm_binding(organization_id)),
+            "coder_binding": serialize_coder_binding(get_store().get_coder_organization_binding(organization_id)),
+            "invitations": [serialize_invitation(item) for item in get_store().list_invitations(organization_id)],
+        }
+
+    def create_org_invitation(
+        user: PlatformUser,
+        organization_id: str,
+        email: str,
+        role: str,
+    ) -> tuple[OrganizationInvitation, str]:
+        try:
+            invitation_role = OrganizationRole(role)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Unsupported organization role: {role}") from exc
+
+        raw_token = generate_session_token()
+        invitation = OrganizationInvitation(
+            invitation_id=str(uuid.uuid4()),
+            organization_id=organization_id,
+            email=normalize_email(email),
+            roles=(invitation_role,),
+            invited_by_user_id=user.user_id,
+            token_hash=hash_token(raw_token),
+            expires_at=utc_expiry(7),
+        )
+        get_store().create_invitation(invitation)
+        return invitation, raw_token
 
     def organization_primary_role(membership: OrganizationMembership | None) -> str:
         if membership is None:
@@ -1258,23 +1322,17 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     @app.get("/cloud", response_class=HTMLResponse)
     def cloud_dashboard(request: Request) -> HTMLResponse:
         user = require_current_user(request)
-        organizations = allowed_organizations_for_user(user)
-        coder_status: dict[str, object] | None = None
-        if user.is_platform_admin and server_config.coder_url and server_config.coder_api_token_present:
-            try:
-                coder_status = fetch_coder_status()
-            except HTTPException:
-                coder_status = None
+        bootstrap = {
+            "page": "dashboard",
+            **build_cloud_dashboard_payload(user),
+        }
         return templates.TemplateResponse(
             request,
-            "dashboard.html",
+            "cloud_app.html",
             {
                 "request": request,
                 "title": "Foundry Cloud",
-                "current_user": serialize_user(user),
-                "organizations": [serialize_organization(item) for item in organizations],
-                "is_platform_admin": user.is_platform_admin,
-                "coder_status": coder_status,
+                "bootstrap": bootstrap,
             },
         )
 
@@ -1299,7 +1357,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             coder_status: dict[str, object] | None = None
             if server_config.coder_url and server_config.coder_api_token_present:
                 try:
-                    coder_status = coder_status_api()
+                    coder_status = fetch_coder_status()
                 except HTTPException:
                     coder_status = None
             return templates.TemplateResponse(
@@ -1345,32 +1403,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         user = require_current_user(request)
         organization = require_organization(organization_id)
         require_org_access(user, organization_id)
-        memberships = get_store().list_memberships(organization_id)
-        runtime_settings = get_store().get_runtime_settings(organization_id)
-        workspace_pool = get_store().get_workspace_pool(organization_id)
-        github_installation = get_store().get_github_installation(organization_id)
-        core_binding = get_store().get_core_realm_binding(organization_id)
-        coder_binding = get_store().get_coder_organization_binding(organization_id)
-        invitations = get_store().list_invitations(organization_id)
+        bootstrap = {
+            "page": "organization",
+            "current_user": serialize_user(user),
+            "detail": build_cloud_organization_payload(organization_id),
+        }
         return templates.TemplateResponse(
             request,
-            "organization_detail.html",
+            "cloud_app.html",
             {
                 "request": request,
                 "title": f"{organization.display_name} · Foundry Cloud",
-                "current_user": serialize_user(user),
-                "organization": serialize_organization(organization),
-                "members": [
-                    serialize_member_record(item)
-                    for item in sort_memberships(memberships)
-                ],
-                "runtime_settings": serialize_runtime_settings(runtime_settings) if runtime_settings else None,
-                "workspace_pool": serialize_workspace_pool(workspace_pool) if workspace_pool else None,
-                "github_installation": serialize_github_installation(github_installation),
-                "core_binding": serialize_core_binding(core_binding),
-                "coder_binding": serialize_coder_binding(coder_binding),
-                "invitations": [serialize_invitation(item) for item in invitations],
-                "is_platform_admin": user.is_platform_admin,
+                "bootstrap": bootstrap,
             },
         )
 
@@ -1405,17 +1449,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         user = require_current_user(request)
         organization = require_organization(organization_id)
         require_org_role(user, organization_id, OrganizationRole.ADMIN)
-        raw_token = generate_session_token()
-        invitation = OrganizationInvitation(
-            invitation_id=str(uuid.uuid4()),
-            organization_id=organization_id,
-            email=normalize_email(email),
-            roles=(OrganizationRole(role),),
-            invited_by_user_id=user.user_id,
-            token_hash=hash_token(raw_token),
-            expires_at=utc_expiry(7),
-        )
-        get_store().create_invitation(invitation)
+        _, raw_token = create_org_invitation(user, organization_id, email, role)
         memberships = get_store().list_memberships(organization_id)
         runtime_settings = get_store().get_runtime_settings(organization_id)
         workspace_pool = get_store().get_workspace_pool(organization_id)
@@ -1539,20 +1573,44 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     @app.get("/api/v1/cloud/organizations/{organization_id}")
     def cloud_organization_api(request: Request, organization_id: str) -> dict[str, object]:
         user = require_current_user(request)
-        organization = require_organization(organization_id)
         require_org_access(user, organization_id)
+        return build_cloud_organization_payload(organization_id)
+
+    @app.post("/api/v1/cloud/organizations/{organization_id}/provision")
+    async def cloud_provision_organization_api(
+        request: Request,
+        organization_id: str,
+        payload: dict[str, object] = Body(default_factory=dict),
+    ) -> dict[str, object]:
+        user = require_current_user(request)
+        organization = require_organization(organization_id)
+        membership = require_org_role(user, organization_id, OrganizationRole.ADMIN)
+        sync_organization_bindings(
+            organization=organization,
+            owner=user,
+            password=str(payload.get("owner_password", "")).strip() or None,
+            membership=membership,
+        )
+        return {"detail": build_cloud_organization_payload(organization_id)}
+
+    @app.post("/api/v1/cloud/organizations/{organization_id}/invitations")
+    async def cloud_create_invitation_api(
+        request: Request,
+        organization_id: str,
+        payload: dict[str, object] = Body(default_factory=dict),
+    ) -> dict[str, object]:
+        user = require_current_user(request)
+        require_organization(organization_id)
+        require_org_role(user, organization_id, OrganizationRole.ADMIN)
+        invitation, raw_token = create_org_invitation(
+            user,
+            organization_id,
+            str(payload.get("email", "")),
+            str(payload.get("role", OrganizationRole.MEMBER.value)),
+        )
         return {
-            "organization": serialize_organization(organization),
-            "members": [
-                serialize_member_record(item)
-                for item in sort_memberships(get_store().list_memberships(organization_id))
-            ],
-            "runtime_settings": serialize_runtime_settings(get_store().get_runtime_settings(organization_id) or default_runtime_settings(organization_id)),
-            "workspace_pool": serialize_workspace_pool(get_store().get_workspace_pool(organization_id) or default_workspace_pool(organization_id)),
-            "github_installation": serialize_github_installation(get_store().get_github_installation(organization_id)),
-            "core_binding": serialize_core_binding(get_store().get_core_realm_binding(organization_id)),
-            "coder_binding": serialize_coder_binding(get_store().get_coder_organization_binding(organization_id)),
-            "invitations": [serialize_invitation(item) for item in get_store().list_invitations(organization_id)],
+            "invitation": serialize_invitation(invitation),
+            "invite_link": f"{server_config.public_base_url}/cloud/invitations/{raw_token}",
         }
 
     @app.get("/api/v1/organizations")

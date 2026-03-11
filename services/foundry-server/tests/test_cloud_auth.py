@@ -88,6 +88,8 @@ class CloudAuthTests(unittest.TestCase):
             dashboard_response = client.get("/cloud")
             self.assertEqual(dashboard_response.status_code, 200)
             self.assertIn("Foundry", dashboard_response.text)
+            self.assertIn("__FOUNDRY_CLOUD_BOOTSTRAP__", dashboard_response.text)
+            self.assertIn("/static/cloud/app.js", dashboard_response.text)
 
     def test_authenticated_org_api_requires_real_owner(self) -> None:
         with self._create_client() as client:
@@ -142,6 +144,31 @@ class CloudAuthTests(unittest.TestCase):
             members = org_response.json()["members"]
             self.assertEqual(len(members), 2)
             self.assertEqual(members[1]["email"], "teammate@example.com")
+
+    def test_cloud_invitation_api_returns_invite_link(self) -> None:
+        with self._create_client() as client:
+            signup_response = client.post(
+                "/signup",
+                data={
+                    "display_name": "Owner",
+                    "email": "owner@example.com",
+                    "password": "owner-password",
+                    "organization_name": "Acme",
+                    "organization_slug": "acme",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(signup_response.status_code, 303)
+            organization_id = signup_response.headers["location"].rsplit("/", 1)[-1]
+
+            invitation_response = client.post(
+                f"/api/v1/cloud/organizations/{organization_id}/invitations",
+                json={"email": "teammate@example.com", "role": "member"},
+            )
+            self.assertEqual(invitation_response.status_code, 200)
+            payload = invitation_response.json()
+            self.assertEqual(payload["invitation"]["email"], "teammate@example.com")
+            self.assertIn("/cloud/invitations/", payload["invite_link"])
 
 
 if __name__ == "__main__":

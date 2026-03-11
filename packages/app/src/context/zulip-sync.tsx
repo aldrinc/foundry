@@ -40,6 +40,11 @@ export type { UnreadItem } from "./unread-state"
 // Module-level getter for the active narrow — allows handleMessageEvent
 // to check if the user is viewing the conversation a new message belongs to.
 let _getActiveNarrow: (() => string | null) | null = null
+const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
+const HAS_TAURI_BRIDGE =
+  typeof window !== "undefined"
+  && typeof (window as Window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke === "function"
+
 export function registerActiveNarrowGetter(getter: () => string | null) {
   _getActiveNarrow = getter
 }
@@ -805,6 +810,10 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
 
   // Set up Tauri event listeners
   onMount(async () => {
+    if (IS_DEMO || !HAS_TAURI_BRIDGE) {
+      return
+    }
+
     const listeners: (() => void)[] = []
 
     const eventTypes = [

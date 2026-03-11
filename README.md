@@ -1,57 +1,51 @@
 # Foundry
 
-Foundry is a source-available desktop client and control-plane stack for GitHub-backed coding workflows. It brings together org provisioning, provider auth, runtime policy, workspace orchestration, and a collaboration-native product surface for teams shipping software with AI in the loop.
+Foundry is a source-available desktop client and control-plane stack for GitHub-backed coding workflows. It combines a native collaboration surface, org provisioning, runtime policy, workspace orchestration, and desktop distribution into one product.
 
-This repository includes the desktop app, shared UI packages, the Foundry control-plane service, the collaboration-core snapshot that powers the tenant app, and the infra needed to run the stack.
-
-> Foundry-authored code is source-available under Elastic License 2.0. It is not an OSI open-source license. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
-
-![Foundry Cloud organization dashboard](docs/images/readme/cloud-org-dashboard.png)
-
-## Why Foundry
-
-- One place to configure organizations, runtime defaults, workspace policy, and provider access.
-- A desktop client with native packaging, updater support, and local system integrations.
-- Collaboration-first execution, where work stays visible in shared topics instead of disappearing into isolated terminals.
-- A self-hosting path for teams that want the full product inside their own environment.
+This repository contains the desktop app, the shared SolidJS UI packages, the Foundry Cloud control plane, the collaboration-core snapshot that powers the tenant app, and the infrastructure needed to run the stack.
 
 ## Product Snapshot
 
-![Foundry collaboration workspace](docs/images/readme/tenant-collaboration.png)
+![Foundry Desktop product snapshot](docs/images/readme/foundry-desktop-product-snapshot.png)
 
-The screenshots above were captured from the live demo dev stack and show the two halves of the product:
+Foundry Desktop is the primary product surface: team conversation, supervisor guidance, delegated execution, and org-aware runtime context all live in the native app instead of a browser tab plus a pile of side tools.
 
-- Foundry Cloud for org setup, runtime policy, and workspace control.
-- The tenant app for day-to-day collaboration, delegated work, and supervisor-driven execution.
+## Control Plane Snapshot
 
-## Architecture At A Glance
+![Foundry Cloud organization dashboard](docs/images/readme/cloud-org-dashboard.png)
 
-- `Foundry Cloud` is the control plane for organizations, memberships, provider auth, runtime defaults, and workspace policy.
-- `Foundry Core` is the collaboration surface where teams coordinate work, review progress, and keep delivery visible.
-- `Foundry Desktop` packages the product as a native app with local integrations and release distribution.
+Foundry Cloud uses the same SolidJS visual system as desktop so org setup, runtime defaults, GitHub binding, and workspace policy no longer sit behind a separate legacy admin UI.
+
+## Why Foundry
+
+- Native desktop collaboration instead of isolated terminal sessions and hidden local state.
+- Shared supervisor-driven execution so work stays reviewable in context.
+- One control plane for org provisioning, runtime providers, GitHub integration, and workspace policy.
+- A self-hosting path for teams that want the full stack inside their own environment.
 
 ## Start Here
 
-- Want desktop builds? Head to [GitHub Releases](https://github.com/aldrinc/foundry/releases).
-- Want local setup? Start with [Quickstart](#quickstart).
-- Want the repo tour? Use [What Ships In This Repo](#what-ships-in-this-repo).
-- Want system context? Read [docs/README.md](docs/README.md) and [docs/architecture/README.md](docs/architecture/README.md).
+- Desktop builds: [GitHub Releases](https://github.com/aldrinc/foundry/releases)
+- Setup docs: [docs/README.md](docs/README.md)
+- Architecture overview: [docs/architecture/README.md](docs/architecture/README.md)
+- Control-plane service: [services/foundry-server/README.md](services/foundry-server/README.md)
 
 ## What Ships In This Repo
 
 | Path | Purpose |
 | --- | --- |
-| `packages/app` | Shared SolidJS application code used across the product surface |
-| `packages/desktop` | Tauri desktop shell, native bridge, packaging, and updater integration |
+| `packages/app` | Shared SolidJS product surface used by desktop |
+| `packages/cloud` | SolidJS control-plane frontend that ships through Foundry Server |
+| `packages/desktop` | Tauri shell, native bridge, packaging, and updater integration |
 | `packages/ui` | Shared UI primitives and design building blocks |
-| `services/foundry-server` | Control-plane service for orgs, auth, GitHub, runtime, and workspace domains |
+| `services/foundry-server` | Control-plane APIs, auth, org management, GitHub, runtime, and workspace domains |
 | `services/foundry-core` | Imported collaboration-core snapshot used by the tenant app |
-| `infra` | Dev deploy scripts, coder integration, and infrastructure templates |
-| `docs` | Packaging, architecture, FAQ, and launch guidance |
+| `infra` | Dev deploy scripts, Coder integration, and infrastructure templates |
+| `docs` | Packaging, launch, architecture, and operational guidance |
 
 ## Get Foundry
 
-Desktop builds are published through [GitHub Releases](https://github.com/aldrinc/foundry/releases).
+Desktop installers are published through [GitHub Releases](https://github.com/aldrinc/foundry/releases).
 
 Current release targets:
 
@@ -68,7 +62,6 @@ bun install
 bun run test
 bun run typecheck
 bun run build
-bun run bundle:desktop
 ```
 
 Useful follow-up commands:
@@ -77,10 +70,10 @@ Useful follow-up commands:
 bun run lint:eslint
 bun run check:rust
 bun run bundle:desktop:macos
-cd services/foundry-server && pytest
+cd services/foundry-server && python3 -m venv .venv
 ```
 
-If you want local hooks enabled:
+If you want local Git hooks enabled:
 
 ```bash
 python3 -m pip install --user pre-commit
@@ -94,6 +87,7 @@ pre-commit install --hook-type pre-commit
 - [docs/faq.md](docs/faq.md)
 - [docs/desktop-distribution.md](docs/desktop-distribution.md)
 - [docs/desktop-ota-updates.md](docs/desktop-ota-updates.md)
+- [docs/public-launch-checklist.md](docs/public-launch-checklist.md)
 - [services/foundry-server/README.md](services/foundry-server/README.md)
 - [services/foundry-core/README.md](services/foundry-core/README.md)
 
@@ -114,8 +108,8 @@ Foundry is in an early public release phase.
 
 - Desktop release artifacts are published through GitHub Releases.
 - The desktop updater path is wired through signed Tauri updater metadata.
-- The server and infra layers are usable, but the public self-hosting path is still being standardized.
-- The remaining launch work is tracked in [docs/public-launch-checklist.md](docs/public-launch-checklist.md).
+- Foundry Cloud now ships as a SolidJS frontend on top of the server session and API layer.
+- The public self-hosting path is still being standardized.
 
 ## Community
 
@@ -126,4 +120,4 @@ Foundry is in an early public release phase.
 
 ## License
 
-Foundry-authored code in this repository is released under Elastic License 2.0, with component-level exceptions for imported third-party code. See [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).
+Foundry-authored code in this repository is source-available under Elastic License 2.0. It is not an OSI open-source license. Component-level exceptions for imported third-party code are documented in [LICENSE](LICENSE) and [LICENSING.md](LICENSING.md).

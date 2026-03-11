@@ -9,7 +9,7 @@ It is the intended home for:
 - GitHub App integration
 - server-backed runtime and agent settings
 - workspace orchestration policy and topology
-- public APIs consumed by the desktop app and the cloud web surface
+- public APIs consumed by the desktop app and the SolidJS cloud web surface
 
 It is not the full renamed core application server derived from the Zulip server.
 
@@ -29,11 +29,16 @@ This is an initial scaffold created to establish:
 - `src/foundry_server/config.py`: environment-backed server config
 - `src/foundry_server/decisions.py`: launch decisions captured as code
 - `src/foundry_server/domain/`: typed domain models for orgs, billing, GitHub, runtime, and workspaces
+- `src/foundry_server/static/cloud/`: built Foundry Cloud frontend assets from `packages/cloud`
 - `tests/`: dependency-light unit tests for config and decision defaults
 
 ## Local development
 
 ```bash
+cd ../..
+bun install
+bun --cwd packages/cloud run build
+
 cd services/foundry-server
 python3 -m venv .venv
 source .venv/bin/activate

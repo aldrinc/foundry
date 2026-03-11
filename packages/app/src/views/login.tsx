@@ -186,7 +186,7 @@ export function LoginView(props: {
   }
 
   const handleCreateOrg = () => {
-    platform.openLink("https://zulip.com/new/")
+    platform.openLink("https://github.com/aldrinc/foundry#start-here")
   }
 
   onMount(() => {
@@ -270,7 +270,7 @@ export function LoginView(props: {
                   class="text-sm text-[var(--interactive-primary)] hover:underline cursor-pointer"
                   onClick={handleCreateOrg}
                 >
-                  Create a new organization
+                  Need a Foundry organization? View setup docs
                 </a>
               </div>
             </div>
@@ -360,7 +360,7 @@ export function LoginView(props: {
                   <input
                     class="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--interactive-primary)] transition-colors"
                     type="password"
-                    placeholder="Your Zulip API key"
+                    placeholder="Your organization API key"
                     value={apiKey()}
                     onInput={(e) => setApiKey(e.currentTarget.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -378,7 +378,7 @@ export function LoginView(props: {
                 <input
                   class="w-full px-3 py-2 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--surface-input)] text-[var(--text-primary)] text-sm focus:outline-none focus:border-[var(--interactive-primary)] transition-colors"
                   type="password"
-                  placeholder="Your Zulip password"
+                  placeholder="Your account password"
                   value={password()}
                   onInput={(e) => setPassword(e.currentTarget.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}

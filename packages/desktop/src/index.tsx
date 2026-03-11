@@ -16,6 +16,9 @@ import "./styles.css"
 
 const root = document.getElementById("root")
 const notificationSoundResourcePath = "notifications/default.wav"
+const HAS_TAURI_BRIDGE =
+  typeof window !== "undefined"
+  && typeof (window as Window & { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__?.invoke === "function"
 type PickerDialogOptions = {
   title?: string
   multiple?: boolean
@@ -40,6 +43,10 @@ async function playNativeNotificationSound() {
 }
 
 async function initializeDeepLinkHandling() {
+  if (!HAS_TAURI_BRIDGE) {
+    return
+  }
+
   try {
     const current = await getCurrent()
     if (current && current.length > 0) {

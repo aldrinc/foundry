@@ -14,6 +14,7 @@
         "src/**/*.jsx",
         "src/**/*.d.ts",
         "src/**/*.d.ts.map",
+        "../../services/foundry-server/src/foundry_server/static/cloud/**",
         "tsconfig.tsbuildinfo"
       ]
     },

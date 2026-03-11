@@ -1,0 +1,15 @@
+@import "../../desktop/src/styles.css";
+@source "./";
+
+@layer base {
+  body {
+    overflow: auto;
+    background:
+      radial-gradient(circle at top left, color-mix(in srgb, #132f33 24%, transparent 76%) 0, transparent 34rem),
+      linear-gradient(180deg, #0f2d31 0%, #163338 100%);
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}

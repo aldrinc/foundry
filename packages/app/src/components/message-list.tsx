@@ -8,6 +8,8 @@ import type { NarrowFilter } from "@foundry/desktop/bindings"
 import { MessageItem } from "./message-item"
 import { SearchBar } from "./search-bar"
 
+const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
+
 function formatDateSeparator(timestamp: number): string {
   const date = new Date(timestamp * 1000)
   const today = new Date()
@@ -75,6 +77,12 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
 
   // Fetch messages when narrow changes
   const fetchMessages = async () => {
+    if (IS_DEMO) {
+      setError("")
+      setLoading(false)
+      return
+    }
+
     // Guard on local loading signal to prevent concurrent fetches
     // (avoids stale store loadState from interrupted HMR)
     if (loading()) return
@@ -109,6 +117,7 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
 
   // Load older messages
   const fetchOlderMessages = async () => {
+    if (IS_DEMO) return
     if (loadState() !== "idle" || loading()) return
     const msgs = messages()
     if (msgs.length === 0) return
