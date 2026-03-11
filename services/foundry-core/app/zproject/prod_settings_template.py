@@ -847,7 +847,7 @@ LOCAL_UPLOADS_DIR = "/home/zulip/uploads"
 ## Maximum allowed size of uploaded files, in megabytes. Set
 ## MAX_FILE_UPLOAD_SIZE to 0 to disable file uploads completely
 ## (including hiding upload-related options from UI).
-# MAX_FILE_UPLOAD_SIZE = 100
+# MAX_FILE_UPLOAD_SIZE = 20 * 1024
 
 ## Controls whether name changes are completely disabled for this
 ## installation.  This is useful when you're syncing names from an

@@ -10,12 +10,15 @@
     "build": "turbo build",
     "bundle:desktop": "bun scripts/run-desktop-bundle.mjs",
     "bundle:desktop:macos": "bun scripts/run-desktop-bundle.mjs --bundles app,dmg",
+    "check:desktop-version": "bun scripts/desktop-version.mjs check",
+    "install:desktop:macos:unsigned": "bun scripts/install-unsigned-macos-app.mjs",
     "test": "bun test packages/app/src",
     "lint:eslint": "eslint packages/app/src packages/ui/src packages/desktop/src",
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "check:rust": "cd packages/desktop/src-tauri && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",
-    "test:e2e": "turbo test:e2e"
+    "test:e2e": "turbo test:e2e",
+    "version:desktop": "bun scripts/desktop-version.mjs set"
   },
   "devDependencies": {
     "@typescript-eslint/parser": "^8.56.1",

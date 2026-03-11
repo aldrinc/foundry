@@ -331,6 +331,69 @@ INTEGRATION_CATEGORY_REDIRECT_PATHS = [
     for redirect in get_integration_category_redirects()
 ]
 
+legacy_meridian_foundry_patterns = [
+    # Legacy desktop builds still call the Meridian route family.
+    rest_path("meridian/tasks/create", POST=foundry_create_task),
+    rest_path("meridian/tasks/<path:task_id>/events", GET=foundry_task_events),
+    rest_path("meridian/tasks/<path:task_id>/events/stream", GET=foundry_task_events_stream),
+    rest_path("meridian/tasks/<path:task_id>/action", POST=foundry_task_action),
+    rest_path(
+        "meridian/tasks/<path:task_id>/needs_clarification",
+        POST=foundry_task_needs_clarification,
+    ),
+    rest_path(
+        "meridian/tasks/<path:task_id>/resolve_clarification",
+        POST=foundry_task_resolve_clarification,
+    ),
+    rest_path("meridian/tasks/<path:task_id>/reply", POST=foundry_task_reply),
+    rest_path("meridian/tasks/<path:task_id>", GET=foundry_task_status),
+    rest_path("meridian/providers/catalog", GET=foundry_provider_catalog),
+    rest_path("meridian/providers/auth", GET=foundry_provider_auth_list),
+    rest_path("meridian/providers/connect", POST=foundry_provider_auth_connect),
+    rest_path("meridian/providers/disconnect", POST=foundry_provider_auth_disconnect),
+    rest_path("meridian/providers/oauth/start", POST=foundry_provider_oauth_start),
+    rest_path("meridian/providers/oauth/callback", GET=foundry_provider_oauth_callback),
+    rest_path("meridian/integrations/catalog", GET=foundry_integration_catalog),
+    rest_path("meridian/integrations/list", GET=foundry_integration_list),
+    rest_path("meridian/integrations/connect", POST=foundry_integration_connect),
+    rest_path("meridian/integrations/disconnect", POST=foundry_integration_disconnect),
+    rest_path("meridian/integrations/policy", POST=foundry_integration_policy_update),
+    rest_path("meridian/topics/<path:topic_scope_id>/sidebar", GET=foundry_topic_sidebar),
+    rest_path("meridian/topics/<path:topic_scope_id>/events", GET=foundry_topic_events),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/supervisor/session",
+        GET=foundry_topic_supervisor_session,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/supervisor/session/stream",
+        GET=foundry_topic_supervisor_session_stream,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/supervisor/session/reset",
+        POST=foundry_topic_supervisor_session_reset,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/supervisor/message",
+        POST=foundry_topic_supervisor_message,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/plan/revisions",
+        GET=foundry_topic_plan_revisions,
+        POST=foundry_topic_plan_create,
+    ),
+    rest_path("meridian/topics/<path:topic_scope_id>/plan/current", GET=foundry_topic_plan_current),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/plan/synthesize",
+        POST=foundry_topic_plan_synthesize,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/directives/dispatch",
+        POST=foundry_topic_directive_dispatch,
+    ),
+    rest_path("meridian/supervisor/context", GET=foundry_supervisor_context),
+    rest_path("meridian/supervisor/memory", POST=foundry_supervisor_memory_append),
+]
+
 # NB: There are several other pieces of code which route requests by URL:
 #
 #   - runtornado.py has its own URL list for Tornado views.  See the
@@ -506,6 +569,7 @@ v1_api_and_json_patterns = [
     ),
     rest_path("foundry/supervisor/context", GET=foundry_supervisor_context),
     rest_path("foundry/supervisor/memory", POST=foundry_supervisor_memory_append),
+    *legacy_meridian_foundry_patterns,
     rest_path(
         "scheduled_messages", GET=fetch_scheduled_messages, POST=create_scheduled_message_backend
     ),

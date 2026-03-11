@@ -121,10 +121,11 @@ export function hydrateAuthenticatedMessageImages(
 ): () => void {
   let disposed = false
 
-  for (const image of container.querySelectorAll<HTMLImageElement>("img[src]")) {
+  for (const image of container.querySelectorAll<HTMLImageElement>("img")) {
+    const preferOriginal = image.getAttribute("data-foundry-auth-prefer-original") === "true"
     const requestUrl = resolveAuthenticatedMediaUrl(
-      image.getAttribute("src"),
-      image.getAttribute("data-original-src"),
+      preferOriginal ? image.getAttribute("data-original-src") : image.getAttribute("src"),
+      preferOriginal ? image.getAttribute("src") : image.getAttribute("data-original-src"),
       image.closest("a[href]")?.getAttribute("href"),
       serverUrl,
     )
@@ -137,6 +138,7 @@ export function hydrateAuthenticatedMessageImages(
 
       image.classList.remove("image-loading-placeholder")
       image.removeAttribute("data-foundry-auth-media-url")
+      image.removeAttribute("data-foundry-auth-prefer-original")
       image.setAttribute("src", dataUrl)
     })
   }
@@ -192,28 +194,132 @@ export function findImageCarouselRanges(imageOnlyBlocks: readonly boolean[]): Ar
   return ranges
 }
 
-function setActiveCarouselSlide(
-  slides: HTMLElement[],
-  dots: HTMLButtonElement[],
-  counter: HTMLElement,
-  nextIndex: number,
-) {
-  slides.forEach((slide, index) => {
-    const active = index === nextIndex
-    slide.hidden = !active
-    slide.setAttribute("data-active", active ? "true" : "false")
-  })
+const SVG_NS = "http://www.w3.org/2000/svg"
+const CHEVRON_LEFT_PATH = "M15.75 19.5 8.25 12l7.5-7.5"
+const CHEVRON_RIGHT_PATH = "M8.25 4.5 15.75 12l-7.5 7.5"
+const EXTERNAL_LINK_PATH = "M13.5 4.5H19.5V10.5 M10.5 13.5L19.5 4.5 M16.5 13.5V18C16.5 18.8284 15.8284 19.5 15 19.5H6C5.17157 19.5 4.5 18.8284 4.5 18V9C4.5 8.17157 5.17157 7.5 6 7.5H10.5"
+const CLOSE_ICON_PATH = "M6 6L18 18 M18 6L6 18"
 
-  dots.forEach((dot, index) => {
-    const active = index === nextIndex
-    dot.setAttribute("aria-current", active ? "true" : "false")
-    dot.dataset.active = active ? "true" : "false"
-  })
-
-  counter.textContent = `${nextIndex + 1} / ${slides.length}`
+type MessageImageCarouselOptions = {
+  onViewerImageChange?: () => void
+  serverUrl?: string
 }
 
-export function hydrateMessageImageCarousels(container: HTMLElement): () => void {
+type GalleryImageSource = {
+  alt: string
+  externalHref: string
+  thumbSrc: string
+  title: string
+  viewerSrc: string
+}
+
+type GalleryImageItem = GalleryImageSource & {
+  thumbnailButton: HTMLButtonElement
+  thumbnailImage: HTMLImageElement
+}
+
+export function normalizeGalleryIndex(nextIndex: number, itemCount: number): number {
+  if (itemCount <= 0) return 0
+  return ((nextIndex % itemCount) + itemCount) % itemCount
+}
+
+function createIcon(pathDefinition: string): SVGSVGElement {
+  const icon = document.createElementNS(SVG_NS, "svg")
+  icon.setAttribute("viewBox", "0 0 24 24")
+  icon.setAttribute("fill", "none")
+  icon.setAttribute("stroke", "currentColor")
+  icon.setAttribute("stroke-width", "1.75")
+  icon.setAttribute("stroke-linecap", "round")
+  icon.setAttribute("stroke-linejoin", "round")
+  icon.setAttribute("aria-hidden", "true")
+
+  const path = document.createElementNS(SVG_NS, "path")
+  path.setAttribute("d", pathDefinition)
+  icon.appendChild(path)
+
+  return icon
+}
+
+function extractGalleryImageSource(block: HTMLElement, index: number): GalleryImageSource | null {
+  const sourceImage = block.querySelector("img")
+  if (!sourceImage) return null
+
+  const sourceLink = sourceImage.closest("a[href]") || block.querySelector<HTMLAnchorElement>("a[href]")
+  const thumbSrc = sourceImage.getAttribute("src")?.trim() || ""
+  const originalSrc = sourceImage.getAttribute("data-original-src")?.trim() || ""
+  const externalHref = sourceLink?.getAttribute("href")?.trim() || originalSrc || thumbSrc
+  const viewerSrc = originalSrc || externalHref || thumbSrc
+
+  if (!thumbSrc || !viewerSrc) return null
+
+  return {
+    alt: sourceImage.getAttribute("alt") || sourceLink?.getAttribute("aria-label") || `Image ${index + 1}`,
+    externalHref,
+    thumbSrc,
+    title: sourceImage.getAttribute("title") || sourceLink?.getAttribute("title") || "",
+    viewerSrc,
+  }
+}
+
+function setViewerImageSource(
+  viewerImage: HTMLImageElement,
+  item: GalleryImageItem,
+  serverUrl?: string,
+) {
+  const requiresAuthenticatedFetch = shouldFetchAuthenticatedMedia(item.viewerSrc, serverUrl)
+  const thumbnailSrc = item.thumbnailImage.getAttribute("src") || item.thumbSrc
+
+  viewerImage.alt = item.alt
+  if (item.title) {
+    viewerImage.setAttribute("title", item.title)
+  } else {
+    viewerImage.removeAttribute("title")
+  }
+
+  viewerImage.setAttribute("data-original-src", item.viewerSrc)
+  viewerImage.classList.toggle("image-loading-placeholder", requiresAuthenticatedFetch)
+
+  if (requiresAuthenticatedFetch) {
+    viewerImage.setAttribute("data-foundry-auth-prefer-original", "true")
+    viewerImage.setAttribute("src", thumbnailSrc)
+    return
+  }
+
+  viewerImage.removeAttribute("data-foundry-auth-prefer-original")
+  viewerImage.setAttribute("src", item.viewerSrc)
+}
+
+function renderActiveGalleryImage(
+  items: GalleryImageItem[],
+  viewerImage: HTMLImageElement,
+  counter: HTMLElement,
+  externalLink: HTMLAnchorElement,
+  nextIndex: number,
+  options?: MessageImageCarouselOptions,
+): number {
+  const activeIndex = normalizeGalleryIndex(nextIndex, items.length)
+  const activeItem = items[activeIndex]
+
+  items.forEach((item, index) => {
+    const active = index === activeIndex
+    item.thumbnailButton.dataset.active = active ? "true" : "false"
+    item.thumbnailButton.setAttribute("aria-current", active ? "true" : "false")
+  })
+
+  setViewerImageSource(viewerImage, activeItem, options?.serverUrl)
+  counter.textContent = `${activeIndex + 1} / ${items.length}`
+  externalLink.hidden = !activeItem.externalHref
+  externalLink.setAttribute("href", activeItem.externalHref || "#")
+  externalLink.setAttribute("aria-label", `Open image ${activeIndex + 1} in browser`)
+  options?.onViewerImageChange?.()
+
+  return activeIndex
+}
+
+export function hydrateMessageImageCarousels(
+  container: HTMLElement,
+  options?: MessageImageCarouselOptions,
+): () => void {
   const cleanups: Array<() => void> = []
   const children = Array.from(container.children)
   const ranges = findImageCarouselRanges(children.map((child) => isImageOnlyBlock(child)))
@@ -221,81 +327,191 @@ export function hydrateMessageImageCarousels(container: HTMLElement): () => void
   for (const range of ranges) {
     const group = children.slice(range.start, range.end) as HTMLElement[]
     if (group.length > 1) {
+      const sources = group
+        .map((block, index) => extractGalleryImageSource(block, index))
+        .filter((source): source is GalleryImageSource => Boolean(source))
+      if (sources.length < 2) continue
+
       const wrapper = document.createElement("div")
-      wrapper.className = "foundry-image-carousel"
+      wrapper.className = "foundry-image-gallery"
       wrapper.dataset.foundryImageCarousel = "true"
       group[0].before(wrapper)
 
-      const viewport = document.createElement("div")
-      viewport.className = "foundry-image-carousel-viewport"
+      const grid = document.createElement("div")
+      grid.className = "foundry-image-gallery-grid"
 
-      const controls = document.createElement("div")
-      controls.className = "foundry-image-carousel-controls"
+      const lightbox = document.createElement("div")
+      lightbox.className = "foundry-image-lightbox"
+      lightbox.hidden = true
+
+      const lightboxBackdrop = document.createElement("button")
+      lightboxBackdrop.type = "button"
+      lightboxBackdrop.className = "foundry-image-lightbox-backdrop"
+      lightboxBackdrop.setAttribute("aria-label", "Close image viewer")
+
+      const dialog = document.createElement("div")
+      dialog.className = "foundry-image-lightbox-dialog"
+      dialog.setAttribute("role", "dialog")
+      dialog.setAttribute("aria-modal", "true")
+      dialog.setAttribute("aria-label", "Image viewer")
+      dialog.tabIndex = -1
+
+      const toolbar = document.createElement("div")
+      toolbar.className = "foundry-image-lightbox-toolbar"
+
+      const counter = document.createElement("span")
+      counter.className = "foundry-image-lightbox-counter"
+      counter.setAttribute("aria-live", "polite")
+
+      const actions = document.createElement("div")
+      actions.className = "foundry-image-lightbox-actions"
+
+      const externalLink = document.createElement("a")
+      externalLink.className = "foundry-image-lightbox-link"
+      externalLink.setAttribute("target", "_blank")
+      externalLink.setAttribute("rel", "noopener noreferrer")
+      externalLink.append(createIcon(EXTERNAL_LINK_PATH), document.createTextNode("Open in browser"))
+
+      const closeButton = document.createElement("button")
+      closeButton.type = "button"
+      closeButton.className = "foundry-image-lightbox-close"
+      closeButton.setAttribute("aria-label", "Close image viewer")
+      closeButton.appendChild(createIcon(CLOSE_ICON_PATH))
+
+      actions.append(externalLink, closeButton)
+      toolbar.append(counter, actions)
+
+      const stage = document.createElement("div")
+      stage.className = "foundry-image-lightbox-stage"
 
       const prevButton = document.createElement("button")
       prevButton.type = "button"
-      prevButton.className = "foundry-image-carousel-button"
-      prevButton.textContent = "Previous"
+      prevButton.className = "foundry-image-lightbox-nav"
+      prevButton.classList.add("is-prev")
       prevButton.setAttribute("aria-label", "Show previous image")
-
-      const counter = document.createElement("span")
-      counter.className = "foundry-image-carousel-counter"
-      counter.setAttribute("aria-live", "polite")
+      prevButton.appendChild(createIcon(CHEVRON_LEFT_PATH))
 
       const nextButton = document.createElement("button")
       nextButton.type = "button"
-      nextButton.className = "foundry-image-carousel-button"
-      nextButton.textContent = "Next"
+      nextButton.className = "foundry-image-lightbox-nav"
+      nextButton.classList.add("is-next")
       nextButton.setAttribute("aria-label", "Show next image")
+      nextButton.appendChild(createIcon(CHEVRON_RIGHT_PATH))
 
-      controls.append(prevButton, counter, nextButton)
+      const viewerFrame = document.createElement("div")
+      viewerFrame.className = "foundry-image-lightbox-frame"
 
-      const dots = document.createElement("div")
-      dots.className = "foundry-image-carousel-dots"
+      const viewerImage = document.createElement("img")
+      viewerImage.className = "foundry-image-lightbox-image"
+      viewerImage.setAttribute("loading", "eager")
+      viewerFrame.appendChild(viewerImage)
 
-      const slides = group.map((block, slideIndex) => {
-        const slide = document.createElement("div")
-        slide.className = "foundry-image-carousel-slide"
-        slide.hidden = slideIndex !== 0
-        slide.setAttribute("data-active", slideIndex === 0 ? "true" : "false")
-        slide.appendChild(block)
-        viewport.appendChild(slide)
+      stage.append(prevButton, viewerFrame, nextButton)
+      dialog.append(toolbar, stage)
+      lightbox.append(lightboxBackdrop, dialog)
 
-        const dot = document.createElement("button")
-        dot.type = "button"
-        dot.className = "foundry-image-carousel-dot"
-        dot.setAttribute("aria-label", `Show image ${slideIndex + 1}`)
-        dots.appendChild(dot)
+      const items = sources.map((source, index) => {
+        const tile = document.createElement("div")
+        tile.className = "foundry-image-gallery-item"
 
-        return slide
+        const thumbnailButton = document.createElement("button")
+        thumbnailButton.type = "button"
+        thumbnailButton.className = "foundry-image-gallery-thumb"
+        thumbnailButton.setAttribute("aria-label", `Open image ${index + 1} of ${sources.length}`)
+
+        const thumbnailImage = document.createElement("img")
+        thumbnailImage.setAttribute("src", source.thumbSrc)
+        thumbnailImage.setAttribute("alt", source.alt)
+        if (source.title) {
+          thumbnailImage.setAttribute("title", source.title)
+        }
+        thumbnailImage.setAttribute("loading", "lazy")
+        thumbnailButton.appendChild(thumbnailImage)
+
+        const tileActions = document.createElement("div")
+        tileActions.className = "foundry-image-gallery-item-actions"
+
+        const tileExternalLink = document.createElement("a")
+        tileExternalLink.className = "foundry-image-gallery-open"
+        tileExternalLink.setAttribute("href", source.externalHref)
+        tileExternalLink.setAttribute("target", "_blank")
+        tileExternalLink.setAttribute("rel", "noopener noreferrer")
+        tileExternalLink.setAttribute("aria-label", `Open image ${index + 1} in browser`)
+        tileExternalLink.appendChild(createIcon(EXTERNAL_LINK_PATH))
+
+        tileActions.appendChild(tileExternalLink)
+        tile.append(thumbnailButton, tileActions)
+        grid.appendChild(tile)
+
+        return {
+          ...source,
+          thumbnailButton,
+          thumbnailImage,
+        }
       })
 
-      wrapper.append(viewport, controls, dots)
+      group.forEach((block) => block.remove())
+      wrapper.append(grid, lightbox)
 
       let activeIndex = 0
-      const dotButtons = Array.from(dots.querySelectorAll<HTMLButtonElement>("button"))
+      let lastTrigger: HTMLButtonElement | null = null
+
       const render = (nextIndex: number) => {
-        activeIndex = (nextIndex + slides.length) % slides.length
-        setActiveCarouselSlide(slides, dotButtons, counter, activeIndex)
+        activeIndex = renderActiveGalleryImage(items, viewerImage, counter, externalLink, nextIndex, options)
+      }
+
+      const openViewer = (nextIndex: number, trigger?: HTMLButtonElement) => {
+        lastTrigger = trigger || items[nextIndex]?.thumbnailButton || null
+        lightbox.hidden = false
+        wrapper.dataset.viewerOpen = "true"
+        render(nextIndex)
+        queueMicrotask(() => dialog.focus())
+      }
+
+      const closeViewer = () => {
+        lightbox.hidden = true
+        wrapper.dataset.viewerOpen = "false"
+        viewerImage.removeAttribute("data-foundry-auth-prefer-original")
+        lastTrigger?.focus()
       }
 
       const handlePrev = () => render(activeIndex - 1)
       const handleNext = () => render(activeIndex + 1)
+      const handleBackdropClick = () => closeViewer()
+      const handleClose = () => closeViewer()
+      const handleDialogKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          closeViewer()
+        }
+        if (event.key === "ArrowLeft") {
+          event.preventDefault()
+          handlePrev()
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault()
+          handleNext()
+        }
+      }
 
       prevButton.addEventListener("click", handlePrev)
       nextButton.addEventListener("click", handleNext)
+      lightboxBackdrop.addEventListener("click", handleBackdropClick)
+      closeButton.addEventListener("click", handleClose)
+      dialog.addEventListener("keydown", handleDialogKeyDown)
 
-      dotButtons.forEach((dot, dotIndex) => {
-        const handleClick = () => render(dotIndex)
-        dot.addEventListener("click", handleClick)
-        cleanups.push(() => dot.removeEventListener("click", handleClick))
+      items.forEach((item, itemIndex) => {
+        const handleClick = () => openViewer(itemIndex, item.thumbnailButton)
+        item.thumbnailButton.addEventListener("click", handleClick)
+        cleanups.push(() => item.thumbnailButton.removeEventListener("click", handleClick))
       })
-
-      render(0)
 
       cleanups.push(() => {
         prevButton.removeEventListener("click", handlePrev)
         nextButton.removeEventListener("click", handleNext)
+        lightboxBackdrop.removeEventListener("click", handleBackdropClick)
+        closeButton.removeEventListener("click", handleClose)
+        dialog.removeEventListener("keydown", handleDialogKeyDown)
       })
     }
   }

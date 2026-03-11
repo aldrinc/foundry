@@ -117,6 +117,23 @@ impl ZulipClient {
             1,
         )
     }
+
+    pub fn build_external_client(&self, timeout: Duration) -> Result<Client, String> {
+        build_http_client(
+            &self.desktop_settings,
+            Some(timeout),
+            Some(Duration::from_secs(10)),
+            5,
+        )
+    }
+
+    pub fn email(&self) -> &str {
+        &self.email
+    }
+
+    pub fn api_key(&self) -> &str {
+        &self.api_key
+    }
 }
 
 fn build_http_client(

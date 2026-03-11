@@ -4,7 +4,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 from .domain import (
     AgentDefinition,
@@ -151,6 +151,31 @@ class FoundryStore:
                     accepted_at TEXT,
                     accepted_by_user_id TEXT,
                     FOREIGN KEY (organization_id) REFERENCES organizations (organization_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS inbox_secretary_sessions (
+                    session_id TEXT PRIMARY KEY,
+                    scope_key TEXT NOT NULL UNIQUE,
+                    realm_url TEXT NOT NULL,
+                    user_email TEXT NOT NULL,
+                    turns_json TEXT NOT NULL DEFAULT '[]',
+                    snapshot_json TEXT,
+                    feedback_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS inbox_secretary_runs (
+                    run_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    prompt_version TEXT NOT NULL,
+                    user_message TEXT NOT NULL,
+                    assistant_reply TEXT NOT NULL,
+                    snapshot_json TEXT,
+                    tool_traces_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (session_id) REFERENCES inbox_secretary_sessions (session_id)
                 );
                 """
             )
@@ -633,6 +658,114 @@ class FoundryStore:
                 (accepted_by_user_id, invitation_id),
             )
 
+    def get_inbox_secretary_session(self, scope_key: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT session_id, scope_key, realm_url, user_email, turns_json, snapshot_json, feedback_json
+                FROM inbox_secretary_sessions
+                WHERE scope_key = ?
+                """,
+                (scope_key,),
+            ).fetchone()
+        return self._inbox_secretary_session_from_row(row) if row is not None else None
+
+    def put_inbox_secretary_session(
+        self,
+        *,
+        session_id: str,
+        scope_key: str,
+        realm_url: str,
+        user_email: str,
+        turns: list[dict[str, Any]],
+        snapshot: dict[str, Any] | None,
+        feedback: list[dict[str, Any]],
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO inbox_secretary_sessions (
+                    session_id,
+                    scope_key,
+                    realm_url,
+                    user_email,
+                    turns_json,
+                    snapshot_json,
+                    feedback_json,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (scope_key) DO UPDATE SET
+                    session_id = excluded.session_id,
+                    realm_url = excluded.realm_url,
+                    user_email = excluded.user_email,
+                    turns_json = excluded.turns_json,
+                    snapshot_json = excluded.snapshot_json,
+                    feedback_json = excluded.feedback_json,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (
+                    session_id,
+                    scope_key,
+                    realm_url,
+                    user_email,
+                    json.dumps(turns),
+                    json.dumps(snapshot) if snapshot is not None else None,
+                    json.dumps(feedback),
+                ),
+            )
+
+    def create_inbox_secretary_run(
+        self,
+        *,
+        run_id: str,
+        session_id: str,
+        model: str,
+        prompt_version: str,
+        user_message: str,
+        assistant_reply: str,
+        snapshot: dict[str, Any] | None,
+        tool_traces: list[dict[str, Any]],
+    ) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO inbox_secretary_runs (
+                    run_id,
+                    session_id,
+                    model,
+                    prompt_version,
+                    user_message,
+                    assistant_reply,
+                    snapshot_json,
+                    tool_traces_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    session_id,
+                    model,
+                    prompt_version,
+                    user_message,
+                    assistant_reply,
+                    json.dumps(snapshot) if snapshot is not None else None,
+                    json.dumps(tool_traces),
+                ),
+            )
+
+    def get_latest_inbox_secretary_run(self, session_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT run_id, session_id, model, prompt_version, user_message, assistant_reply, snapshot_json, tool_traces_json, created_at
+                FROM inbox_secretary_runs
+                WHERE session_id = ?
+                ORDER BY created_at DESC, rowid DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+        return self._inbox_secretary_run_from_row(row) if row is not None else None
+
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.database_path)
@@ -894,3 +1027,31 @@ class FoundryStore:
             expires_at=str(row["expires_at"]),
             accepted_by_user_id=row["accepted_by_user_id"],
         )
+
+    @staticmethod
+    def _inbox_secretary_session_from_row(row: sqlite3.Row) -> dict[str, Any]:
+        snapshot_json = row["snapshot_json"]
+        return {
+            "session_id": str(row["session_id"]),
+            "scope_key": str(row["scope_key"]),
+            "realm_url": str(row["realm_url"]),
+            "user_email": str(row["user_email"]),
+            "turns": json.loads(str(row["turns_json"])),
+            "snapshot": json.loads(str(snapshot_json)) if snapshot_json else None,
+            "feedback": json.loads(str(row["feedback_json"])),
+        }
+
+    @staticmethod
+    def _inbox_secretary_run_from_row(row: sqlite3.Row) -> dict[str, Any]:
+        snapshot_json = row["snapshot_json"]
+        return {
+            "run_id": str(row["run_id"]),
+            "session_id": str(row["session_id"]),
+            "model": str(row["model"]),
+            "prompt_version": str(row["prompt_version"]),
+            "user_message": str(row["user_message"]),
+            "assistant_reply": str(row["assistant_reply"]),
+            "snapshot": json.loads(str(snapshot_json)) if snapshot_json else None,
+            "tool_traces": json.loads(str(row["tool_traces_json"])),
+            "created_at": str(row["created_at"]),
+        }

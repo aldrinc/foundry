@@ -173,7 +173,7 @@ S3_SKIP_CHECKSUM: bool = False
 LOCAL_UPLOADS_DIR: str | None = None
 LOCAL_AVATARS_DIR: str | None = None
 LOCAL_FILES_DIR: str | None = None
-MAX_FILE_UPLOAD_SIZE = 100
+MAX_FILE_UPLOAD_SIZE = 20 * 1024
 # How many GB an organization on a cloud standard plan can upload per user,
 # on zulipchat.com.
 UPLOAD_QUOTA_PER_USER_GB_FOR_STANDARD = 5

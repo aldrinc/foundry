@@ -180,6 +180,13 @@ def rest_dispatch(request: HttpRequest, /, **kwargs: object) -> HttpResponse:
         # because there's no way to set the Authorization header in
         # React Native.  See last block for rate limiting notes.
         target_function = authenticated_uploads_api_view(skip_rate_limiting=True)(target_function)
+    elif request.path.startswith(("/json/foundry/", "/json/meridian/")) and "Authorization" in request.headers:
+        # Desktop builds still issue some supervisor/provider requests through
+        # legacy /json path families. Accept API-key auth here as a
+        # compatibility shim while clients migrate to /api/v1/foundry.
+        target_function = authenticated_rest_api_view(
+            allow_webhook_access="allow_incoming_webhooks" in view_flags,
+        )(target_function)
     # /json views (web client) validate with a session token (cookie)
     elif not request.path.startswith("/api") and check_is_authenticated(request):
         # Authenticated via sessions framework, only CSRF check needed

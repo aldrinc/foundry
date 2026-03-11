@@ -14,6 +14,12 @@ export function getProviderConnectionStatus(provider) {
 export function isProviderConnected(provider) {
     return getProviderConnectionStatus(provider) === "connected";
 }
+export function providerSupportsOauth(provider) {
+    return (provider.auth_modes || []).includes("oauth");
+}
+export function isProviderOauthConfigured(provider) {
+    return provider.oauth_configured === true;
+}
 export function getProviderCredentialLabel(provider) {
     const runtime = provider;
     const credential = runtime.credential;

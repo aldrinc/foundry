@@ -4,6 +4,8 @@ import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
 import {
   buildSupervisorDelegateContextFromDelegates,
   getProviderConnectionStatus,
+  isProviderOauthConfigured,
+  providerSupportsOauth,
   unwrapSupervisorMessageWithDelegates,
   wrapSupervisorMessageWithDelegates,
 } from "./agent-runtime"
@@ -81,6 +83,23 @@ describe("agents helpers", () => {
     } as FoundryProviderAuth
 
     expect(getProviderConnectionStatus(provider)).toBe("not_connected")
+  })
+
+  test("requires explicit oauth_configured before treating OAuth as usable", () => {
+    const advertisedOnly = {
+      provider: "codex",
+      display_name: "Codex",
+      auth_modes: ["api_key", "oauth"],
+    } as FoundryProviderAuth
+
+    const configured = {
+      ...advertisedOnly,
+      oauth_configured: true,
+    } as FoundryProviderAuth
+
+    expect(providerSupportsOauth(advertisedOnly)).toBe(true)
+    expect(isProviderOauthConfigured(advertisedOnly)).toBe(false)
+    expect(isProviderOauthConfigured(configured)).toBe(true)
   })
 
   test("builds a supervisor delegate manifest only from enabled delegateable agents", () => {

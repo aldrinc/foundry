@@ -73,6 +73,50 @@ async getMessages(orgId: string, narrow: NarrowFilter[], anchor: string, numBefo
 }
 },
 /**
+ * Analyze unread conversations and return citation-backed inbox priorities.
+ */
+async getInboxPriorities(orgId: string, candidates: InboxPriorityCandidate[]) : Promise<Result<InboxPrioritiesResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_inbox_priorities", { orgId, candidates }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Load the current inbox secretary session from Foundry-server.
+ */
+async getInboxAssistantSession(orgId: string) : Promise<Result<InboxSecretarySession, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_inbox_assistant_session", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Send a chat message to the inbox secretary and return the updated session.
+ */
+async sendInboxAssistantMessage(orgId: string, message: string) : Promise<Result<InboxSecretarySession, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("send_inbox_assistant_message", { orgId, message }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Persist user feedback against a secretary item and return the updated session.
+ */
+async recordInboxAssistantFeedback(orgId: string, itemKey: string, conversationKey: string, action: string, note: string | null) : Promise<Result<InboxSecretarySession, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("record_inbox_assistant_feedback", { orgId, itemKey, conversationKey, action, note }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Send a message
  */
 async sendMessage(orgId: string, msgType: string, to: string, content: string, topic: string | null) : Promise<Result<SendResult, string>> {
@@ -991,6 +1035,54 @@ export type GroupPermissionSetting = { require_system_group?: boolean; allow_int
  * Group-setting value returned by Zulip for organization permissions.
  */
 export type GroupSettingValue = number | AnonymousGroupSetting
+/**
+ * Response from the priority inbox analyzer.
+ */
+export type InboxPrioritiesResponse = { priorities: InboxPriorityItem[]; used_ai: boolean; fallback_reason: string }
+/**
+ * Candidate conversation sent to the priority inbox analyzer.
+ */
+export type InboxPriorityCandidate = { id: string; narrow: string; kind: string; label: string; unread_count: number; last_message_id: number; stream_id: number | null; stream_name: string | null; topic: string | null; user_ids: number[] | null }
+/**
+ * Source citation for a generated inbox priority item.
+ */
+export type InboxPriorityCitation = { message_id: number; sender_name: string; excerpt: string; timestamp: number }
+/**
+ * A single prioritized inbox item returned by the desktop analyzer.
+ */
+export type InboxPriorityItem = { candidate_id: string; narrow: string; kind: string; label: string; stream_id: number | null; stream_name: string; topic: string; user_ids: number[]; unread_count: number; last_message_id: number; status: string; title: string; summary: string; reason: string; citations: InboxPriorityCitation[] }
+/**
+ * Citation returned by the Foundry-server inbox secretary.
+ */
+export type InboxSecretaryCitation = { citation_id: string; message_id: number | null; sender_name: string; excerpt: string; timestamp: number; source_url: string; title: string }
+/**
+ * User feedback persisted for a secretary item.
+ */
+export type InboxSecretaryFeedbackEntry = { feedback_id: string; item_key: string; action: string; note: string; created_at: string }
+/**
+ * A secretary-generated priority or unclear item.
+ */
+export type InboxSecretaryItem = { external_key: string; conversation_key: string; narrow: string; kind: string; label: string; stream_id: number | null; stream_name: string; topic: string; user_ids: number[]; title: string; summary: string; why: string; status: string; confidence: string; source_packet_ids: string[]; citation_ids: string[]; citations: InboxSecretaryCitation[] }
+/**
+ * Latest run metadata for traceability in the secretary chat.
+ */
+export type InboxSecretaryRun = { run_id: string; model: string; prompt_version: string; assistant_reply: string; snapshot: InboxSecretarySnapshot | null; tool_traces: InboxSecretaryToolTrace[]; created_at: string }
+/**
+ * Full persisted state for the inbox secretary session.
+ */
+export type InboxSecretarySession = { session_id: string; scope_key: string; realm_url: string; user_email: string; turns: InboxSecretaryTurn[]; snapshot: InboxSecretarySnapshot | null; feedback: InboxSecretaryFeedbackEntry[]; configured: boolean; last_run: InboxSecretaryRun | null }
+/**
+ * Structured secretary snapshot shown in the inbox UI.
+ */
+export type InboxSecretarySnapshot = { generated_at: string; priorities: InboxSecretaryItem[]; unclear: InboxSecretaryItem[] }
+/**
+ * One tool execution from the latest secretary run.
+ */
+export type InboxSecretaryToolTrace = { tool_name: string; input: string; result: string; status: string; duration_ms: number }
+/**
+ * Single chat turn in the inbox secretary session.
+ */
+export type InboxSecretaryTurn = { turn_id: string; role: string; text: string; created_at: string }
 /**
  * Invitation returned by GET /api/v1/invites.
  */

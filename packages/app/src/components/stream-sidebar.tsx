@@ -11,8 +11,13 @@ import { OrgSwitcher } from "./org-switcher"
 import type { SavedServerStatus } from "@foundry/desktop/bindings"
 import { getUnreadTotalCount } from "../context/unread-state"
 import { buildTopicSidebarSections, isResolvedTopicName, resolveTopicName, unresolveTopicName } from "./topic-sidebar-state"
+import type { SettingsSection } from "../views/settings"
 
-export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: () => void | Promise<void>; onSwitchOrg?: (server: SavedServerStatus) => void }) {
+export function StreamSidebar(props: {
+  onOpenSettings?: (section?: SettingsSection) => void
+  onLogout?: () => void | Promise<void>
+  onSwitchOrg?: (server: SavedServerStatus) => void
+}) {
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
@@ -58,8 +63,11 @@ export function StreamSidebar(props: { onOpenSettings?: () => void; onLogout?: (
       {/* Org switcher */}
       <OrgSwitcher
         currentOrgId={org.orgId}
+        currentRealmName={org.realmName}
+        currentRealmIcon={org.realmIcon}
+        currentRealmUrl={org.realmUrl}
         onSwitch={(server) => props.onSwitchOrg?.(server)}
-        onAddOrg={() => props.onOpenSettings?.()}
+        onAddOrg={() => props.onOpenSettings?.("servers")}
       />
 
       {/* User header — avatar dropdown trigger */}

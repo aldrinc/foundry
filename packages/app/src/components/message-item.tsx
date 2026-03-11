@@ -136,8 +136,16 @@ export function MessageItem(props: {
   createEffect(() => {
     if (!contentEl) return
     contentEl.innerHTML = sanitizeMessageHtml(props.message.content, serverUrl())
-    const cleanupCarousel = hydrateMessageImageCarousels(contentEl)
-    const cleanupImages = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
+    let cleanupImages = () => {}
+    const rehydrateImages = () => {
+      cleanupImages()
+      cleanupImages = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
+    }
+    const cleanupCarousel = hydrateMessageImageCarousels(contentEl, {
+      onViewerImageChange: rehydrateImages,
+      serverUrl: serverUrl(),
+    })
+    rehydrateImages()
     onCleanup(() => {
       cleanupImages()
       cleanupCarousel()

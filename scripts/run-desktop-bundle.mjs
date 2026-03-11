@@ -38,5 +38,12 @@ child.on("exit", (code, signal) => {
     process.kill(process.pid, signal)
     return
   }
+  if (code === 0 && process.platform === "darwin" && !env.APPLE_CERTIFICATE && !env.APPLE_SIGNING_IDENTITY) {
+    console.log("")
+    console.log("macOS bundle completed without Apple signing/notarization.")
+    console.log(
+      "For internal testing, stage and repair the app with: bun run install:desktop:macos:unsigned -- <path-to-Foundry.app-or-.dmg>",
+    )
+  }
   process.exit(code ?? 1)
 })

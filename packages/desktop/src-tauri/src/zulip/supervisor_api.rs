@@ -1,9 +1,42 @@
 use std::time::Duration;
 
 use super::supervisor_types::*;
+use super::types::*;
 use super::ZulipClient;
 
+const PROVIDER_AUTH_PATH: &str = "/api/v1/foundry/providers/auth";
+const PROVIDER_CONNECT_PATH: &str = "/api/v1/foundry/providers/connect";
+const PROVIDER_DISCONNECT_PATH: &str = "/api/v1/foundry/providers/disconnect";
+const PROVIDER_OAUTH_START_PATH: &str = "/api/v1/foundry/providers/oauth/start";
+
 impl ZulipClient {
+    /// POST /api/v1/foundry/inbox/priorities
+    /// Analyze unread candidates and return citation-backed priorities.
+    pub async fn get_inbox_priorities(
+        &self,
+        candidates: &[InboxPriorityCandidate],
+    ) -> Result<InboxPrioritiesResponse, String> {
+        let candidates_json = serde_json::to_string(candidates)
+            .map_err(|e| format!("Failed to serialize inbox priority candidates: {}", e))?;
+
+        let resp = self
+            .post("/api/v1/foundry/inbox/priorities")
+            .form(&[("candidates", candidates_json)])
+            .send()
+            .await
+            .map_err(|e| format!("Failed to get inbox priorities: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Inbox priorities failed ({}): {}", status, body));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse inbox priorities response: {}", e))
+    }
+
     /// GET /api/v1/foundry/topics/{scope}/supervisor/session
     /// Poll supervisor session state and events
     pub async fn get_supervisor_session(
@@ -194,11 +227,11 @@ impl ZulipClient {
         Ok(())
     }
 
-    /// GET /json/foundry/providers/auth
+    /// GET /api/v1/foundry/providers/auth
     /// Get available AI providers and their auth status
     pub async fn get_foundry_providers(&self) -> Result<FoundryProvidersResponse, String> {
         let resp = self
-            .get("/json/foundry/providers/auth")
+            .get(PROVIDER_AUTH_PATH)
             .send()
             .await
             .map_err(|e| format!("Failed to get providers: {}", e))?;
@@ -214,7 +247,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse providers response: {}", e))
     }
 
-    /// POST /json/foundry/providers/connect
+    /// POST /api/v1/foundry/providers/connect
     /// Connect a provider using an API key credential
     pub async fn connect_foundry_provider(
         &self,
@@ -233,7 +266,7 @@ impl ZulipClient {
         }
 
         let resp = self
-            .post("/json/foundry/providers/connect")
+            .post(PROVIDER_CONNECT_PATH)
             .form(&params)
             .send()
             .await
@@ -250,14 +283,14 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse provider connect response: {}", e))
     }
 
-    /// POST /json/foundry/providers/disconnect
+    /// POST /api/v1/foundry/providers/disconnect
     /// Disconnect a provider credential
     pub async fn disconnect_foundry_provider(
         &self,
         provider: &str,
     ) -> Result<FoundryProviderCredentialResponse, String> {
         let resp = self
-            .post("/json/foundry/providers/disconnect")
+            .post(PROVIDER_DISCONNECT_PATH)
             .form(&[("provider", provider)])
             .send()
             .await
@@ -274,7 +307,7 @@ impl ZulipClient {
             .map_err(|e| format!("Failed to parse provider disconnect response: {}", e))
     }
 
-    /// POST /json/foundry/providers/oauth/start
+    /// POST /api/v1/foundry/providers/oauth/start
     /// Start a provider OAuth flow and return the authorization URL
     pub async fn start_foundry_provider_oauth(
         &self,
@@ -291,7 +324,7 @@ impl ZulipClient {
         }
 
         let resp = self
-            .post("/json/foundry/providers/oauth/start")
+            .post(PROVIDER_OAUTH_START_PATH)
             .form(&params)
             .send()
             .await
@@ -345,5 +378,21 @@ impl ZulipClient {
         resp.json()
             .await
             .map_err(|e| format!("Failed to parse task events response: {}", e))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        PROVIDER_AUTH_PATH, PROVIDER_CONNECT_PATH, PROVIDER_DISCONNECT_PATH,
+        PROVIDER_OAUTH_START_PATH,
+    };
+
+    #[test]
+    fn provider_endpoints_use_api_v1_routes() {
+        assert!(PROVIDER_AUTH_PATH.starts_with("/api/v1/"));
+        assert!(PROVIDER_CONNECT_PATH.starts_with("/api/v1/"));
+        assert!(PROVIDER_DISCONNECT_PATH.starts_with("/api/v1/"));
+        assert!(PROVIDER_OAUTH_START_PATH.starts_with("/api/v1/"));
     }
 }

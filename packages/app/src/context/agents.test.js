@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildSupervisorDelegateContextFromDelegates, getProviderConnectionStatus, unwrapSupervisorMessageWithDelegates, wrapSupervisorMessageWithDelegates, } from "./agent-runtime";
+import { buildSupervisorDelegateContextFromDelegates, getProviderConnectionStatus, isProviderOauthConfigured, providerSupportsOauth, unwrapSupervisorMessageWithDelegates, wrapSupervisorMessageWithDelegates, } from "./agent-runtime";
 function createDelegate(overrides = {}) {
     return {
         id: "researcher",
@@ -47,6 +47,20 @@ describe("agents helpers", () => {
             oauth_configured: true,
         };
         expect(getProviderConnectionStatus(provider)).toBe("not_connected");
+    });
+    test("requires explicit oauth_configured before treating OAuth as usable", () => {
+        const advertisedOnly = {
+            provider: "codex",
+            display_name: "Codex",
+            auth_modes: ["api_key", "oauth"],
+        };
+        const configured = {
+            ...advertisedOnly,
+            oauth_configured: true,
+        };
+        expect(providerSupportsOauth(advertisedOnly)).toBe(true);
+        expect(isProviderOauthConfigured(advertisedOnly)).toBe(false);
+        expect(isProviderOauthConfigured(configured)).toBe(true);
     });
     test("builds a supervisor delegate manifest only from enabled delegateable agents", () => {
         const manifest = buildSupervisorDelegateContextFromDelegates([

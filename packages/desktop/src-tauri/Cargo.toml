@@ -1,6 +1,6 @@
 [package]
 name = "foundry-desktop"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.77"
 
@@ -38,7 +38,7 @@ tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
 tokio = { version = "1", features = ["full"] }
 
 # HTTP client for Zulip API
-reqwest = { version = "0.12", features = ["json", "native-tls", "multipart"] }
+reqwest = { version = "0.12", features = ["json", "native-tls", "multipart", "stream"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

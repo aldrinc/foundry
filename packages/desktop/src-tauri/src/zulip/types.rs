@@ -368,6 +368,155 @@ pub struct MessageResponse {
     pub found_anchor: bool,
 }
 
+/// Candidate conversation sent to the priority inbox analyzer.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxPriorityCandidate {
+    pub id: String,
+    pub narrow: String,
+    pub kind: String,
+    pub label: String,
+    pub unread_count: u32,
+    pub last_message_id: u64,
+    pub stream_id: Option<u64>,
+    pub stream_name: Option<String>,
+    pub topic: Option<String>,
+    pub user_ids: Option<Vec<u64>>,
+}
+
+/// Source citation for a generated inbox priority item.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxPriorityCitation {
+    pub message_id: u64,
+    pub sender_name: String,
+    pub excerpt: String,
+    pub timestamp: i64,
+}
+
+/// A single prioritized inbox item returned by the desktop analyzer.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxPriorityItem {
+    pub candidate_id: String,
+    pub narrow: String,
+    pub kind: String,
+    pub label: String,
+    pub stream_id: Option<u64>,
+    pub stream_name: String,
+    pub topic: String,
+    pub user_ids: Vec<u64>,
+    pub unread_count: u32,
+    pub last_message_id: u64,
+    pub status: String,
+    pub title: String,
+    pub summary: String,
+    pub reason: String,
+    pub citations: Vec<InboxPriorityCitation>,
+}
+
+/// Response from the priority inbox analyzer.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxPrioritiesResponse {
+    pub priorities: Vec<InboxPriorityItem>,
+    pub used_ai: bool,
+    pub fallback_reason: String,
+}
+
+/// Single chat turn in the inbox secretary session.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryTurn {
+    pub turn_id: String,
+    pub role: String,
+    pub text: String,
+    pub created_at: String,
+}
+
+/// User feedback persisted for a secretary item.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryFeedbackEntry {
+    pub feedback_id: String,
+    pub item_key: String,
+    pub action: String,
+    pub note: String,
+    pub created_at: String,
+}
+
+/// Citation returned by the Foundry-server inbox secretary.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryCitation {
+    pub citation_id: String,
+    pub message_id: Option<u64>,
+    pub sender_name: String,
+    pub excerpt: String,
+    pub timestamp: i64,
+    pub source_url: String,
+    pub title: String,
+}
+
+/// A secretary-generated priority or unclear item.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryItem {
+    pub external_key: String,
+    pub conversation_key: String,
+    pub narrow: String,
+    pub kind: String,
+    pub label: String,
+    pub stream_id: Option<u64>,
+    pub stream_name: String,
+    pub topic: String,
+    pub user_ids: Vec<u64>,
+    pub title: String,
+    pub summary: String,
+    pub why: String,
+    pub status: String,
+    pub confidence: String,
+    pub source_packet_ids: Vec<String>,
+    pub citation_ids: Vec<String>,
+    pub citations: Vec<InboxSecretaryCitation>,
+}
+
+/// Structured secretary snapshot shown in the inbox UI.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretarySnapshot {
+    pub generated_at: String,
+    pub priorities: Vec<InboxSecretaryItem>,
+    pub unclear: Vec<InboxSecretaryItem>,
+}
+
+/// One tool execution from the latest secretary run.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryToolTrace {
+    pub tool_name: String,
+    pub input: String,
+    pub result: String,
+    pub status: String,
+    pub duration_ms: i64,
+}
+
+/// Latest run metadata for traceability in the secretary chat.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretaryRun {
+    pub run_id: String,
+    pub model: String,
+    pub prompt_version: String,
+    pub assistant_reply: String,
+    pub snapshot: Option<InboxSecretarySnapshot>,
+    pub tool_traces: Vec<InboxSecretaryToolTrace>,
+    pub created_at: String,
+}
+
+/// Full persisted state for the inbox secretary session.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct InboxSecretarySession {
+    pub session_id: String,
+    pub scope_key: String,
+    pub realm_url: String,
+    pub user_email: String,
+    pub turns: Vec<InboxSecretaryTurn>,
+    pub snapshot: Option<InboxSecretarySnapshot>,
+    pub feedback: Vec<InboxSecretaryFeedbackEntry>,
+    pub configured: bool,
+    pub last_run: Option<InboxSecretaryRun>,
+}
+
 /// Emoji reaction
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Reaction {

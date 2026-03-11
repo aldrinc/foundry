@@ -16,6 +16,7 @@ mod zulip;
 /// Per-organization connection state
 pub struct OrgState {
     pub client: zulip::ZulipClient,
+    pub current_user_id: Option<u64>,
     pub event_task: Option<tokio::task::JoinHandle<()>>,
     pub queue_id: Option<String>,
     pub supervisor_task: Option<tokio::task::JoinHandle<()>>,
@@ -152,6 +153,10 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::open_external_auth_window,
         commands::logout,
         commands::get_messages,
+        commands::get_inbox_priorities,
+        commands::get_inbox_assistant_session,
+        commands::send_inbox_assistant_message,
+        commands::record_inbox_assistant_feedback,
         commands::send_message,
         commands::edit_message,
         commands::delete_message,

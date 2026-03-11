@@ -11,7 +11,9 @@ import {
   getProviderCredentialLabel,
   getProviderConnectionStatus,
   getProviderDefaultModel,
+  isProviderOauthConfigured,
   isProviderConnected,
+  providerSupportsOauth,
 } from "../context/agent-runtime"
 import { usePlatform } from "../context/platform"
 import { useZulipSync } from "../context/zulip-sync"
@@ -462,12 +464,13 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
   const defaultModel = () => getProviderDefaultModel(props.provider)
   const status = () => getProviderConnectionStatus(props.provider)
   const connected = () => isProviderConnected(props.provider)
-  const supportsOauth = () => (props.provider.auth_modes || []).includes("oauth")
+  const supportsOauth = () => providerSupportsOauth(props.provider)
+  const oauthConfigured = () => isProviderOauthConfigured(props.provider)
   const supportsApiKey = () => (props.provider.auth_modes || []).includes("api_key")
   const credentialLabel = () => getProviderCredentialLabel(props.provider)
   const authLabels = () => {
     const labels: string[] = []
-    if (supportsOauth()) labels.push("OAuth")
+    if (supportsOauth()) labels.push(oauthConfigured() ? "OAuth" : "OAuth unavailable")
     if ((props.provider.auth_modes || []).includes("api_key")) labels.push("API key")
     if ((props.provider.auth_modes || []).includes("local")) labels.push("Local")
     return labels
@@ -585,7 +588,7 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
           <button
             class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-60"
             onClick={() => void handleOauth()}
-            disabled={busyAction() !== null || oauthPending()}
+            disabled={busyAction() !== null || oauthPending() || !oauthConfigured()}
           >
             {oauthPending() ? "Waiting for OAuth..." : "OAuth sign-in"}
           </button>
@@ -648,6 +651,12 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
       <Show when={message() || error()}>
         <div class={`text-[11px] mt-3 ${error() ? "text-[var(--status-error)]" : "text-[var(--text-tertiary)]"}`}>
           {error() || message()}
+        </div>
+      </Show>
+
+      <Show when={supportsOauth() && !oauthConfigured()}>
+        <div class="text-[11px] mt-3 text-[var(--text-tertiary)]">
+          OAuth is not configured on this Foundry instance for {label()}. Use API key auth for now.
         </div>
       </Show>
     </div>

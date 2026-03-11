@@ -89,6 +89,23 @@ class RealmTest(ZulipTestCase):
     ) -> None:
         self.assertEqual(user_profile.realm.name, new_realm_name)
 
+    def test_get_max_file_upload_size_mebibytes(self) -> None:
+        realm = get_realm("zulip")
+
+        with self.settings(MAX_FILE_UPLOAD_SIZE=25 * 1024):
+            realm.plan_type = Realm.PLAN_TYPE_SELF_HOSTED
+            self.assertEqual(realm.get_max_file_upload_size_mebibytes(), 25 * 1024)
+
+            realm.plan_type = Realm.PLAN_TYPE_STANDARD
+            self.assertEqual(realm.get_max_file_upload_size_mebibytes(), 20 * 1024)
+
+            realm.plan_type = Realm.PLAN_TYPE_LIMITED
+            self.assertEqual(realm.get_max_file_upload_size_mebibytes(), 20 * 1024)
+
+        with self.settings(MAX_FILE_UPLOAD_SIZE=10 * 1024):
+            realm.plan_type = Realm.PLAN_TYPE_PLUS
+            self.assertEqual(realm.get_max_file_upload_size_mebibytes(), 10 * 1024)
+
     def test_realm_creation_ensures_internal_realms(self) -> None:
         with mock.patch("zerver.actions.create_realm.server_initialized", return_value=False):
             with (

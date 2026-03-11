@@ -32,6 +32,9 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.github_webhook_secret_present)
         self.assertFalse(config.coder_api_token_present)
         self.assertFalse(config.stripe_secret_key_present)
+        self.assertFalse(config.anthropic_api_key_present)
+        self.assertEqual(config.anthropic_api_base_url, "https://api.anthropic.com")
+        self.assertEqual(config.anthropic_model, "claude-sonnet-4-6")
 
     def test_env_overrides_are_applied(self) -> None:
         config = load_config(
@@ -46,6 +49,9 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_CORE_URL": "https://core.foundry.test",
                 "FOUNDRY_CORE_BOOTSTRAP_SECRET": "core-secret",
                 "FOUNDRY_CORE_REALM_KEY_OVERRIDE": "__root__",
+                "FOUNDRY_ANTHROPIC_API_KEY": "anthropic-secret",
+                "FOUNDRY_ANTHROPIC_API_BASE_URL": "https://anthropic-proxy.foundry.test",
+                "FOUNDRY_ANTHROPIC_MODEL": "claude-opus-test",
                 "FOUNDRY_GITHUB_APP_PRIVATE_KEY_PATH": "/tmp/foundry.pem",
                 "FOUNDRY_GITHUB_WEBHOOK_SECRET": "secret",
                 "FOUNDRY_CODER_URL": "https://coder.foundry.test",
@@ -68,6 +74,9 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.core_url, "https://core.foundry.test")
         self.assertTrue(config.core_bootstrap_secret_present)
         self.assertEqual(config.core_realm_key_override, "__root__")
+        self.assertTrue(config.anthropic_api_key_present)
+        self.assertEqual(config.anthropic_api_base_url, "https://anthropic-proxy.foundry.test")
+        self.assertEqual(config.anthropic_model, "claude-opus-test")
         self.assertTrue(config.github_app_private_key_present)
         self.assertTrue(config.github_webhook_secret_present)
         self.assertEqual(config.coder_url, "https://coder.foundry.test")

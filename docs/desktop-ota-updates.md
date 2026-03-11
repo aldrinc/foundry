@@ -35,15 +35,23 @@ If you later rotate to a password-protected key, also set:
 
 ## Release process
 
-1. Bump the desktop version before releasing.
-   Keep these files aligned:
+1. Bump the desktop version before releasing:
+
+   ```bash
+   bun run version:desktop -- 0.1.2
+   ```
+
+   That command updates and keeps aligned:
    - `packages/desktop/src-tauri/tauri.conf.json`
    - `packages/desktop/src-tauri/Cargo.toml`
+   - `packages/desktop/src-tauri/Cargo.lock`
    - `packages/desktop/package.json`
 2. Push the release branch or merged commit to GitHub.
 3. Run the `Desktop Release` workflow from GitHub Actions, or push a `desktop-v*` tag.
 4. The workflow builds desktop bundles, uploads signed updater metadata, and publishes release assets to GitHub Releases.
-5. Installed apps with auto-update enabled will check the GitHub feed and install the new version.
+5. Installed apps with auto-update enabled will check the GitHub feed and prompt the user to install the new version.
+
+The release workflow now verifies that all desktop version files agree, and that a pushed `desktop-v*` tag matches the app version exactly.
 
 ## Notes
 

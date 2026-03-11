@@ -54,6 +54,13 @@ from .domain import (
     UserSession,
 )
 from .github_app import GitHubAppClient, GitHubAppConfigurationError, GitHubAppRequestError
+from .inbox_secretary import (
+    InboxSecretaryConfigurationError,
+    InboxSecretaryRequestError,
+    InboxSecretaryService,
+    normalize_scope_key,
+    reconcile_snapshot_with_feedback,
+)
 from .local_auth import (
     generate_password_salt,
     generate_session_token,
@@ -158,6 +165,19 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         try:
             return get_core_client()
         except FoundryCoreConfigurationError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    def get_inbox_secretary_service() -> InboxSecretaryService:
+        service = getattr(app.state, "inbox_secretary_service", None)
+        if service is None:
+            service = InboxSecretaryService(server_config)
+            app.state.inbox_secretary_service = service
+        return service
+
+    def require_inbox_secretary_service() -> InboxSecretaryService:
+        try:
+            return get_inbox_secretary_service()
+        except InboxSecretaryConfigurationError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     def get_store() -> FoundryStore:
@@ -733,6 +753,164 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 detail="Local password auth is not enabled for this environment.",
             )
 
+    def coerce_required_text(payload: dict[str, object], key: str) -> str:
+        value = payload.get(key)
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized:
+                return normalized
+        raise HTTPException(status_code=400, detail=f"Missing required field: {key}")
+
+    def coerce_optional_text(payload: dict[str, object], key: str) -> str:
+        value = payload.get(key)
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        return str(value).strip()
+
+    def coerce_optional_int(payload: dict[str, object], key: str) -> int | None:
+        value = payload.get(key)
+        if value is None or value == "":
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid integer field: {key}") from exc
+
+    def secretary_timestamp() -> str:
+        return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def create_secretary_turn(role: str, text: str) -> dict[str, object]:
+        return {
+            "turn_id": str(uuid.uuid4()),
+            "role": role,
+            "text": text.strip(),
+            "created_at": secretary_timestamp(),
+        }
+
+    def empty_secretary_session(*, scope_key: str, realm_url: str, user_email: str) -> dict[str, object]:
+        return {
+            "session_id": str(uuid.uuid4()),
+            "scope_key": scope_key,
+            "realm_url": realm_url,
+            "user_email": user_email,
+            "turns": [],
+            "snapshot": None,
+            "feedback": [],
+        }
+
+    def ensure_secretary_session(
+        *,
+        scope_key: str,
+        realm_url: str,
+        user_email: str,
+    ) -> dict[str, object]:
+        session = get_store().get_inbox_secretary_session(scope_key)
+        if session is not None:
+            return session
+        session = empty_secretary_session(
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+        )
+        get_store().put_inbox_secretary_session(
+            session_id=str(session["session_id"]),
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+            turns=list(session["turns"]),
+            snapshot=session["snapshot"],
+            feedback=list(session["feedback"]),
+        )
+        return session
+
+    def trim_secretary_history(items: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+        if len(items) <= limit:
+            return items
+        return items[-limit:]
+
+    def secretary_feedback_label(session: dict[str, object], *, item_key: str) -> str:
+        item = secretary_snapshot_item(session, item_key=item_key)
+        if item is None:
+            return "item"
+        title = str(item.get("title") or "").strip()
+        return title or "item"
+
+    def secretary_snapshot_item(session: dict[str, object], *, item_key: str) -> dict[str, object] | None:
+        snapshot = session.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return None
+        for bucket in ("priorities", "unclear"):
+            raw_items = snapshot.get(bucket, [])
+            if not isinstance(raw_items, list):
+                continue
+            for item in raw_items:
+                if not isinstance(item, dict):
+                    continue
+                candidate_keys = {
+                    str(item.get("external_key") or "").strip(),
+                    str(item.get("conversation_key") or "").strip(),
+                }
+                if item_key in candidate_keys:
+                    return item
+        return None
+
+    def secretary_feedback_reply(action: str, *, label: str) -> str:
+        if action == "done":
+            return f"Recorded \"{label}\" as done. I’ll keep it closed unless newer evidence reopens it."
+        if action == "waiting":
+            return f"Recorded \"{label}\" as waiting. I’ll keep it in a waiting state until newer activity changes it."
+        if action == "not_mine":
+            return f"Recorded \"{label}\" as not yours. I won’t surface it again unless newer evidence makes it relevant."
+        return f"Recorded feedback for \"{label}\"."
+
+    def serialize_secretary_run(run: dict[str, object] | None) -> dict[str, object] | None:
+        if run is None:
+            return None
+        raw_traces = run.get("tool_traces", [])
+        tool_traces: list[dict[str, object]] = []
+        if isinstance(raw_traces, list):
+            for raw_trace in raw_traces:
+                if not isinstance(raw_trace, dict):
+                    continue
+                tool_traces.append(
+                    {
+                        "tool_name": str(raw_trace.get("tool_name", "")),
+                        "input": json.dumps(raw_trace.get("input", {}), ensure_ascii=True),
+                        "result": json.dumps(raw_trace.get("result", {}), ensure_ascii=True),
+                        "status": str(raw_trace.get("status", "")),
+                        "duration_ms": int(raw_trace.get("duration_ms", 0) or 0),
+                    }
+                )
+        return {
+            "run_id": run["run_id"],
+            "model": run["model"],
+            "prompt_version": run["prompt_version"],
+            "assistant_reply": run["assistant_reply"],
+            "snapshot": run["snapshot"],
+            "tool_traces": tool_traces,
+            "created_at": run["created_at"],
+        }
+
+    def serialize_secretary_session(session: dict[str, object]) -> dict[str, object]:
+        latest_run = get_store().get_latest_inbox_secretary_run(str(session["session_id"]))
+        reconciled_snapshot = reconcile_snapshot_with_feedback(
+            session["snapshot"] if isinstance(session["snapshot"], dict) else None,
+            list(session["feedback"]) if isinstance(session.get("feedback"), list) else [],
+        )
+        return {
+            "session_id": session["session_id"],
+            "scope_key": session["scope_key"],
+            "realm_url": session["realm_url"],
+            "user_email": session["user_email"],
+            "turns": session["turns"],
+            "snapshot": reconciled_snapshot,
+            "feedback": session["feedback"],
+            "configured": server_config.anthropic_api_key_present,
+            "last_run": serialize_secretary_run(latest_run),
+        }
+
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
@@ -742,6 +920,154 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "self_host_mode": server_config.self_host_mode,
             "workspace_topology": server_config.workspace_topology.value,
         }
+
+    @app.post("/api/v1/desktop/inbox-secretary/session")
+    def inbox_secretary_session(payload: dict[str, object] = Body(...)) -> dict[str, object]:
+        org_key = coerce_required_text(payload, "org_key")
+        realm_url = coerce_required_text(payload, "realm_url")
+        user_email = coerce_required_text(payload, "user_email")
+        scope_key = normalize_scope_key(org_key, user_email)
+        session = ensure_secretary_session(
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+        )
+        return serialize_secretary_session(session)
+
+    @app.post("/api/v1/desktop/inbox-secretary/chat")
+    def inbox_secretary_chat(payload: dict[str, object] = Body(...)) -> dict[str, object]:
+        org_key = coerce_required_text(payload, "org_key")
+        realm_url = coerce_required_text(payload, "realm_url")
+        user_email = coerce_required_text(payload, "user_email")
+        api_key = coerce_required_text(payload, "api_key")
+        message = coerce_required_text(payload, "message")
+        current_user_id = coerce_optional_int(payload, "current_user_id")
+        scope_key = normalize_scope_key(org_key, user_email)
+        session = ensure_secretary_session(
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+        )
+
+        try:
+            result = require_inbox_secretary_service().run_turn(
+                realm_url=realm_url,
+                user_email=user_email,
+                api_key=api_key,
+                current_user_id=current_user_id,
+                prior_turns=list(session["turns"]),
+                feedback=list(session["feedback"]),
+                message=message,
+            )
+        except InboxSecretaryRequestError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        turns = trim_secretary_history(
+            list(session["turns"])
+            + [
+                create_secretary_turn("user", message),
+                create_secretary_turn("assistant", str(result["reply"])),
+            ],
+            limit=40,
+        )
+        updated_session = {
+            **session,
+            "realm_url": realm_url,
+            "user_email": user_email,
+            "turns": turns,
+            "snapshot": reconcile_snapshot_with_feedback(
+                result["snapshot"] if isinstance(result["snapshot"], dict) else None,
+                list(session["feedback"]),
+            ),
+            "feedback": list(session["feedback"]),
+        }
+        get_store().put_inbox_secretary_session(
+            session_id=str(updated_session["session_id"]),
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+            turns=turns,
+            snapshot=result["snapshot"] if isinstance(result["snapshot"], dict) else None,
+            feedback=list(session["feedback"]),
+        )
+        get_store().create_inbox_secretary_run(
+            run_id=str(uuid.uuid4()),
+            session_id=str(updated_session["session_id"]),
+            model=str(result["model"]),
+            prompt_version=str(result["prompt_version"]),
+            user_message=message,
+            assistant_reply=str(result["reply"]),
+            snapshot=result["snapshot"] if isinstance(result["snapshot"], dict) else None,
+            tool_traces=list(result["tool_traces"]) if isinstance(result["tool_traces"], list) else [],
+        )
+        return serialize_secretary_session(updated_session)
+
+    @app.post("/api/v1/desktop/inbox-secretary/feedback")
+    def inbox_secretary_feedback(payload: dict[str, object] = Body(...)) -> dict[str, object]:
+        org_key = coerce_required_text(payload, "org_key")
+        realm_url = coerce_required_text(payload, "realm_url")
+        user_email = coerce_required_text(payload, "user_email")
+        item_key = coerce_required_text(payload, "item_key")
+        conversation_key = coerce_optional_text(payload, "conversation_key")
+        action = coerce_required_text(payload, "action").lower()
+        note = coerce_optional_text(payload, "note")
+        if action not in {"done", "not_mine", "waiting", "dismissed"}:
+            raise HTTPException(status_code=400, detail=f"Unsupported feedback action: {action}")
+
+        scope_key = normalize_scope_key(org_key, user_email)
+        session = ensure_secretary_session(
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+        )
+        existing_item = secretary_snapshot_item(session, item_key=item_key)
+        item_label = secretary_feedback_label(session, item_key=item_key)
+        feedback_entry = {
+            "feedback_id": str(uuid.uuid4()),
+            "item_key": item_key,
+            "conversation_key": conversation_key or "",
+            "evidence_key": (
+                str(existing_item.get("evidence_key", "")).strip()
+                if isinstance(existing_item, dict)
+                else ""
+            ),
+            "action": action,
+            "note": note,
+            "created_at": secretary_timestamp(),
+        }
+        updated_feedback = trim_secretary_history(
+            list(session["feedback"]) + [feedback_entry],
+            limit=40,
+        )
+        updated_turns = trim_secretary_history(
+            list(session["turns"])
+            + [
+                create_secretary_turn("user", f'Feedback: marked "{item_label}" as {action}.'),
+                create_secretary_turn("assistant", secretary_feedback_reply(action, label=item_label)),
+            ],
+            limit=40,
+        )
+        updated_session = {
+            **session,
+            "realm_url": realm_url,
+            "user_email": user_email,
+            "turns": updated_turns,
+            "feedback": updated_feedback,
+            "snapshot": reconcile_snapshot_with_feedback(
+                session["snapshot"] if isinstance(session["snapshot"], dict) else None,
+                updated_feedback,
+            ),
+        }
+        get_store().put_inbox_secretary_session(
+            session_id=str(updated_session["session_id"]),
+            scope_key=scope_key,
+            realm_url=realm_url,
+            user_email=user_email,
+            turns=list(updated_session["turns"]),
+            snapshot=updated_session["snapshot"] if isinstance(updated_session["snapshot"], dict) else None,
+            feedback=list(updated_session["feedback"]),
+        )
+        return serialize_secretary_session(updated_session)
 
     @app.get("/api/v1/meta/launch-decisions")
     def launch_decisions(request: Request) -> dict[str, object]:

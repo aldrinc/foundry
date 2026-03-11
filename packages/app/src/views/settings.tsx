@@ -16,8 +16,9 @@ import { SettingsBots } from "./settings-bots"
 import { SettingsApp } from "./settings-app"
 import { SettingsNetwork } from "./settings-network"
 import { SettingsServers } from "./settings-servers"
+import type { SavedServerStatus } from "@foundry/desktop/bindings"
 
-type SettingsSection =
+export type SettingsSection =
   | "general" | "notifications" | "account" | "muted-users" | "alert-words"
   | "channels" | "groups"
   | "org-profile" | "org-permissions" | "emoji" | "linkifiers" | "users" | "agents" | "bots"
@@ -75,8 +76,13 @@ const NAV: NavCategory[] = [
   },
 ]
 
-export function SettingsView(props: { onClose: () => void; onLogout: () => void | Promise<void> }) {
-  const [activeSection, setActiveSection] = createSignal<SettingsSection>("general")
+export function SettingsView(props: {
+  initialSection?: SettingsSection
+  onClose: () => void
+  onLogout: () => void | Promise<void>
+  onSwitchOrg?: (server: SavedServerStatus) => void
+}) {
+  const [activeSection, setActiveSection] = createSignal<SettingsSection>(props.initialSection ?? "general")
 
   const renderContent = () => {
     switch (activeSection()) {
@@ -96,7 +102,7 @@ export function SettingsView(props: { onClose: () => void; onLogout: () => void 
       case "bots": return <SettingsBots />
       case "app": return <SettingsApp />
       case "network": return <SettingsNetwork />
-      case "servers": return <SettingsServers />
+      case "servers": return <SettingsServers onSwitchOrg={props.onSwitchOrg} />
       case "about": return <SettingsAbout />
       default: return <SettingsGeneral />
     }

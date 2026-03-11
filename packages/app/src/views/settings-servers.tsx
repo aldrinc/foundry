@@ -21,7 +21,11 @@ import {
 
 type AuthMode = "api-key" | "password"
 
-export function SettingsServers() {
+export function SettingsServers(props: {
+  onSwitchOrg?: (server: SavedServerStatus) => void
+}) {
+  const ASSISTANT_SERVER_KEY = "foundry_server_url"
+  const LOCAL_ASSISTANT_DEFAULT = "http://127.0.0.1:8090"
   const org = useOrg()
   const platform = usePlatform()
   const [servers, setServers] = createSignal<SavedServerStatus[]>([])
@@ -36,6 +40,10 @@ export function SettingsServers() {
   const [error, setError] = createSignal("")
   const [loading, setLoading] = createSignal(false)
   const [pendingSsoProvider, setPendingSsoProvider] = createSignal<string | null>(null)
+  const [assistantServerUrl, setAssistantServerUrl] = createSignal("")
+  const [assistantServerSavedUrl, setAssistantServerSavedUrl] = createSignal("")
+  const [assistantServerLoading, setAssistantServerLoading] = createSignal(false)
+  const [assistantServerMessage, setAssistantServerMessage] = createSignal("")
   const externalAuthMethods = () => serverInfo()?.external_authentication_methods ?? []
   const canUsePasswordAuth = () => {
     const info = serverInfo()
@@ -57,8 +65,27 @@ export function SettingsServers() {
     }
   }
 
+  const loadAssistantServerUrl = async () => {
+    try {
+      const result = await commands.getConfig(ASSISTANT_SERVER_KEY)
+      if (result.status !== "ok" || !result.data) {
+        setAssistantServerUrl("")
+        setAssistantServerSavedUrl("")
+        return
+      }
+      const parsed = JSON.parse(result.data)
+      const value = typeof parsed === "string" ? parsed.trim() : ""
+      setAssistantServerUrl(value)
+      setAssistantServerSavedUrl(value)
+    } catch {
+      setAssistantServerUrl("")
+      setAssistantServerSavedUrl("")
+    }
+  }
+
   onMount(() => {
     void loadServers()
+    void loadAssistantServerUrl()
     void handleDeepLinks(consumePendingDeepLinks())
 
     const unsubscribe = subscribeToDeepLinks((urls) => {
@@ -67,6 +94,25 @@ export function SettingsServers() {
 
     onCleanup(unsubscribe)
   })
+
+  const handleSaveAssistantServer = async () => {
+    setAssistantServerLoading(true)
+    setAssistantServerMessage("")
+    try {
+      const value = assistantServerUrl().trim()
+      await commands.setConfig(ASSISTANT_SERVER_KEY, JSON.stringify(value))
+      setAssistantServerSavedUrl(value)
+      setAssistantServerMessage(
+        value
+          ? "Assistant backend saved."
+          : `Assistant backend cleared. The app will fall back to ${LOCAL_ASSISTANT_DEFAULT}.`,
+      )
+    } catch (e: any) {
+      setAssistantServerMessage(e?.toString() || "Failed to save assistant backend URL.")
+    } finally {
+      setAssistantServerLoading(false)
+    }
+  }
 
   const resetAddForm = () => {
     setShowAdd(false)
@@ -214,6 +260,57 @@ export function SettingsServers() {
 
   return (
     <div class="space-y-6">
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-[var(--text-primary)]">Assistant Backend</h3>
+          <button
+            class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-base)] transition-colors disabled:opacity-50"
+            disabled={assistantServerLoading() || assistantServerUrl().trim() === assistantServerSavedUrl().trim()}
+            onClick={() => void handleSaveAssistantServer()}
+          >
+            {assistantServerLoading() ? "Saving..." : "Save"}
+          </button>
+        </div>
+
+        <p class="text-xs text-[var(--text-tertiary)]">
+          Used by the inbox secretary and other server-backed agent features. Leave blank to use the local default at {LOCAL_ASSISTANT_DEFAULT}.
+        </p>
+
+        <div class="space-y-2">
+          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block">Assistant backend URL</label>
+          <input
+            type="text"
+            class="w-full text-xs bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] font-mono"
+            placeholder="https://server-dev.example.sslip.io"
+            value={assistantServerUrl()}
+            onInput={(e) => {
+              setAssistantServerUrl(e.currentTarget.value)
+              setAssistantServerMessage("")
+            }}
+          />
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[10px] text-[var(--text-quaternary)] font-mono truncate">
+              {assistantServerSavedUrl().trim() ? `Saved: ${assistantServerSavedUrl().trim()}` : `Saved: local default (${LOCAL_ASSISTANT_DEFAULT})`}
+            </span>
+            <button
+              class="text-[10px] px-2 py-1 rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-base)] transition-colors disabled:opacity-50"
+              disabled={assistantServerLoading()}
+              onClick={() => {
+                setAssistantServerUrl("")
+                setAssistantServerMessage("")
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          <Show when={assistantServerMessage()}>
+            <div class={`text-[11px] ${assistantServerMessage().includes("Failed") ? "text-[var(--status-error)]" : "text-[var(--text-tertiary)]"}`}>
+              {assistantServerMessage()}
+            </div>
+          </Show>
+        </div>
+      </div>
+
       <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-[var(--text-primary)]">Connected Servers</h3>
         <button
@@ -422,19 +519,35 @@ export function SettingsServers() {
                 </div>
 
                 <div class="flex items-center gap-2 shrink-0">
-                  <Show when={server.id !== org.orgId}>
-                    <Show
-                      when={server.connected}
-                      fallback={
-                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--background-base)] text-[var(--text-quaternary)] border border-[var(--border-default)]">
-                          Saved
+                  <Show
+                    when={server.id === org.orgId}
+                    fallback={
+                      <Show
+                        when={server.connected}
+                        fallback={
+                          <span class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--background-base)] text-[var(--text-quaternary)] border border-[var(--border-default)]">
+                            Saved
+                          </span>
+                        }
+                      >
+                        <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
+                          Connected
                         </span>
-                      }
+                      </Show>
+                    }
+                  >
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--interactive-primary)]/10 text-[var(--interactive-primary)] border border-[var(--interactive-primary)]/20">
+                      Current
+                    </span>
+                  </Show>
+
+                  <Show when={server.id !== org.orgId}>
+                    <button
+                      class="text-[10px] px-2 py-1 rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity"
+                      onClick={() => props.onSwitchOrg?.(server)}
                     >
-                      <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700">
-                        Connected
-                      </span>
-                    </Show>
+                      Switch
+                    </button>
                   </Show>
 
                   <Show when={server.connected && server.id !== org.orgId}>

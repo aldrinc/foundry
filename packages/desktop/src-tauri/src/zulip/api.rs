@@ -1,5 +1,6 @@
 use base64::Engine as _;
 use serde::de::DeserializeOwned;
+use serde::Deserialize;
 
 use super::types::*;
 use super::ZulipClient;
@@ -11,6 +12,11 @@ struct RealmSettingsRegisterResponse {
     queue_id: String,
     #[serde(flatten)]
     snapshot: RealmSettingsSnapshot,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct MessageSummaryResponse {
+    summary: String,
 }
 
 fn is_resolved_topic(topic_name: &str) -> bool {
@@ -407,6 +413,31 @@ impl ZulipClient {
         resp.json()
             .await
             .map_err(|e| format!("Failed to parse messages: {}", e))
+    }
+
+    /// GET /api/v1/messages/summary — summarize a narrow if the server has AI enabled.
+    pub async fn get_messages_summary(&self, narrow: &[NarrowFilter]) -> Result<String, String> {
+        let narrow_json =
+            serde_json::to_string(narrow).map_err(|e| format!("Narrow serialize error: {}", e))?;
+
+        let resp = self
+            .get("/api/v1/messages/summary")
+            .query(&[("narrow", &narrow_json)])
+            .send()
+            .await
+            .map_err(|e| format!("Get message summary failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Get message summary failed: {}", body));
+        }
+
+        let summary: MessageSummaryResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse message summary response: {}", e))?;
+
+        Ok(summary.summary)
     }
 
     /// POST /api/v1/messages — Send a message
@@ -910,12 +941,10 @@ impl ZulipClient {
     }
 
     /// POST /api/v1/user_uploads — Upload a file
-    pub async fn upload_file(
-        &self,
-        file_bytes: Vec<u8>,
-        file_name: &str,
-    ) -> Result<UploadResult, String> {
-        let part = reqwest::multipart::Part::bytes(file_bytes).file_name(file_name.to_string());
+    pub async fn upload_file(&self, file_path: &str) -> Result<UploadResult, String> {
+        let part = reqwest::multipart::Part::file(file_path)
+            .await
+            .map_err(|e| format!("Failed to open upload file: {}", e))?;
         let form = reqwest::multipart::Form::new().part("file", part);
 
         let resp = self

@@ -11,6 +11,7 @@ import { usePlatform } from "./context/platform"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
 import { SettingsView } from "./views/settings"
+import type { SettingsSection } from "./views/settings"
 import { RecentTopicsView } from "./views/recent-topics"
 import { StarredView } from "./views/starred"
 import { AllMessagesView } from "./views/all-messages"
@@ -28,8 +29,23 @@ import {
   markManualLogout,
   shouldSkipAutoLogin,
 } from "./manual-logout"
+import {
+  getAutoLoginServer,
+  getPreferredServerId,
+  setPreferredServerId,
+} from "./preferred-server"
 import { commands } from "@foundry/desktop/bindings"
 import type { LoginResult, Subscription, User, Message, SavedServerStatus } from "@foundry/desktop/bindings"
+import {
+  availableUpdatePrompt,
+  failInstallingUpdate,
+  getUpdatePromptDescription,
+  getUpdatePromptPrimaryActionLabel,
+  getUpdatePromptTitle,
+  hideUpdatePrompt,
+  startInstallingUpdate,
+  type UpdatePromptState,
+} from "./update-prompt-state"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
@@ -115,10 +131,12 @@ export function App(props: {
 
       const result = await commands.getServers()
       if (result.status === "ok" && result.data.length > 0) {
-        const server = result.data[0]
+        const server = getAutoLoginServer(result.data, getPreferredServerId(window.localStorage))
+        if (!server) return
         setLoginEmail(server.email)
         const loginRes = await commands.login(server.url, server.email, server.api_key)
         if (loginRes.status === "ok") {
+          setPreferredServerId(window.localStorage, loginRes.data.org_id)
           setLoginResult(loginRes.data)
         }
       }
@@ -131,6 +149,7 @@ export function App(props: {
 
   const handleLogin = (result: LoginResult, email?: string) => {
     clearManualLogout(window.localStorage)
+    setPreferredServerId(window.localStorage, result.org_id)
     setLoginResult(result)
     if (email) setLoginEmail(email)
   }
@@ -142,12 +161,7 @@ export function App(props: {
   }
 
   const handleSwitchOrg = async (server: SavedServerStatus) => {
-    // Logout current org
     const current = loginResult()
-    if (current) {
-      try { await commands.logout(current.org_id) } catch { /* non-critical */ }
-    }
-    // Login to new org
     try {
       const servers = await commands.getServers()
       if (servers.status === "ok") {
@@ -156,8 +170,12 @@ export function App(props: {
           const res = await commands.login(saved.url, saved.email, saved.api_key)
           if (res.status === "ok") {
             clearManualLogout(window.localStorage)
+            setPreferredServerId(window.localStorage, res.data.org_id)
             setLoginEmail(saved.email)
             setLoginResult(res.data)
+            if (current && current.org_id !== res.data.org_id) {
+              void commands.logout(current.org_id).catch(() => {})
+            }
             return
           }
         }
@@ -236,9 +254,11 @@ function AppShell(props: {
   const nav = useNavigation()
   const { store: settingsStore, capabilities } = useSettings()
   const platform = usePlatform()
+  const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("general")
   const [showSettings, setShowSettings] = createSignal(false)
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
+  const [updatePrompt, setUpdatePrompt] = createSignal<UpdatePromptState>(hideUpdatePrompt())
   let autoUpdateCheckStarted = false
 
   const handleLogout = async () => {
@@ -249,6 +269,11 @@ function AppShell(props: {
     }
 
     props.onLogout()
+  }
+
+  const openSettings = (section: SettingsSection = "general") => {
+    setSettingsSection(section)
+    setShowSettings(true)
   }
 
   // Let the sync layer know which narrow the user is viewing,
@@ -349,12 +374,72 @@ function AppShell(props: {
           if (!result.updateAvailable) {
             return
           }
-          await platform.update!()
+          setUpdatePrompt(availableUpdatePrompt(result.version))
         } catch (error) {
           console.warn("[Updater] automatic update check failed", error)
         }
       })()
     }, 3000)
+  })
+
+  createEffect(() => {
+    if (!settingsStore.autoUpdate && updatePrompt().phase !== "hidden") {
+      setUpdatePrompt(hideUpdatePrompt())
+    }
+  })
+
+  const dismissUpdatePrompt = () => {
+    if (updatePrompt().phase === "installing") {
+      return
+    }
+    setUpdatePrompt(hideUpdatePrompt())
+  }
+
+  const installUpdate = async () => {
+    if (!platform.update) {
+      return
+    }
+
+    const current = updatePrompt()
+    if (current.phase !== "available" && current.phase !== "error") {
+      return
+    }
+
+    setUpdatePrompt(startInstallingUpdate(current))
+
+    try {
+      await platform.update()
+      setUpdatePrompt(hideUpdatePrompt())
+    } catch (error) {
+      console.warn("[Updater] install failed", error)
+      setUpdatePrompt(failInstallingUpdate(current, error))
+    }
+  }
+
+  onMount(() => {
+    if (window.location.protocol !== "http:") {
+      return
+    }
+
+    const debugWindow = window as Window & {
+      __FOUNDRY_DESKTOP_DEBUG__?: {
+        showUpdatePrompt: (version?: string) => void
+        clearUpdatePrompt: () => void
+      }
+    }
+
+    const debugApi = {
+      showUpdatePrompt: (version?: string) => setUpdatePrompt(availableUpdatePrompt(version)),
+      clearUpdatePrompt: () => setUpdatePrompt(hideUpdatePrompt()),
+    }
+
+    debugWindow.__FOUNDRY_DESKTOP_DEBUG__ = debugApi
+
+    onCleanup(() => {
+      if (debugWindow.__FOUNDRY_DESKTOP_DEBUG__ === debugApi) {
+        delete debugWindow.__FOUNDRY_DESKTOP_DEBUG__
+      }
+    })
   })
 
   // ── Settings-driven behavior effects ──
@@ -496,7 +581,7 @@ function AppShell(props: {
         >
           <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
             <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} darkBackground={outerFrameIsDark()} />
-            <GearMenu onOpenSettings={() => setShowSettings(true)} darkBackground={outerFrameIsDark()} />
+            <GearMenu onOpenSettings={() => openSettings()} darkBackground={outerFrameIsDark()} />
           </div>
         </div>
 
@@ -513,7 +598,7 @@ function AppShell(props: {
         >
           {/* Stream sidebar */}
           <StreamSidebar
-            onOpenSettings={() => setShowSettings(true)}
+            onOpenSettings={(section) => openSettings(section)}
             onLogout={handleLogout}
             onSwitchOrg={(server) => props.onSwitchOrg?.(server)}
           />
@@ -537,11 +622,13 @@ function AppShell(props: {
       {/* Settings modal overlay */}
       <Show when={showSettings()}>
         <SettingsView
+          initialSection={settingsSection()}
           onClose={() => setShowSettings(false)}
           onLogout={async () => {
             setShowSettings(false)
             await handleLogout()
           }}
+          onSwitchOrg={(server) => props.onSwitchOrg?.(server)}
         />
       </Show>
 
@@ -549,6 +636,71 @@ function AppShell(props: {
       <Show when={showShortcuts()}>
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       </Show>
+
+      <UpdatePromptCard
+        state={updatePrompt()}
+        onDismiss={dismissUpdatePrompt}
+        onInstall={installUpdate}
+      />
     </div>
+  )
+}
+
+function UpdatePromptCard(props: {
+  state: UpdatePromptState
+  onDismiss: () => void
+  onInstall: () => void | Promise<void>
+}) {
+  return (
+    <Show when={props.state.phase !== "hidden"}>
+      <div class="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-24px))]">
+        <section
+          aria-live="polite"
+          class="rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--background-surface)] shadow-[0_24px_48px_rgba(0,0,0,0.28)]"
+          data-component="update-prompt"
+        >
+          <div class="px-4 py-4">
+            <div class="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+              Desktop update
+            </div>
+            <h3 class="mt-2 text-base font-semibold text-[var(--text-primary)]">
+              {getUpdatePromptTitle(props.state)}
+            </h3>
+            <p class="mt-1 text-sm leading-5 text-[var(--text-secondary)]">
+              {getUpdatePromptDescription(props.state)}
+            </p>
+
+            <Show when={props.state.phase === "error"}>
+              <p class="mt-2 text-xs text-[var(--status-error)]">
+                {props.state.phase === "error" ? props.state.errorMessage : ""}
+              </p>
+            </Show>
+
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                class="px-3 py-1.5 text-xs rounded-[var(--radius-md)] bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] hover:bg-[var(--interactive-primary-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                data-component="update-prompt-install"
+                disabled={props.state.phase === "installing"}
+                onClick={() => {
+                  void props.onInstall()
+                }}
+              >
+                {getUpdatePromptPrimaryActionLabel(props.state)}
+              </button>
+
+              <Show when={props.state.phase !== "installing"}>
+                <button
+                  class="px-3 py-1.5 text-xs rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-base)] transition-colors"
+                  data-component="update-prompt-dismiss"
+                  onClick={() => props.onDismiss()}
+                >
+                  Later
+                </button>
+              </Show>
+            </div>
+          </div>
+        </section>
+      </div>
+    </Show>
   )
 }

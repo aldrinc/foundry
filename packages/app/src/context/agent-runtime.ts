@@ -44,6 +44,14 @@ export function isProviderConnected(provider: FoundryProviderAuth) {
   return getProviderConnectionStatus(provider) === "connected"
 }
 
+export function providerSupportsOauth(provider: FoundryProviderAuth) {
+  return (provider.auth_modes || []).includes("oauth")
+}
+
+export function isProviderOauthConfigured(provider: FoundryProviderAuth) {
+  return provider.oauth_configured === true
+}
+
 export function getProviderCredentialLabel(provider: FoundryProviderAuth) {
   const runtime = provider as FoundryProviderRuntime
   const credential = runtime.credential

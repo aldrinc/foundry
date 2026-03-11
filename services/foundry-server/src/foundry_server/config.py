@@ -58,6 +58,10 @@ class AppConfig:
     core_bootstrap_secret: str
     core_bootstrap_secret_present: bool
     core_realm_key_override: str
+    anthropic_api_key: str
+    anthropic_api_key_present: bool
+    anthropic_api_base_url: str
+    anthropic_model: str
     github_app_name: str
     github_api_url: str
     github_app_id: str
@@ -128,6 +132,9 @@ class AppConfig:
             "core_url": self.core_url,
             "core_bootstrap_secret_present": self.core_bootstrap_secret_present,
             "core_realm_key_override": self.core_realm_key_override,
+            "anthropic_api_key_present": self.anthropic_api_key_present,
+            "anthropic_api_base_url": self.anthropic_api_base_url,
+            "anthropic_model": self.anthropic_model,
             "github_app_name": self.github_app_name,
             "github_api_url": self.github_api_url,
             "github_app_configured": bool(
@@ -198,6 +205,13 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
             "FOUNDRY_CORE_REALM_KEY_OVERRIDE",
             "",
         ).strip(),
+        anthropic_api_key=source.get("FOUNDRY_ANTHROPIC_API_KEY", "").strip(),
+        anthropic_api_key_present=bool(source.get("FOUNDRY_ANTHROPIC_API_KEY", "").strip()),
+        anthropic_api_base_url=source.get(
+            "FOUNDRY_ANTHROPIC_API_BASE_URL",
+            "https://api.anthropic.com",
+        ).rstrip("/"),
+        anthropic_model=source.get("FOUNDRY_ANTHROPIC_MODEL", "claude-sonnet-4-6").strip(),
         github_app_name=source.get("FOUNDRY_GITHUB_APP_NAME", "Foundry"),
         github_api_url=source.get("FOUNDRY_GITHUB_API_URL", "https://api.github.com"),
         github_app_id=source.get("FOUNDRY_GITHUB_APP_ID", ""),
