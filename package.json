@@ -6,6 +6,7 @@
     "packages/*"
   ],
   "scripts": {
+    "configure:desktop:apple-signing": "bun scripts/configure-apple-signing.mjs",
     "dev": "turbo dev",
     "build": "turbo build",
     "bundle:desktop": "bun scripts/run-desktop-bundle.mjs",
@@ -25,6 +26,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
+    "libsodium-wrappers-sumo": "^0.7.15",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }

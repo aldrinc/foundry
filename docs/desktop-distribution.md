@@ -29,10 +29,31 @@ bun run check:rust
 Before a desktop release, update the app version in one place:
 
 ```bash
-bun run version:desktop -- 0.1.2
+bun run version:desktop -- <version>
 ```
 
 That keeps the desktop npm package, Tauri config, and Rust manifest metadata aligned.
+
+To configure Apple signing and notarization secrets/variables in GitHub Actions programmatically for the current repo:
+
+```bash
+bun run configure:desktop:apple-signing -- \
+  --github-token "$GITHUB_TOKEN" \
+  --team-id "$APPLE_TEAM_ID" \
+  --signing-identity "$APPLE_SIGNING_IDENTITY" \
+  --certificate-p12 /path/to/DeveloperIDApplication.p12 \
+  --certificate-password "$APPLE_CERTIFICATE_PASSWORD" \
+  --api-key-id "$APPLE_API_KEY" \
+  --api-issuer "$APPLE_API_ISSUER" \
+  --api-key-p8 /path/to/AuthKey_$APPLE_API_KEY.p8 \
+  --make-public true
+```
+
+If you prefer Apple ID notarization instead of an App Store Connect API key, replace the `--api-*` flags with:
+
+```bash
+--apple-id "$APPLE_ID" --apple-app-password "$APPLE_PASSWORD"
+```
 
 ## Build Commands
 
