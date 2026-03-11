@@ -101,8 +101,11 @@ set -euo pipefail
 mkdir -p /etc/foundry /var/lib/foundry "${DEST}"
 
 if ! id foundrydev >/dev/null 2>&1; then
-  echo "foundrydev user is required on the target host" >&2
-  exit 1
+  login_shell="/usr/sbin/nologin"
+  if [[ ! -x "${login_shell}" ]]; then
+    login_shell="/usr/bin/false"
+  fi
+  useradd --system --user-group --home-dir /var/lib/foundry --create-home --shell "${login_shell}" foundrydev
 fi
 
 read_env_value() {
