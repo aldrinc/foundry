@@ -1304,8 +1304,7 @@ fn get_current_user_id(state: &AppState, org_id: &str) -> Result<Option<u64>, St
 mod tests {
     use super::{
         infer_priority_status, is_sso_callback_url, looks_like_foundry_cloud_login_html,
-        strip_html, truncate_text,
-        InboxPriorityCandidate, PriorityMessageContext,
+        strip_html, truncate_text, InboxPriorityCandidate, PriorityMessageContext,
     };
     use tauri::Url;
 
