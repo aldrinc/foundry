@@ -88,7 +88,7 @@ export function SettingsApp() {
 
       <SettingToggle
         label="Auto-update"
-        description={caps()?.updater === false ? "Not yet available — updater not configured" : "Automatically download and install updates"}
+        description={caps()?.updater === false ? "Not yet available — updater not configured" : "Check for updates automatically and let you choose when to install"}
         checked={store.autoUpdate}
         onChange={(v) => setSetting("autoUpdate", v)}
         disabled={caps() ? !caps()!.updater : false}

@@ -112,6 +112,7 @@ const createPlatform = (): Platform => {
         await relaunch()
       } catch (error) {
         console.warn("Updater install unavailable", error)
+        throw error
       }
     },
 

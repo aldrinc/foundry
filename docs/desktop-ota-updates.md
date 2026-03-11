@@ -43,7 +43,7 @@ If you later rotate to a password-protected key, also set:
 2. Push the release branch or merged commit to GitHub.
 3. Run the `Desktop Release` workflow from GitHub Actions, or push a `desktop-v*` tag.
 4. The workflow builds desktop bundles, uploads signed updater metadata, and publishes release assets to GitHub Releases.
-5. Installed apps with auto-update enabled will check the GitHub feed and install the new version.
+5. Installed apps with auto-update enabled will check the GitHub feed and prompt the user to install the new version.
 
 ## Notes
 

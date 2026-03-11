@@ -30,6 +30,16 @@ import {
 } from "./manual-logout"
 import { commands } from "@foundry/desktop/bindings"
 import type { LoginResult, Subscription, User, Message, SavedServerStatus } from "@foundry/desktop/bindings"
+import {
+  availableUpdatePrompt,
+  failInstallingUpdate,
+  getUpdatePromptDescription,
+  getUpdatePromptPrimaryActionLabel,
+  getUpdatePromptTitle,
+  hideUpdatePrompt,
+  startInstallingUpdate,
+  type UpdatePromptState,
+} from "./update-prompt-state"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
@@ -239,6 +249,7 @@ function AppShell(props: {
   const [showSettings, setShowSettings] = createSignal(false)
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
+  const [updatePrompt, setUpdatePrompt] = createSignal<UpdatePromptState>(hideUpdatePrompt())
   let autoUpdateCheckStarted = false
 
   const handleLogout = async () => {
@@ -349,12 +360,72 @@ function AppShell(props: {
           if (!result.updateAvailable) {
             return
           }
-          await platform.update!()
+          setUpdatePrompt(availableUpdatePrompt(result.version))
         } catch (error) {
           console.warn("[Updater] automatic update check failed", error)
         }
       })()
     }, 3000)
+  })
+
+  createEffect(() => {
+    if (!settingsStore.autoUpdate && updatePrompt().phase !== "hidden") {
+      setUpdatePrompt(hideUpdatePrompt())
+    }
+  })
+
+  const dismissUpdatePrompt = () => {
+    if (updatePrompt().phase === "installing") {
+      return
+    }
+    setUpdatePrompt(hideUpdatePrompt())
+  }
+
+  const installUpdate = async () => {
+    if (!platform.update) {
+      return
+    }
+
+    const current = updatePrompt()
+    if (current.phase !== "available" && current.phase !== "error") {
+      return
+    }
+
+    setUpdatePrompt(startInstallingUpdate(current))
+
+    try {
+      await platform.update()
+      setUpdatePrompt(hideUpdatePrompt())
+    } catch (error) {
+      console.warn("[Updater] install failed", error)
+      setUpdatePrompt(failInstallingUpdate(current, error))
+    }
+  }
+
+  onMount(() => {
+    if (window.location.protocol !== "http:") {
+      return
+    }
+
+    const debugWindow = window as Window & {
+      __FOUNDRY_DESKTOP_DEBUG__?: {
+        showUpdatePrompt: (version?: string) => void
+        clearUpdatePrompt: () => void
+      }
+    }
+
+    const debugApi = {
+      showUpdatePrompt: (version?: string) => setUpdatePrompt(availableUpdatePrompt(version)),
+      clearUpdatePrompt: () => setUpdatePrompt(hideUpdatePrompt()),
+    }
+
+    debugWindow.__FOUNDRY_DESKTOP_DEBUG__ = debugApi
+
+    onCleanup(() => {
+      if (debugWindow.__FOUNDRY_DESKTOP_DEBUG__ === debugApi) {
+        delete debugWindow.__FOUNDRY_DESKTOP_DEBUG__
+      }
+    })
   })
 
   // ── Settings-driven behavior effects ──
@@ -549,6 +620,71 @@ function AppShell(props: {
       <Show when={showShortcuts()}>
         <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />
       </Show>
+
+      <UpdatePromptCard
+        state={updatePrompt()}
+        onDismiss={dismissUpdatePrompt}
+        onInstall={installUpdate}
+      />
     </div>
+  )
+}
+
+function UpdatePromptCard(props: {
+  state: UpdatePromptState
+  onDismiss: () => void
+  onInstall: () => void | Promise<void>
+}) {
+  return (
+    <Show when={props.state.phase !== "hidden"}>
+      <div class="fixed bottom-4 right-4 z-40 w-[min(380px,calc(100vw-24px))]">
+        <section
+          aria-live="polite"
+          class="rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--background-surface)] shadow-[0_24px_48px_rgba(0,0,0,0.28)]"
+          data-component="update-prompt"
+        >
+          <div class="px-4 py-4">
+            <div class="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+              Desktop update
+            </div>
+            <h3 class="mt-2 text-base font-semibold text-[var(--text-primary)]">
+              {getUpdatePromptTitle(props.state)}
+            </h3>
+            <p class="mt-1 text-sm leading-5 text-[var(--text-secondary)]">
+              {getUpdatePromptDescription(props.state)}
+            </p>
+
+            <Show when={props.state.phase === "error"}>
+              <p class="mt-2 text-xs text-[var(--status-error)]">
+                {props.state.phase === "error" ? props.state.errorMessage : ""}
+              </p>
+            </Show>
+
+            <div class="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                class="px-3 py-1.5 text-xs rounded-[var(--radius-md)] bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] hover:bg-[var(--interactive-primary-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                data-component="update-prompt-install"
+                disabled={props.state.phase === "installing"}
+                onClick={() => {
+                  void props.onInstall()
+                }}
+              >
+                {getUpdatePromptPrimaryActionLabel(props.state)}
+              </button>
+
+              <Show when={props.state.phase !== "installing"}>
+                <button
+                  class="px-3 py-1.5 text-xs rounded-[var(--radius-md)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-base)] transition-colors"
+                  data-component="update-prompt-dismiss"
+                  onClick={() => props.onDismiss()}
+                >
+                  Later
+                </button>
+              </Show>
+            </div>
+          </div>
+        </section>
+      </div>
+    </Show>
   )
 }
