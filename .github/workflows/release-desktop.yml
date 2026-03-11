@@ -74,12 +74,95 @@ jobs:
       - name: Install workspace dependencies
         run: bun install --frozen-lockfile
 
+      - name: Prepare Apple signing inputs
+        if: matrix.platform == 'macos-latest'
+        id: apple-signing
+        shell: bash
+        env:
+          APPLE_SIGNING_REQUIRED: ${{ vars.APPLE_SIGNING_REQUIRED }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+
+          required="${APPLE_SIGNING_REQUIRED:-false}"
+          has_certificate="false"
+          notarization_mode=""
+          api_key_path=""
+
+          if [[ -n "${APPLE_CERTIFICATE:-}" || -n "${APPLE_CERTIFICATE_PASSWORD:-}" || -n "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+            if [[ -z "${APPLE_CERTIFICATE:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" || -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
+              echo "::error::Incomplete Apple signing configuration. Set APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, and APPLE_SIGNING_IDENTITY."
+              exit 1
+            fi
+            has_certificate="true"
+          fi
+
+          if [[ -n "${APPLE_API_KEY_P8:-}" || -n "${APPLE_API_KEY:-}" || -n "${APPLE_API_ISSUER:-}" ]]; then
+            if [[ -z "${APPLE_API_KEY_P8:-}" || -z "${APPLE_API_KEY:-}" || -z "${APPLE_API_ISSUER:-}" ]]; then
+              echo "::error::Incomplete App Store Connect API key configuration. Set APPLE_API_KEY_P8, APPLE_API_KEY, and APPLE_API_ISSUER."
+              exit 1
+            fi
+            api_key_dir="$RUNNER_TEMP/apple-api-key"
+            mkdir -p "$api_key_dir"
+            api_key_path="$api_key_dir/AuthKey_${APPLE_API_KEY}.p8"
+            printf '%s' "${APPLE_API_KEY_P8}" > "$api_key_path"
+            chmod 600 "$api_key_path"
+            notarization_mode="app-store-connect"
+          elif [[ -n "${APPLE_ID:-}" || -n "${APPLE_PASSWORD:-}" || -n "${APPLE_TEAM_ID:-}" ]]; then
+            if [[ -z "${APPLE_ID:-}" || -z "${APPLE_PASSWORD:-}" || -z "${APPLE_TEAM_ID:-}" ]]; then
+              echo "::error::Incomplete Apple ID notarization configuration. Set APPLE_ID, APPLE_PASSWORD, and APPLE_TEAM_ID."
+              exit 1
+            fi
+            notarization_mode="apple-id"
+          fi
+
+          if [[ "$required" == "true" ]]; then
+            if [[ "$has_certificate" != "true" ]]; then
+              echo "::error::APPLE_SIGNING_REQUIRED is true, but Apple code signing is not configured."
+              exit 1
+            fi
+            if [[ -z "$notarization_mode" ]]; then
+              echo "::error::APPLE_SIGNING_REQUIRED is true, but macOS notarization is not configured."
+              exit 1
+            fi
+          else
+            if [[ "$has_certificate" != "true" ]]; then
+              echo "::warning::macOS release job is building without Apple code signing. Set APPLE_SIGNING_REQUIRED=true after configuring credentials to enforce signed builds."
+            fi
+            if [[ -z "$notarization_mode" ]]; then
+              echo "::warning::macOS release job is building without notarization credentials. Set APPLE_SIGNING_REQUIRED=true after configuring credentials to enforce notarized builds."
+            fi
+          fi
+
+          {
+            echo "api_key_path=$api_key_path"
+            echo "has_certificate=$has_certificate"
+            echo "notarization_mode=$notarization_mode"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish signed desktop release
         uses: tauri-apps/tauri-action@v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ vars.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ vars.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH: ${{ steps.apple-signing.outputs.api_key_path }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         with:
           projectPath: packages/desktop
           tauriScript: bun tauri

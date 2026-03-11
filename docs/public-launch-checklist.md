@@ -22,7 +22,8 @@ This is the current launch-prep checklist for publishing Foundry as a public, so
 
 - [x] Publish desktop artifacts through GitHub Releases
 - [x] Wire signed OTA updater metadata into the desktop release flow
-- [ ] Add macOS code signing and notarization for smoother public installs
+- [x] Wire macOS code signing and notarization into the desktop release workflow
+- [ ] Add Apple Developer signing and notarization credentials to GitHub repository settings
 - [ ] Publish checksums alongside every public release asset
 - [ ] Add release-note templates for desktop and server changes
 - [ ] Document a stable self-hosting path for the server stack

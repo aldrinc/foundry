@@ -50,6 +50,34 @@ Because updater artifacts are enabled, the bundle step now also needs a Tauri up
 
 If none of those are available, the bundle command will exit with a clear error before building. For passwordless keys, the wrapper also sets an explicit empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so non-interactive local builds do not hang or fail on a prompt.
 
+## macOS Signing And Notarization
+
+The GitHub `Desktop Release` workflow can now code sign and notarize macOS bundles when Apple credentials are configured in repository settings.
+
+Repository variables:
+
+- `APPLE_SIGNING_REQUIRED`
+- `APPLE_SIGNING_IDENTITY`
+- `APPLE_API_KEY`
+- `APPLE_API_ISSUER`
+- `APPLE_TEAM_ID`
+
+Repository secrets:
+
+- `APPLE_CERTIFICATE`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_API_KEY_P8`
+- `APPLE_ID`
+- `APPLE_PASSWORD`
+
+Notes:
+
+- `APPLE_CERTIFICATE` should be a base64-encoded Developer ID Application `.p12` export.
+- The workflow prefers App Store Connect API key notarization when `APPLE_API_KEY_P8`, `APPLE_API_KEY`, and `APPLE_API_ISSUER` are all configured.
+- If the API key is not configured, the workflow falls back to Apple ID notarization with `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
+- Leave `APPLE_SIGNING_REQUIRED` unset or set it to `false` while the repo is still being prepared. Set it to `true` once the Apple credentials are in place and signed macOS artifacts should be mandatory on every desktop release.
+- Local `bun run bundle:desktop:macos` builds remain unsigned unless you also provide the corresponding Apple signing/notarization environment variables to the local shell.
+
 ## Artifact Locations
 
 macOS output is written under:
@@ -61,4 +89,4 @@ For internal team distribution, share the `.dmg`.
 
 ## Current Limitation
 
-These bundles include signed updater metadata, but the app bundle itself is still unsigned. They are suitable for internal testing and distribution, but they are not yet code signed or notarized for friction-free public macOS installation.
+These bundles always include signed updater metadata. macOS bundles are only code signed and notarized when the Apple credentials above are configured for the release workflow, or when equivalent Apple signing environment variables are set locally.
