@@ -54,6 +54,7 @@ ssh "${SSH_OPTS[@]}" "root@${HOST}" \
 set -euo pipefail
 
 mkdir -p "${DEST}" "${OVERRIDES_DEST}"
+rm -rf "${DEST}/.git"
 chown -R 1000:1000 "${DEST}"
 chown -R root:root "${OVERRIDES_DEST}"
 chmod +x "${OVERRIDES_DEST}/dev-live-entrypoint.sh"
@@ -61,7 +62,7 @@ chmod +x "${OVERRIDES_DEST}/dev-live-entrypoint.sh"
 cd /opt/meridian/apps/zulip-dev
 docker compose --profile dev-live up -d --force-recreate zulip-dev-live
 
-for attempt in $(seq 1 60); do
+for attempt in $(seq 1 180); do
   if curl -fsS http://127.0.0.1:18084/health >/dev/null; then
     printf 'core_url=%s\n' "${CORE_PUBLIC_URL}"
     exit 0
