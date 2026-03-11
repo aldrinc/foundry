@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "@typescript-eslint/parser": "^8.56.1",
-    "eslint": "^9.39.4",
+    "eslint": "^10.0.3",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
     "libsodium-wrappers-sumo": "^0.7.15",
