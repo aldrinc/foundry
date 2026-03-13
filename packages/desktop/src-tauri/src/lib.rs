@@ -7,6 +7,7 @@ use tauri::{Manager, WindowEvent};
 use tauri_plugin_autostart::ManagerExt as _;
 
 mod admin_commands;
+mod codex_oauth;
 mod commands;
 mod logging;
 mod server;
@@ -179,6 +180,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::set_topic_resolved,
         commands::update_zulip_settings,
         commands::get_zulip_settings,
+        commands::fetch_link_preview,
         admin_commands::get_users,
         admin_commands::reactivate_user,
         admin_commands::get_realm_presence,
@@ -230,6 +232,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         supervisor_commands::get_foundry_providers,
         supervisor_commands::connect_foundry_provider,
         supervisor_commands::disconnect_foundry_provider,
+        supervisor_commands::connect_foundry_provider_desktop_oauth,
         supervisor_commands::start_foundry_provider_oauth,
         supervisor_commands::get_task_events,
         supervisor_commands::start_supervisor_stream,

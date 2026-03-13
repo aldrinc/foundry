@@ -137,7 +137,7 @@ export function DirectMessageList() {
       {/* DM header */}
       <div class="px-3 py-2 flex items-center justify-between">
         <button
-          class="flex items-center gap-1 text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider hover:text-[var(--text-secondary)] transition-colors"
+          class="flex items-center gap-1 text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider hover:text-[var(--text-secondary)] transition-colors"
           onClick={() => setCollapsed(c => !c)}
         >
           <svg

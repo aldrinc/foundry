@@ -94,6 +94,15 @@ class AppConfig:
     organization_workspace_pool_size: int
     organization_workspace_max_concurrency: int
     session_max_age_days: int
+    orchestration_enabled: bool
+    orchestration_mount_path: str
+    orchestration_run_store_path: str
+    orchestration_api_token: str
+    orchestration_api_token_present: bool
+    orchestration_verify_tls: bool
+    orchestration_supervisor_dir: str
+    orchestration_local_work_root: str
+    orchestration_policy_path: str
 
     def public_summary(self) -> dict[str, object]:
         return {
@@ -112,6 +121,7 @@ class AppConfig:
             "coder_configured": bool(self.coder_url and self.coder_api_token_present),
             "stripe_configured": self.stripe_secret_key_present,
             "workspace_topology": self.workspace_topology.value,
+            "orchestration_enabled": self.orchestration_enabled,
         }
 
     def admin_summary(self) -> dict[str, object]:
@@ -166,6 +176,14 @@ class AppConfig:
             "organization_workspace_pool_size": self.organization_workspace_pool_size,
             "organization_workspace_max_concurrency": self.organization_workspace_max_concurrency,
             "session_max_age_days": self.session_max_age_days,
+            "orchestration_enabled": self.orchestration_enabled,
+            "orchestration_mount_path": self.orchestration_mount_path,
+            "orchestration_run_store_path": self.orchestration_run_store_path,
+            "orchestration_api_token_present": self.orchestration_api_token_present,
+            "orchestration_verify_tls": self.orchestration_verify_tls,
+            "orchestration_supervisor_dir": self.orchestration_supervisor_dir,
+            "orchestration_local_work_root": self.orchestration_local_work_root,
+            "orchestration_policy_path": self.orchestration_policy_path,
         }
 
 
@@ -283,4 +301,31 @@ def load_config(env: Mapping[str, str] | None = None) -> AppConfig:
             source, "FOUNDRY_ORG_WORKSPACE_MAX_CONCURRENCY", 20
         ),
         session_max_age_days=_env_int(source, "FOUNDRY_SESSION_MAX_AGE_DAYS", 14),
+        orchestration_enabled=_env_bool(source, "FOUNDRY_ORCHESTRATION_ENABLED", True),
+        orchestration_mount_path=(
+            source.get("FOUNDRY_ORCHESTRATION_MOUNT_PATH", "/api/v1/meridian").rstrip("/")
+            or "/api/v1/meridian"
+        ),
+        orchestration_run_store_path=source.get(
+            "FOUNDRY_ORCHESTRATION_RUN_STORE_PATH",
+            "./data/foundry-orchestrator.db",
+        ),
+        orchestration_api_token=(
+            source.get("FOUNDRY_ORCHESTRATION_API_TOKEN", "").strip()
+            or source.get("FOUNDRY_CORE_BOOTSTRAP_SECRET", "").strip()
+        ),
+        orchestration_api_token_present=bool(
+            source.get("FOUNDRY_ORCHESTRATION_API_TOKEN", "").strip()
+            or source.get("FOUNDRY_CORE_BOOTSTRAP_SECRET", "").strip()
+        ),
+        orchestration_verify_tls=_env_bool(source, "FOUNDRY_ORCHESTRATION_VERIFY_TLS", True),
+        orchestration_supervisor_dir=source.get(
+            "FOUNDRY_ORCHESTRATION_SUPERVISOR_DIR",
+            "./data/supervisor",
+        ),
+        orchestration_local_work_root=source.get(
+            "FOUNDRY_ORCHESTRATION_LOCAL_WORK_ROOT",
+            "./data/local-work",
+        ),
+        orchestration_policy_path=source.get("FOUNDRY_ORCHESTRATION_POLICY_PATH", "").strip(),
     )

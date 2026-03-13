@@ -2,6 +2,11 @@ import type { SavedServer } from "@foundry/desktop/bindings"
 
 export const PREFERRED_SERVER_STORAGE_KEY = "foundry.desktop.preferred-server-id"
 
+export interface SavedServerLoginSeed {
+  email: string
+  serverUrl: string
+}
+
 type StorageReader = Pick<Storage, "getItem">
 type StorageWriter = Pick<Storage, "setItem" | "removeItem">
 
@@ -24,4 +29,19 @@ export function getAutoLoginServer(
 ): SavedServer | null {
   if (servers.length === 0) return null
   return servers.find((server) => server.id === preferredServerId) ?? servers[0] ?? null
+}
+
+export function getSavedServerLoginSeed(
+  servers: SavedServer[],
+  preferredServerId: string | null,
+): SavedServerLoginSeed | null {
+  const server = getAutoLoginServer(servers, preferredServerId)
+  if (!server) {
+    return null
+  }
+
+  return {
+    email: server.email,
+    serverUrl: server.url,
+  }
 }

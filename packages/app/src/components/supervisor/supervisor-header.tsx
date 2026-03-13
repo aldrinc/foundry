@@ -1,3 +1,4 @@
+import { Show } from "solid-js"
 import { useSupervisor } from "../../context/supervisor"
 
 export function SupervisorHeader() {
@@ -13,15 +14,35 @@ export function SupervisorHeader() {
   }
 
   const engineLabel = () => {
-    return supervisor.store.session?.metadata?.engine || "Supervisor"
+    const sessionTitle = supervisor.store.draftingNewSession
+      ? "New session"
+      : supervisor.store.session?.metadata?.title
+    return sessionTitle || supervisor.store.session?.metadata?.engine || "Supervisor"
   }
+
+  const phaseLabel = () => {
+    const p = supervisor.store.runtimePhase
+    if (!p) return null
+    return p.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  const repoName = () => {
+    const r = supervisor.store.repoAttachment
+    if (!r || typeof r !== "object") return null
+    const obj = r as Record<string, unknown>
+    const name = obj.repo_name || obj.name
+    return typeof name === "string" ? name : null
+  }
+
+  const hasSubInfo = () => phaseLabel() || repoName()
 
   return (
     <div
-      class="h-12 flex items-center justify-between px-3 border-b border-[var(--border-default)] bg-[var(--background-elevated)]"
+      class="flex items-center justify-between px-3 border-b border-[var(--border-default)] bg-[var(--background-elevated)]"
+      style={{ "min-height": "3rem" }}
       data-component="supervisor-header"
     >
-      <div class="flex items-center gap-2 min-w-0">
+      <div class="flex items-center gap-2 min-w-0 py-1.5">
         <div class={`w-2 h-2 rounded-full shrink-0 ${statusColor()}`} />
         <div class="min-w-0">
           <div class="text-sm font-medium text-[var(--text-primary)] truncate">
@@ -29,6 +50,16 @@ export function SupervisorHeader() {
           </div>
           <div class="text-xs text-[var(--text-tertiary)] truncate">
             #{supervisor.store.streamName} &gt; {supervisor.store.topicName}
+            <Show when={hasSubInfo()}>
+              <span class="text-[var(--text-tertiary)]">
+                <Show when={phaseLabel()}>
+                  {" · "}<span class="text-[var(--status-info)]">{phaseLabel()}</span>
+                </Show>
+                <Show when={repoName()}>
+                  {" · "}{repoName()}
+                </Show>
+              </span>
+            </Show>
           </div>
         </div>
       </div>

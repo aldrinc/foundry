@@ -11,6 +11,7 @@ import type {
 } from "@foundry/desktop/bindings"
 import { PrioritySection } from "./priority-section"
 import { TraditionalInbox } from "./traditional-inbox"
+import { normalizeInboxAssistantError } from "./inbox-assistant-error"
 import { formatCitationTime } from "./utils"
 
 const INITIAL_SECRETARY_PROMPT =
@@ -98,18 +99,22 @@ export function InboxView() {
       if (requestVersion !== assistantRequestVersion) return
       if (result.status === "error") {
         setAssistantSession(null)
-        setAssistantError(result.error || "Failed to load inbox secretary")
+        setAssistantError(normalizeInboxAssistantError(result.error || "Failed to load inbox secretary"))
         return
       }
       setAssistantSession(result.data)
-      if (result.data.turns.length === 0 && bootstrappedOrgId() !== orgId) {
+      if (
+        result.data.configured !== false
+        && result.data.turns.length === 0
+        && bootstrappedOrgId() !== orgId
+      ) {
         setBootstrappedOrgId(orgId)
         void sendAssistantMessage(INITIAL_SECRETARY_PROMPT)
       }
     } catch (error: any) {
       if (requestVersion !== assistantRequestVersion) return
       setAssistantSession(null)
-      setAssistantError(error?.toString() || "Failed to load inbox secretary")
+      setAssistantError(normalizeInboxAssistantError(error?.toString() || "Failed to load inbox secretary"))
     } finally {
       if (requestVersion !== assistantRequestVersion) return
       setAssistantLoading(false)
@@ -128,7 +133,7 @@ export function InboxView() {
       const result = await commands.sendInboxAssistantMessage(org.orgId, trimmed)
       if (requestVersion !== assistantRequestVersion) return
       if (result.status === "error") {
-        setAssistantError(result.error || "Failed to update inbox secretary")
+        setAssistantError(normalizeInboxAssistantError(result.error || "Failed to update inbox secretary"))
         return
       }
       setAssistantSession(result.data)
@@ -136,7 +141,7 @@ export function InboxView() {
       setBootstrappedOrgId(org.orgId)
     } catch (error: any) {
       if (requestVersion !== assistantRequestVersion) return
-      setAssistantError(error?.toString() || "Failed to update inbox secretary")
+      setAssistantError(normalizeInboxAssistantError(error?.toString() || "Failed to update inbox secretary"))
     } finally {
       if (requestVersion !== assistantRequestVersion) return
       setAssistantLoading(false)
@@ -152,12 +157,12 @@ export function InboxView() {
     try {
       const result = await commands.recordInboxAssistantFeedback(org.orgId, itemKey, item.conversation_key, action, null)
       if (result.status === "error") {
-        setAssistantError(result.error || "Failed to record secretary feedback")
+        setAssistantError(normalizeInboxAssistantError(result.error || "Failed to record secretary feedback"))
         return
       }
       setAssistantSession(result.data)
     } catch (error: any) {
-      setAssistantError(error?.toString() || "Failed to record secretary feedback")
+      setAssistantError(normalizeInboxAssistantError(error?.toString() || "Failed to record secretary feedback"))
     } finally {
       setFeedbackPending((current) => {
         const next = { ...current }

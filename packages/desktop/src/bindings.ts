@@ -362,6 +362,20 @@ async getZulipSettings(orgId: string) : Promise<Result<string, string>> {
 }
 },
 /**
+ * Fetch OpenGraph link preview metadata for a URL.
+ * 
+ * Downloads the first 256 KB of the page, parses OG meta tags, and returns
+ * structured preview data. Results are cached in memory (up to 500 entries).
+ */
+async fetchLinkPreview(url: string) : Promise<Result<LinkPreview, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fetch_link_preview", { url }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Fetch the current set of users from the Zulip server.
  */
 async getUsers(orgId: string) : Promise<Result<User[], string>> {
@@ -822,9 +836,9 @@ async setConfig(key: string, value: string) : Promise<Result<null, string>> {
 /**
  * Poll supervisor session state and events
  */
-async getSupervisorSession(orgId: string, topicScopeId: string, afterId: number, limit: number) : Promise<Result<SupervisorSessionResponse, string>> {
+async getSupervisorSession(orgId: string, topicScopeId: string, sessionId: string | null, afterId: number, limit: number) : Promise<Result<SupervisorSessionResponse, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_supervisor_session", { orgId, topicScopeId, afterId, limit }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_supervisor_session", { orgId, topicScopeId, sessionId, afterId, limit }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -833,9 +847,9 @@ async getSupervisorSession(orgId: string, topicScopeId: string, afterId: number,
 /**
  * Send a message to the supervisor
  */
-async postSupervisorMessage(orgId: string, topicScopeId: string, message: string, clientMsgId: string, streamId: number | null, streamName: string | null, topic: string | null) : Promise<Result<SupervisorMessageResponse, string>> {
+async postSupervisorMessage(orgId: string, request: SupervisorMessageCommand) : Promise<Result<SupervisorMessageResponse, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("post_supervisor_message", { orgId, topicScopeId, message, clientMsgId, streamId, streamName, topic }) };
+    return { status: "ok", data: await TAURI_INVOKE("post_supervisor_message", { orgId, request }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -844,9 +858,9 @@ async postSupervisorMessage(orgId: string, topicScopeId: string, message: string
 /**
  * Get task list for the supervisor dashboard
  */
-async getSupervisorSidebar(orgId: string, topicScopeId: string) : Promise<Result<SupervisorSidebarResponse, string>> {
+async getSupervisorSidebar(orgId: string, topicScopeId: string, sessionId: string | null) : Promise<Result<SupervisorSidebarResponse, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("get_supervisor_sidebar", { orgId, topicScopeId }) };
+    return { status: "ok", data: await TAURI_INVOKE("get_supervisor_sidebar", { orgId, topicScopeId, sessionId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -908,6 +922,17 @@ async disconnectFoundryProvider(orgId: string, provider: string) : Promise<Resul
 }
 },
 /**
+ * Connect a Foundry provider using a desktop-native OAuth flow
+ */
+async connectFoundryProviderDesktopOauth(orgId: string, provider: string) : Promise<Result<FoundryProviderCredentialResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("connect_foundry_provider_desktop_oauth", { orgId, provider }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Start a Foundry provider OAuth flow
  */
 async startFoundryProviderOauth(orgId: string, provider: string, redirectUri: string | null) : Promise<Result<FoundryProviderOauthStartResponse, string>> {
@@ -934,9 +959,9 @@ async getTaskEvents(orgId: string, topicScopeId: string, taskId: string, afterId
  * This connects to the Zulip server's SSE proxy endpoint and emits
  * Tauri events as new supervisor events arrive in real time.
  */
-async startSupervisorStream(orgId: string, topicScopeId: string, afterId: number) : Promise<Result<null, string>> {
+async startSupervisorStream(orgId: string, topicScopeId: string, sessionId: string | null, afterId: number) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("start_supervisor_stream", { orgId, topicScopeId, afterId }) };
+    return { status: "ok", data: await TAURI_INVOKE("start_supervisor_stream", { orgId, topicScopeId, sessionId, afterId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1089,6 +1114,10 @@ export type InboxSecretaryTurn = { turn_id: string; role: string; text: string; 
 export type Invite = { id: number; email?: string | null; expiry_date?: number | null; invited?: number | null; invited_as?: number | null; invited_by_user_id?: number | null; notify_referrer_on_join?: boolean | null; is_multiuse?: boolean | null; link_url?: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
+ * OpenGraph link preview data returned to the frontend.
+ */
+export type LinkPreview = { url: string; title: string | null; description: string | null; image_url: string | null; site_name: string | null }
+/**
  * Linkifier entry returned by GET /api/v1/realm/linkifiers.
  */
 export type Linkifier = { id: number; pattern: string; url_template: string }
@@ -1161,6 +1190,11 @@ export type RecentPrivateConversation = { user_ids?: number[]; max_message_id: n
  */
 export type ResolveTopicRequest = { anchor_message_id: number; topic_name: string; resolved: boolean; send_notification_to_old_thread?: boolean | null; send_notification_to_new_thread?: boolean | null }
 /**
+ * Typed projection of the orchestrator runtime payload.
+ * Consumed by the desktop app for runtime-first UI surfaces.
+ */
+export type RuntimeProjection = { phase?: string | null; phase_reason?: string | null; approval_required?: boolean | null; clarification_required?: boolean | null; execution_requested?: boolean | null; execution_prerequisites_ready?: boolean | null; execution_blockers?: string[] | null; completion_follow_up_required?: boolean | null; completion_missing_evidence?: string[] | null; observed_artifacts?: JsonValue[] | null; repo_attachment?: JsonValue | null; worker_backend_ready?: boolean | null; active_plan_revision_id?: string | null; contract?: JsonValue | null; runtime_state?: JsonValue | null }
+/**
  * Saved server configuration
  */
 export type SavedServer = { id: string; url: string; email: string; api_key: string; realm_name: string; realm_icon: string }
@@ -1206,7 +1240,7 @@ export type SubscriptionPropertyValue = boolean | string
 export type SupervisorEvent = { id: number; topic_scope_id: string; session_id: string; ts: string; 
 /**
  * Event kind: "message", "thinking", "tool_call", "tool_result",
- * "dispatch_result", "plan_draft", "assistant"
+ * "execution_result", "plan_draft", "assistant"
  */
 kind: string; 
 /**
@@ -1217,22 +1251,23 @@ role: string; author_id?: string | null; author_name?: string | null; content_md
  * Polymorphic payload - structure varies by event kind
  */
 payload?: JsonValue; client_msg_id?: string | null }
+export type SupervisorMessageCommand = { topicScopeId: string; message: string; sessionId: string | null; sessionCreateMode: string | null; sessionTitle: string | null; clientMsgId: string; streamId: number | null; streamName: string | null; topic: string | null }
 /**
  * Response from POST /json/foundry/topics/{scope}/supervisor/message
  */
-export type SupervisorMessageResponse = { session?: SupervisorSession | null; events?: SupervisorEvent[] }
+export type SupervisorMessageResponse = { session?: SupervisorSession | null; sessions?: SupervisorSession[]; events?: SupervisorEvent[]; task_summary?: SupervisorTaskSummary | null; runtime_projection?: RuntimeProjection | null }
 /**
  * A supervisor session tied to a topic scope
  */
-export type SupervisorSession = { session_id: string; topic_scope_id: string; status: string; updated_at?: string | null; metadata?: SupervisorSessionMetadata }
+export type SupervisorSession = { session_id: string; topic_scope_id: string; status: string; created_at?: string | null; updated_at?: string | null; metadata?: SupervisorSessionMetadata }
 /**
  * Metadata about the supervisor session engine
  */
-export type SupervisorSessionMetadata = { engine?: string | null; moltis_model?: string | null }
+export type SupervisorSessionMetadata = { engine?: string | null; moltis_model?: string | null; title?: string | null; created_by_user_id?: string | null; created_by_name?: string | null; created_via?: string | null }
 /**
  * Response from GET /json/foundry/topics/{scope}/supervisor/session
  */
-export type SupervisorSessionResponse = { session?: SupervisorSession | null; events?: SupervisorEvent[] }
+export type SupervisorSessionResponse = { session?: SupervisorSession | null; sessions?: SupervisorSession[]; events?: SupervisorEvent[]; task_summary?: SupervisorTaskSummary | null; runtime_projection?: RuntimeProjection | null }
 /**
  * Response from GET /json/foundry/topics/{scope}/sidebar
  */
@@ -1241,6 +1276,10 @@ export type SupervisorSidebarResponse = { tasks?: SupervisorTask[] }
  * A task entry from the supervisor sidebar/dashboard
  */
 export type SupervisorTask = { task_id: string; title?: string; assigned_role?: string; status?: string; activity?: string | null; last_updated?: string | null; preview_url?: string | null; branch_name?: string | null; turns_used?: number | null; tokens_used?: number | null; usd_estimate?: number | null; result_text?: string | null; error_text?: string | null; clarification_requested?: boolean; approved?: boolean; artifacts?: JsonValue[]; blockers?: string[] }
+/**
+ * Condensed task dashboard state returned with supervisor session snapshots
+ */
+export type SupervisorTaskSummary = { active_plan_revision_id?: string | null; filtered_plan_revision_id?: string | null; tasks?: SupervisorTask[]; task_count?: number | null; counts?: JsonValue | null; all_task_count?: number | null; all_counts?: JsonValue | null; completion_follow_up_required?: boolean | null; completion_missing_evidence?: string[] | null; phase?: string | null; runtime_state?: JsonValue | null }
 /**
  * Task event from the task event stream
  */

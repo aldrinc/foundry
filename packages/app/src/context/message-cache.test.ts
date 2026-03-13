@@ -62,6 +62,7 @@ describe("message cache helpers", () => {
       }),
     ).toEqual([
       "stream:3/topic:project",
+      "stream:3",
       ALL_MESSAGES_NARROW,
       STARRED_NARROW,
     ])

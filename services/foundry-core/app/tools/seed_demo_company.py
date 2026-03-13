@@ -1,21 +1,45 @@
 import json
 import os
 
+from zerver.actions.create_realm import do_create_realm
+from zerver.actions.create_user import do_create_user, do_reactivate_user
 from zerver.actions.message_send import internal_send_stream_message
 from zerver.actions.streams import bulk_add_subscriptions
 from zerver.lib.streams import create_stream_if_needed
-from zerver.models import Message, Recipient
-from zerver.models.realms import get_realm
-from zerver.models.users import get_user_by_delivery_email
+from zerver.models import Message, Realm, Recipient, UserProfile
 
 REALM_SUBDOMAIN = os.environ.get("FOUNDRY_DEMO_REALM_SUBDOMAIN", "foundry-labs").strip().lower()
-TEAM_EMAILS = (
-    "maya@foundry.dev",
-    "niko@foundry.dev",
-    "sara@foundry.dev",
-    "leo@foundry.dev",
-    "ivy@foundry.dev",
+REALM_NAME = os.environ.get("FOUNDRY_DEMO_REALM_NAME", "Foundry Labs").strip() or "Foundry Labs"
+DEFAULT_PASSWORD = os.environ.get("FOUNDRY_DEMO_PASSWORD", "FoundryDemo2026!")
+
+TEAM_SPECS = (
+    {
+        "email": "maya@foundry.dev",
+        "full_name": "Maya Chen",
+        "role": UserProfile.ROLE_REALM_OWNER,
+    },
+    {
+        "email": "niko@foundry.dev",
+        "full_name": "Niko Alvarez",
+        "role": UserProfile.ROLE_REALM_ADMINISTRATOR,
+    },
+    {
+        "email": "sara@foundry.dev",
+        "full_name": "Sara Park",
+        "role": UserProfile.ROLE_REALM_ADMINISTRATOR,
+    },
+    {
+        "email": "leo@foundry.dev",
+        "full_name": "Leo Brooks",
+        "role": UserProfile.ROLE_MEMBER,
+    },
+    {
+        "email": "ivy@foundry.dev",
+        "full_name": "Ivy Nguyen",
+        "role": UserProfile.ROLE_MEMBER,
+    },
 )
+TEAM_EMAILS = tuple(spec["email"] for spec in TEAM_SPECS)
 
 STREAM_SPECS = (
     {
@@ -29,6 +53,10 @@ STREAM_SPECS = (
     {
         "name": "desktop",
         "description": "Desktop client polish, release QA, and GitHub-facing screenshots.",
+    },
+    {
+        "name": "ict",
+        "description": "ICT strategy, trading-product experiments, and end-to-end execution topics.",
     },
     {
         "name": "release",
@@ -144,6 +172,24 @@ TOPIC_SPECS = (
         ),
     },
     {
+        "stream": "ict",
+        "topic": "lct-index",
+        "messages": (
+            (
+                "maya@foundry.dev",
+                "We want to recreate ictindex.io.",
+            ),
+            (
+                "leo@foundry.dev",
+                "Treat this as a real delivery workflow: repo, implementation plan, worker dispatch, and visible delivery evidence.",
+            ),
+            (
+                "niko@foundry.dev",
+                "I will keep the dev worker backend and preview path ready so the supervisor can move from plan to execution without fake completion.",
+            ),
+        ),
+    },
+    {
         "stream": "release",
         "topic": "v0.1 launch checklist",
         "messages": (
@@ -186,10 +232,74 @@ TOPIC_SPECS = (
 )
 
 
-realm = get_realm(REALM_SUBDOMAIN)
-owner = get_user_by_delivery_email("maya@foundry.dev", realm)
-users = [get_user_by_delivery_email(email, realm) for email in TEAM_EMAILS]
-user_by_email = {user.delivery_email.lower(): user for user in users}
+def ensure_realm() -> tuple[Realm, bool]:
+    realm = Realm.objects.filter(string_id=REALM_SUBDOMAIN).first()
+    if realm is not None:
+        return realm, False
+
+    realm = do_create_realm(
+        REALM_SUBDOMAIN,
+        REALM_NAME,
+        org_type=Realm.ORG_TYPES["business"]["id"],
+        default_language="en",
+        invite_required=True,
+    )
+    return realm, True
+
+
+def ensure_user(
+    realm: Realm,
+    *,
+    email: str,
+    full_name: str,
+    role: int,
+    realm_creation: bool,
+) -> tuple[UserProfile, bool]:
+    user = UserProfile.objects.filter(realm=realm, delivery_email__iexact=email).first()
+    if user is None:
+        user = do_create_user(
+            email,
+            DEFAULT_PASSWORD,
+            realm,
+            full_name,
+            role=role,
+            realm_creation=realm_creation,
+            tos_version=UserProfile.TOS_VERSION_BEFORE_FIRST_LOGIN,
+            acting_user=None,
+        )
+        return user, True
+
+    changed = False
+    if user.full_name != full_name:
+        user.full_name = full_name
+        changed = True
+    if user.role != role:
+        user.role = role
+        changed = True
+    if changed:
+        user.save(update_fields=["full_name", "role"])
+    if not user.is_active:
+        do_reactivate_user(user, acting_user=None)
+    return user, False
+
+
+realm, realm_created = ensure_realm()
+created_users = []
+users = []
+user_by_email = {}
+for index, spec in enumerate(TEAM_SPECS):
+    user, created = ensure_user(
+        realm,
+        email=spec["email"],
+        full_name=spec["full_name"],
+        role=spec["role"],
+        realm_creation=realm_created and index == 0,
+    )
+    users.append(user)
+    user_by_email[user.delivery_email.lower()] = user
+    if created:
+        created_users.append(user.delivery_email.lower())
+owner = user_by_email["maya@foundry.dev"]
 
 if hasattr(realm, "description"):
     description = "Foundry Labs uses Foundry to build Foundry."
@@ -232,6 +342,8 @@ print(
     json.dumps(
         {
             "realm_subdomain": REALM_SUBDOMAIN,
+            "realm_created": realm_created,
+            "created_users": created_users,
             "stream_count": len(stream_by_name),
             "seeded_topics": seeded_topics,
             "skipped_topics": skipped_topics,

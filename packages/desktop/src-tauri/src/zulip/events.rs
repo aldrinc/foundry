@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use super::{sanitize_event_id, ZulipClient};
+use super::{is_auth_failure_message, sanitize_event_id, ZulipClient};
 
 /// Start the event queue long-polling loop in a background task.
 /// Events are emitted to the frontend via Tauri's event system.
@@ -62,16 +62,26 @@ pub async fn start_event_loop(
                     }
                     Err(e) => {
                         tracing::error!(?e, org_id = %org_id, "Failed to re-register queue");
-                        let _ = app.emit(
-                            &format!("zulip:{}:disconnected", event_id),
-                            &serde_json::json!({"error": e}),
-                        );
+                        let payload = if is_auth_failure_message(&e) {
+                            serde_json::json!({"auth_invalid": true, "code": "UNAUTHORIZED", "error": e})
+                        } else {
+                            serde_json::json!({"error": e})
+                        };
+                        let _ = app.emit(&format!("zulip:{}:disconnected", event_id), &payload);
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 }
             }
             Err(e) => {
                 tracing::warn!(?e, org_id = %org_id, backoff = ?backoff, "Event poll error, retrying");
+
+                if is_auth_failure_message(&e) {
+                    let _ = app.emit(
+                        &format!("zulip:{}:disconnected", event_id),
+                        &serde_json::json!({"auth_invalid": true, "code": "UNAUTHORIZED", "error": e}),
+                    );
+                    break;
+                }
 
                 let _ = app.emit(
                     &format!("zulip:{}:connection_error", event_id),

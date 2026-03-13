@@ -26,15 +26,18 @@ type AuthMode = "api-key" | "password"
 export function LoginView(props: {
   onLogin: (result: LoginResult) => void
   onLoginWithEmail?: (result: LoginResult, email: string) => void
+  initialServerUrl?: string
+  initialEmail?: string
+  initialError?: string
 }) {
   const platform = usePlatform()
 
-  const [serverUrl, setServerUrl] = createSignal("")
-  const [email, setEmail] = createSignal("")
+  const [serverUrl, setServerUrl] = createSignal(props.initialServerUrl || "")
+  const [email, setEmail] = createSignal(props.initialEmail || "")
   const [apiKey, setApiKey] = createSignal("")
   const [password, setPassword] = createSignal("")
   const [step, setStep] = createSignal<"server" | "auth">("server")
-  const [error, setError] = createSignal("")
+  const [error, setError] = createSignal(props.initialError || "")
   const [loading, setLoading] = createSignal(false)
   const [serverName, setServerName] = createSignal("")
   const [serverSettings, setServerSettings] = createSignal<ServerSettings | null>(null)
@@ -244,8 +247,8 @@ export function LoginView(props: {
                   autofocus
                 />
                 <p class="mt-2 text-xs text-[var(--text-tertiary)]">
-                  Use your tenant organization URL here. Configure the Foundry assistant backend URL
-                  separately after login in Settings &gt; Servers.
+                  Use your tenant organization URL here. Foundry routes assistant features
+                  through this same server connection after login.
                 </p>
               </div>
 

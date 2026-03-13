@@ -35,6 +35,12 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(config.anthropic_api_key_present)
         self.assertEqual(config.anthropic_api_base_url, "https://api.anthropic.com")
         self.assertEqual(config.anthropic_model, "claude-sonnet-4-6")
+        self.assertTrue(config.orchestration_enabled)
+        self.assertEqual(config.orchestration_mount_path, "/api/v1/meridian")
+        self.assertEqual(config.orchestration_run_store_path, "./data/foundry-orchestrator.db")
+        self.assertFalse(config.orchestration_api_token_present)
+        self.assertEqual(config.orchestration_supervisor_dir, "./data/supervisor")
+        self.assertEqual(config.orchestration_local_work_root, "./data/local-work")
 
     def test_env_overrides_are_applied(self) -> None:
         config = load_config(
@@ -61,6 +67,14 @@ class ConfigTests(unittest.TestCase):
                 "FOUNDRY_ORG_WORKSPACE_POOL_SIZE": "8",
                 "FOUNDRY_ORG_WORKSPACE_MAX_CONCURRENCY": "40",
                 "FOUNDRY_SESSION_MAX_AGE_DAYS": "30",
+                "FOUNDRY_ORCHESTRATION_ENABLED": "false",
+                "FOUNDRY_ORCHESTRATION_MOUNT_PATH": "/internal/orchestration",
+                "FOUNDRY_ORCHESTRATION_RUN_STORE_PATH": "/tmp/foundry-orchestrator.db",
+                "FOUNDRY_ORCHESTRATION_API_TOKEN": "orchestrator-secret",
+                "FOUNDRY_ORCHESTRATION_VERIFY_TLS": "false",
+                "FOUNDRY_ORCHESTRATION_SUPERVISOR_DIR": "/tmp/foundry-supervisor",
+                "FOUNDRY_ORCHESTRATION_LOCAL_WORK_ROOT": "/tmp/foundry-work",
+                "FOUNDRY_ORCHESTRATION_POLICY_PATH": "/tmp/orchestrator-policy.json",
             }
         )
 
@@ -86,6 +100,14 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(config.organization_workspace_pool_size, 8)
         self.assertEqual(config.organization_workspace_max_concurrency, 40)
         self.assertEqual(config.session_max_age_days, 30)
+        self.assertFalse(config.orchestration_enabled)
+        self.assertEqual(config.orchestration_mount_path, "/internal/orchestration")
+        self.assertEqual(config.orchestration_run_store_path, "/tmp/foundry-orchestrator.db")
+        self.assertTrue(config.orchestration_api_token_present)
+        self.assertFalse(config.orchestration_verify_tls)
+        self.assertEqual(config.orchestration_supervisor_dir, "/tmp/foundry-supervisor")
+        self.assertEqual(config.orchestration_local_work_root, "/tmp/foundry-work")
+        self.assertEqual(config.orchestration_policy_path, "/tmp/orchestrator-policy.json")
 
     def test_process_environment_is_used_by_default(self) -> None:
         with mock.patch.dict(

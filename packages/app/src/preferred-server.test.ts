@@ -4,6 +4,7 @@ import {
   PREFERRED_SERVER_STORAGE_KEY,
   clearPreferredServerId,
   getAutoLoginServer,
+  getSavedServerLoginSeed,
   getPreferredServerId,
   setPreferredServerId,
 } from "./preferred-server"
@@ -63,5 +64,35 @@ describe("preferred server persistence", () => {
     expect(getAutoLoginServer(servers, "zulip.meridian.cv")).toEqual(servers[1])
     expect(getAutoLoginServer(servers, "missing")).toEqual(servers[0])
     expect(getAutoLoginServer([], "zulip.meridian.cv")).toBeNull()
+  })
+
+  test("builds a login seed from the preferred saved server", () => {
+    const servers = [
+      {
+        id: "zulip.meridian.cv",
+        url: "https://zulip.meridian.cv",
+        email: "ac@meridian.cv",
+        api_key: "prod-key",
+        realm_name: "Meridian",
+        realm_icon: "",
+      },
+      {
+        id: "foundry-labs.zulip-dev-live.5.161.60.86.sslip.io",
+        url: "https://foundry-labs.zulip-dev-live.5.161.60.86.sslip.io",
+        email: "maya@foundry.dev",
+        api_key: "dev-key",
+        realm_name: "Foundry Labs",
+        realm_icon: "",
+      },
+    ]
+
+    expect(
+      getSavedServerLoginSeed(servers, "foundry-labs.zulip-dev-live.5.161.60.86.sslip.io"),
+    ).toEqual({
+      email: "maya@foundry.dev",
+      serverUrl: "https://foundry-labs.zulip-dev-live.5.161.60.86.sslip.io",
+    })
+
+    expect(getSavedServerLoginSeed([], "foundry-labs.zulip-dev-live.5.161.60.86.sslip.io")).toBeNull()
   })
 })

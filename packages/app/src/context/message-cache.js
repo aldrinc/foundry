@@ -35,6 +35,9 @@ export function cacheKeysForMessage(message) {
     if (primary) {
         keys.add(primary);
     }
+    if (message.stream_id) {
+        keys.add(`stream:${message.stream_id}`);
+    }
     keys.add(ALL_MESSAGES_NARROW);
     if (hasStarredFlag(message)) {
         keys.add(STARRED_NARROW);

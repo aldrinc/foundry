@@ -13,6 +13,9 @@ import {
   resolveRealmUrlFromSavedServers,
   sanitizeMessageHtml,
 } from "./message-html"
+import { hydrateCodeBlocks } from "./code-block-enhancer"
+import { hydrateFileAttachmentCards } from "./file-attachment-card"
+import { LinkPreviewCard, extractFirstUrl } from "./link-preview-card"
 
 /** Convert an emoji hex code to its Unicode character(s) */
 export function emojiCodeToChar(code: string): string {
@@ -38,9 +41,13 @@ export function MessageItem(props: {
   const [editContent, setEditContent] = createSignal("")
   const [saving, setSaving] = createSignal(false)
   const [resolvedServerUrl, setResolvedServerUrl] = createSignal(props.serverUrl || org.realmUrl || (window as any).__FOUNDRY_REALM_URL || "")
+  const [linkPreviewCollapsed, setLinkPreviewCollapsed] = createSignal(false)
   let contentEl!: HTMLDivElement
 
   const currentUserId = () => sync.store.currentUserId
+
+  // Extract first URL from message for link preview (Mattermost shows first URL only)
+  const firstUrl = () => extractFirstUrl(props.message.content)
 
   const serverUrl = () => resolvedServerUrl()
 
@@ -152,17 +159,21 @@ export function MessageItem(props: {
       onViewerImageChange: rehydrateImages,
       serverUrl: serverUrl(),
     })
+    const cleanupCodeBlocks = hydrateCodeBlocks(contentEl)
+    const cleanupFileCards = hydrateFileAttachmentCards(contentEl, serverUrl())
     rehydrateImages()
     onCleanup(() => {
       cleanupImages()
       cleanupCarousel()
+      cleanupCodeBlocks()
+      cleanupFileCards()
     })
   })
 
   return (
     <div
       class="group relative flex gap-3 px-4 py-1 hover:bg-[var(--background-surface)]/50"
-      classList={{ "pt-4": props.showSender, "pt-0.5": !props.showSender }}
+      classList={{ "pt-4": props.showSender, "pt-1": !props.showSender }}
       data-component="message-item"
       data-message-id={props.message.id}
     >
@@ -171,7 +182,7 @@ export function MessageItem(props: {
         <Show
           when={props.showSender}
           fallback={
-            <span class="block w-8 text-center text-[10px] leading-[1.25rem] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity select-none whitespace-nowrap overflow-hidden">
+            <span class="block w-8 text-center text-xs leading-[1.25rem] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity select-none whitespace-nowrap overflow-hidden">
               {new Date(props.message.timestamp * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: false })}
             </span>
           }
@@ -203,7 +214,7 @@ export function MessageItem(props: {
             <span class="text-[15px] font-bold text-[var(--text-primary)] leading-snug">
               {props.message.sender_full_name}
             </span>
-            <span class="text-[11px] text-[var(--text-tertiary)] ml-0.5">
+            <span class="text-xs text-[var(--text-tertiary)] ml-0.5">
               {timestamp()}
             </span>
           </div>
@@ -248,20 +259,45 @@ export function MessageItem(props: {
         >
           <div
             ref={contentEl!}
-            class="text-sm text-[var(--text-primary)] message-content select-text"
+            class="text-[var(--text-primary)] message-content select-text"
+            style={{ "font-size": "var(--font-size-base, 15px)" }}
             data-component="message-content"
             onClick={handleContentClick}
           />
         </Show>
 
-        {/* Reactions */}
+        {/* Link preview card — first URL in message (Element/Mattermost convention) */}
+        <Show when={!editing() && firstUrl() && !linkPreviewCollapsed()}>
+          <LinkPreviewCard
+            url={firstUrl()!}
+            collapsed={linkPreviewCollapsed()}
+            onCollapse={() => setLinkPreviewCollapsed(true)}
+          />
+        </Show>
+
+        {/* Reactions — with username tooltips (Mattermost ReactionTooltip pattern) */}
         <Show when={props.message.reactions && props.message.reactions.length > 0}>
-          <div class="flex flex-wrap gap-1 mt-1">
+          <div class="flex flex-wrap gap-1 mt-1" role="group" aria-label="Message reactions">
             <For each={groupReactions(props.message.reactions || [])}>
               {(reaction) => {
                 const isOwn = () => {
                   const uid = currentUserId()
                   return uid ? reaction.user_ids.includes(uid) : false
+                }
+
+                const reactionUserNames = () => {
+                  return reaction.user_ids
+                    .map(uid => sync.store.users.find(u => u.user_id === uid)?.full_name)
+                    .filter(Boolean) as string[]
+                }
+
+                const tooltipText = () => {
+                  const names = reactionUserNames()
+                  const emojiLabel = reaction.emoji_name.replace(/_/g, " ")
+                  if (names.length === 0) return `:${reaction.emoji_name}:`
+                  if (names.length === 1) return `${names[0]} reacted with ${emojiLabel}`
+                  if (names.length === 2) return `${names[0]} and ${names[1]} reacted with ${emojiLabel}`
+                  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} reacted with ${emojiLabel}`
                 }
 
                 return (
@@ -271,10 +307,11 @@ export function MessageItem(props: {
                         ? "bg-[var(--interactive-primary)]/10 border-[var(--interactive-primary)]/30 text-[var(--interactive-primary)]"
                         : "bg-[var(--background-surface)] border-[var(--border-default)] text-[var(--text-primary)]"
                     } hover:border-[var(--interactive-primary)]`}
-                    title={`:${reaction.emoji_name}: (${reaction.count})`}
+                    title={tooltipText()}
+                    aria-label={tooltipText()}
                     onClick={() => handleToggleReaction(reaction.emoji_name, reaction.emoji_code)}
                   >
-                    <span>{emojiCodeToChar(reaction.emoji_code)}</span>
+                    <span aria-hidden="true">{emojiCodeToChar(reaction.emoji_code)}</span>
                     <span class="text-[var(--text-tertiary)]">{reaction.count}</span>
                   </button>
                 )

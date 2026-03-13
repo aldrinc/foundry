@@ -22,8 +22,37 @@ type SupervisorSession = {
     session_id: string;
     topic_scope_id: string;
     status: string;
+    created_at: string;
     updated_at: string;
+    title: string;
+    created_via: string;
+    created_by_user_id: string;
+    created_by_name: string;
+    latest_plan_revision_id: string;
+    active_plan_revision_id: string;
+    active_job_id: string;
+    last_message_id: number | null;
+    task_summary?: SessionTaskSummary;
     metadata: Record<string, unknown>;
+};
+
+type SessionTaskIndicator = {
+    task_id: string;
+    title: string;
+    status: string;
+    display_status: string;
+    worker_status: string;
+    activity: string;
+    assigned_role: string;
+    updated_at: string;
+};
+
+type SessionTaskSummary = {
+    task_count: number;
+    active_task_count: number;
+    counts: Record<string, number>;
+    overall_status: string;
+    active_task: SessionTaskIndicator | null;
 };
 
 type SupervisorEvent = {
@@ -60,6 +89,8 @@ type SidebarState = {
     active_tab: "users" | "ai";
     context: TopicContext | null;
     session: SupervisorSession | null;
+    sessions: SupervisorSession[];
+    pending_manual_session: boolean;
     current_plan_revision_id: string;
     after_id: number;
     seen_event_ids: Set<number>;
@@ -83,6 +114,8 @@ const state: SidebarState = {
     active_tab: "users",
     context: null,
     session: null,
+    sessions: [],
+    pending_manual_session: false,
     current_plan_revision_id: "",
     after_id: 0,
     seen_event_ids: new Set<number>(),
@@ -474,13 +507,29 @@ function parse_session(value: unknown): SupervisorSession | null {
     if (!session_id || !topic_scope_id) {
         return null;
     }
-    return {
+    const metadata = as_record(item["metadata"]) ?? {};
+    const session: SupervisorSession = {
         session_id,
         topic_scope_id,
         status: as_string(item["status"]).trim() || "active",
+        created_at: as_string(item["created_at"]).trim(),
         updated_at: as_string(item["updated_at"]).trim(),
-        metadata: as_record(item["metadata"]) ?? {},
+        title: as_string(item["title"]).trim() || as_string(metadata["title"]).trim(),
+        created_via: as_string(item["created_via"]).trim() || as_string(metadata["created_via"]).trim(),
+        created_by_user_id:
+            as_string(item["created_by_user_id"]).trim() || as_string(metadata["created_by_user_id"]).trim(),
+        created_by_name: as_string(item["created_by_name"]).trim() || as_string(metadata["created_by_name"]).trim(),
+        latest_plan_revision_id: as_string(item["latest_plan_revision_id"]).trim(),
+        active_plan_revision_id: as_string(item["active_plan_revision_id"]).trim(),
+        active_job_id: as_string(item["active_job_id"]).trim(),
+        last_message_id: as_number(item["last_message_id"]) ?? null,
+        metadata,
     };
+    const task_summary = parse_session_task_summary(item["task_summary"]);
+    if (task_summary) {
+        session.task_summary = task_summary;
+    }
+    return session;
 }
 
 function session_engine_label(session: SupervisorSession | null): string {
@@ -494,6 +543,200 @@ function session_engine_label(session: SupervisorSession | null): string {
         return model ? `moltis · ${model}` : "moltis";
     }
     return engine;
+}
+
+function parse_sessions_from_response(data: unknown): SupervisorSession[] {
+    const root = as_record(data);
+    if (!root) {
+        return [];
+    }
+    const nested = as_record(root["raw"]);
+    const values = Array.isArray(root["sessions"])
+        ? root["sessions"]
+        : Array.isArray(nested?.["sessions"])
+          ? nested["sessions"]
+          : [];
+    const sessions: SupervisorSession[] = [];
+    for (const value of values) {
+        const session = parse_session(value);
+        if (session) {
+            sessions.push(session);
+        }
+    }
+    return sessions;
+}
+
+function session_title(session: SupervisorSession): string {
+    return session.title || session.session_id;
+}
+
+function session_subtitle(session: SupervisorSession): string {
+    const via = session.created_via.trim();
+    const creator = session.created_by_name.trim() || session.created_by_user_id.trim();
+    return [via, creator].filter((value) => value).join(" · ");
+}
+
+function session_time_label(session: SupervisorSession): string {
+    const raw = session.updated_at.trim();
+    if (!raw) {
+        return "";
+    }
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+        return raw;
+    }
+    return date.toLocaleString([], {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
+}
+
+function parse_session_task_summary(value: unknown): SessionTaskSummary | undefined {
+    const root = as_record(value);
+    if (!root) {
+        return undefined;
+    }
+    const raw_counts = as_record(root["counts"]) ?? {};
+    const counts: Record<string, number> = {};
+    for (const [key, item] of Object.entries(raw_counts)) {
+        const parsed = as_number(item);
+        if (parsed !== undefined) {
+            counts[key] = parsed;
+        }
+    }
+    const active_task_root = as_record(root["active_task"]);
+    const active_task = active_task_root
+        ? {
+              task_id: as_string(active_task_root["task_id"]).trim(),
+              title: as_string(active_task_root["title"]).trim(),
+              status: as_string(active_task_root["status"]).trim(),
+              display_status: as_string(active_task_root["display_status"]).trim(),
+              worker_status: as_string(active_task_root["worker_status"]).trim(),
+              activity: as_string(active_task_root["activity"]).trim(),
+              assigned_role: as_string(active_task_root["assigned_role"]).trim() || "worker",
+              updated_at: as_string(active_task_root["updated_at"]).trim(),
+          }
+        : null;
+    return {
+        task_count: as_number(root["task_count"]) ?? 0,
+        active_task_count: as_number(root["active_task_count"]) ?? 0,
+        counts,
+        overall_status: as_string(root["overall_status"]).trim(),
+        active_task,
+    };
+}
+
+function title_case_status(value: string): string {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+        return "";
+    }
+    const labels: Record<string, string> = {
+        active: "Active",
+        blocked: "Blocked",
+        canceled: "Canceled",
+        done: "Completed",
+        failed: "Failed",
+        idle: "Idle",
+        needs_input: "Needs input",
+        paused: "Paused",
+        queued: "Queued",
+        working: "Working",
+    };
+    if (labels[normalized]) {
+        return labels[normalized];
+    }
+    return normalized
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
+}
+
+function session_indicator(session: SupervisorSession): {label: string; status: string} {
+    const summary = session.task_summary;
+    if (!summary) {
+        return {
+            label: title_case_status(session.status || "active"),
+            status: session.status || "active",
+        };
+    }
+    const active_task = summary.active_task;
+    if (active_task) {
+        const status = active_task.display_status || active_task.worker_status || active_task.status || summary.overall_status;
+        const detail = active_task.activity || active_task.title;
+        return {
+            label: detail ? `${title_case_status(status)} · ${detail}` : title_case_status(status),
+            status,
+        };
+    }
+    if (summary.task_count > 0) {
+        const status = summary.overall_status || session.status || "active";
+        const detail = summary.task_count === 1 ? "1 task" : `${summary.task_count} tasks`;
+        return {
+            label: `${title_case_status(status)} · ${detail}`,
+            status,
+        };
+    }
+    if (session.active_plan_revision_id || session.latest_plan_revision_id) {
+        return {
+            label: "Plan ready",
+            status: "queued",
+        };
+    }
+    return {
+        label: title_case_status(session.status || "active"),
+        status: session.status || "active",
+    };
+}
+
+function session_indicator_class(status: string): string {
+    const normalized = status.trim().toLowerCase();
+    if (normalized === "done") {
+        return "is-complete";
+    }
+    if (normalized === "failed" || normalized === "canceled") {
+        return "is-problem";
+    }
+    if (normalized === "blocked" || normalized === "needs_input") {
+        return "is-blocked";
+    }
+    if (normalized === "working" || normalized === "queued") {
+        return "is-active";
+    }
+    return "";
+}
+
+function render_session_list(): void {
+    const $list = $("#foundry-supervisor-session-list");
+    if ($list.length === 0) {
+        return;
+    }
+    const selected_id = state.session?.session_id ?? "";
+    const cards = state.sessions.map((session) => {
+        const active = session.session_id === selected_id && !state.pending_manual_session;
+        const title = session_title(session);
+        const subtitle = session_subtitle(session);
+        const indicator = session_indicator(session);
+        const indicator_class = session_indicator_class(indicator.status);
+        const time = session_time_label(session) || title_case_status(session.status || "active");
+        return `<button type="button" class="foundry-supervisor-session-item ${active ? "is-active" : ""}" data-session-id="${_.escape(session.session_id)}">
+            <span class="foundry-supervisor-session-title">${_.escape(title)}</span>
+            <span class="foundry-supervisor-session-meta">${_.escape(subtitle || session.status || "active")}</span>
+            <span class="foundry-supervisor-session-indicator ${indicator_class}">${_.escape(indicator.label)}</span>
+            <span class="foundry-supervisor-session-time">${_.escape(time)}</span>
+        </button>`;
+    });
+    if (state.pending_manual_session) {
+        cards.unshift(`<div class="foundry-supervisor-session-item is-draft">
+            <span class="foundry-supervisor-session-title">New session draft</span>
+            <span class="foundry-supervisor-session-meta">Next message will create a manual session</span>
+            <span class="foundry-supervisor-session-indicator is-active">Pending manual creation</span>
+            <span class="foundry-supervisor-session-time">draft</span>
+        </div>`);
+    }
+    $list.html(cards.join(""));
 }
 
 function parse_event(value: unknown): SupervisorEvent | null {
@@ -583,8 +826,8 @@ function payload_trace_fields(event: SupervisorEvent): TraceField[] {
     if (tasks.length > 0) {
         push_field("Tasks", String(tasks.length));
     }
-    if (typeof payload["dispatch_blocked"] === "boolean") {
-        push_field("Dispatch", payload["dispatch_blocked"] ? "blocked" : "ready");
+    if (typeof payload["execution_blocked"] === "boolean") {
+        push_field("Execution", payload["execution_blocked"] ? "blocked" : "started");
     }
 
     const completion = as_record(payload["moltis_completion"]);
@@ -614,7 +857,7 @@ function render_trace_fields(event: SupervisorEvent): string {
 </details>`;
 }
 
-function render_dispatch_tasks(event: SupervisorEvent): string {
+function render_execution_tasks(event: SupervisorEvent): string {
     const tasks = Array.isArray(event.payload?.["tasks"]) ? event.payload["tasks"] : [];
     if (tasks.length === 0) {
         return "";
@@ -714,7 +957,7 @@ function update_live_preview_from_event(event: SupervisorEvent): void {
         clear_thinking_preview();
         return;
     }
-    if (role === "assistant" && (kind === "assistant" || kind === "dispatch_result" || kind === "plan_draft")) {
+    if (role === "assistant" && (kind === "assistant" || kind === "execution_result" || kind === "plan_draft")) {
         clear_thinking_preview();
     }
 }
@@ -731,8 +974,8 @@ function event_css_class(event: SupervisorEvent): string {
     if (kind === "tool_call" || kind === "tool_result") {
         return "is-tool";
     }
-    if (kind === "dispatch_result") {
-        return "is-dispatch";
+    if (kind === "execution_result") {
+        return "is-execution";
     }
     if (kind === "plan_draft") {
         return "is-plan";
@@ -906,7 +1149,7 @@ function render_event(event: SupervisorEvent): JQuery {
     }
     const label = event.author_name.trim() || role_label(event.role);
     const ts = event.ts ? new Date(event.ts).toLocaleTimeString() : "";
-    const dispatched = render_dispatch_tasks(event);
+    const execution_tasks = render_execution_tasks(event);
     const html = `
 <article class="foundry-supervisor-event ${event_css_class(event)}" data-supervisor-event-id="${event.id}">
   <header class="foundry-supervisor-event-header">
@@ -914,7 +1157,9 @@ function render_event(event: SupervisorEvent): JQuery {
     <span class="foundry-supervisor-event-meta">${_.escape(ts)}</span>
   </header>
   ${render_markdown(event.content_md)}
-  ${dispatched}
+  ${execution_tasks}
+  ${render_trace_fields(event)}
+  ${render_payload_details(event)}
 </article>`;
     const $node = $(html);
     rendered_markdown.update_elements($node);
@@ -984,7 +1229,7 @@ function group_intermediate_steps(): void {
             continue;
         }
         const is_user = child.classList.contains("is-user");
-        const is_supervisor = child.classList.contains("is-supervisor") || child.classList.contains("is-dispatch") || child.classList.contains("is-plan");
+        const is_supervisor = child.classList.contains("is-supervisor") || child.classList.contains("is-execution") || child.classList.contains("is-plan");
         const is_separator = child.tagName === "HR";
         const is_intermediate = child.classList.contains("is-thinking") || child.classList.contains("is-tool") || child.classList.contains("foundry-supervisor-lifecycle-card") || child.classList.contains("foundry-supervisor-shell-output-card") || child.querySelector(".foundry-supervisor-tool-collapse") !== null;
         const is_steps_group = child.classList.contains("foundry-supervisor-steps-group");
@@ -1035,6 +1280,10 @@ function set_warning(message: string): void {
     $warning.text(message).show();
 }
 
+function timeline_base_markup(): string {
+    return '<button type="button" id="foundry-supervisor-scroll-bottom" class="foundry-supervisor-scroll-bottom" style="display:none" aria-label="Scroll to bottom">↓</button>';
+}
+
 function render_shell(context: TopicContext): void {
     const topic_title = `${_.escape(context.stream_name)} · ${_.escape(context.topic)}`;
     const html = `
@@ -1046,11 +1295,16 @@ function render_shell(context: TopicContext): void {
     </div>
     <div class="foundry-supervisor-sidebar-topic" title="${topic_title}">${topic_title}</div>
   </div>
+  <div class="foundry-supervisor-session-panel">
+    <div class="foundry-supervisor-session-panel-header">
+      <span class="foundry-supervisor-session-panel-title">Sessions</span>
+      <button type="button" id="foundry-supervisor-new-session" class="foundry-supervisor-session-create">New</button>
+    </div>
+    <div id="foundry-supervisor-session-list" class="foundry-supervisor-session-list"></div>
+  </div>
   <div id="foundry-supervisor-task-dashboard" class="foundry-supervisor-task-dashboard" style="display:none"></div>
   <div id="foundry-supervisor-sidebar-warning" class="foundry-supervisor-sidebar-warning" style="display:none;"></div>
-  <div id="foundry-supervisor-sidebar-timeline" class="foundry-supervisor-sidebar-timeline scrolling_list">
-    <button type="button" id="foundry-supervisor-scroll-bottom" class="foundry-supervisor-scroll-bottom" style="display:none" aria-label="Scroll to bottom">↓</button>
-  </div>
+  <div id="foundry-supervisor-sidebar-timeline" class="foundry-supervisor-sidebar-timeline scrolling_list">${timeline_base_markup()}</div>
   <div class="foundry-supervisor-sidebar-composer">
     <textarea id="foundry-supervisor-sidebar-input" class="foundry-supervisor-sidebar-input" rows="2" placeholder="Ask anything..."></textarea>
     <div id="foundry-supervisor-attachments" class="foundry-supervisor-composer-attachments" style="display:none"></div>
@@ -1062,6 +1316,7 @@ function render_shell(context: TopicContext): void {
   </div>
 </div>`;
     root_selector().html(html);
+    render_session_list();
     attach_timeline_wheel_listener();
     update_send_button_state();
 }
@@ -1215,7 +1470,7 @@ function update_task_registry(event: SupervisorEvent): void {
     const payload_plan_revision_id = as_string(payload["plan_revision_id"]).trim();
 
     if (
-        event.kind === "dispatch_result"
+        event.kind === "execution_result"
         && payload_plan_revision_id
         && payload_plan_revision_id !== state.current_plan_revision_id
     ) {
@@ -1229,11 +1484,11 @@ function update_task_registry(event: SupervisorEvent): void {
         payload_plan_revision_id === state.current_plan_revision_id;
     const allow_new_unknown_tasks =
         !state.current_plan_revision_id ||
-        (event.kind === "dispatch_result"
+        (event.kind === "execution_result"
             && (!payload_plan_revision_id || payload_plan_revision_id === state.current_plan_revision_id)) ||
         payload_plan_revision_id === state.current_plan_revision_id;
 
-    /* 1. Upsert tasks from the tasks[] array in dispatch events */
+    /* 1. Upsert tasks from the tasks[] array in execution events */
     const tasks = Array.isArray(payload["tasks"]) ? payload["tasks"] : [];
     if (event_matches_current_plan) {
         for (const task of tasks) {
@@ -1834,8 +2089,46 @@ function set_tab(tab: "users" | "ai"): void {
     }
 }
 
+function reset_session_view(): void {
+    state.current_plan_revision_id = "";
+    state.after_id = 0;
+    state.seen_event_ids = new Set<number>();
+    state.request_in_flight = false;
+    state.disconnected = false;
+    state.poll_failure_count = 0;
+    state.last_status_message = "";
+    state.last_live_message = "";
+    state.pending_user_echoes = new Map<string, number>();
+    state.next_local_event_id = -1;
+    state.task_registry = new Map<string, TaskEntry>();
+    clear_thinking_preview();
+    timeline_selector().html(timeline_base_markup());
+    $("#foundry-supervisor-task-dashboard").hide().empty();
+    set_warning("");
+}
+
+function activate_session(session: SupervisorSession | null, options: {pending_manual: boolean}): void {
+    const {pending_manual} = options;
+    state.pending_manual_session = pending_manual;
+    state.session = session;
+    reset_session_view();
+    if (session) {
+        const engine = session_engine_label(session);
+        set_status_message(
+            `Session ${session.session_id} · ${session.status}${engine ? ` · ${engine}` : ""}`,
+        );
+    } else if (pending_manual) {
+        set_status_message("New session draft");
+    } else {
+        set_status_message("Connecting…");
+    }
+    render_session_list();
+}
+
 function reset_topic_state(): void {
     state.session = null;
+    state.sessions = [];
+    state.pending_manual_session = false;
     state.current_plan_revision_id = "";
     state.after_id = 0;
     state.seen_event_ids = new Set<number>();
@@ -1939,18 +2232,25 @@ async function poll_session(): Promise<void> {
     if (!state.context || state.active_tab !== "ai") {
         return;
     }
+    if (!state.session && state.pending_manual_session) {
+        return;
+    }
     if (state.request_in_flight) {
         schedule_poll(POLL_INTERVAL_MS);
         return;
     }
     state.request_in_flight = true;
     const scope = state.context.topic_scope_id;
+    const params: Record<string, string | number> = {
+        after_id: state.after_id,
+        limit: 250,
+    };
+    if (state.session?.session_id) {
+        params["session_id"] = state.session.session_id;
+    }
     await channel.get({
         url: `/json/foundry/topics/${encodeURIComponent(scope)}/supervisor/session`,
-        data: {
-            after_id: state.after_id,
-            limit: 250,
-        },
+        data: params,
         success(data) {
             state.request_in_flight = false;
             state.disconnected = false;
@@ -1959,14 +2259,17 @@ async function poll_session(): Promise<void> {
                 set_warning("");
             }
             const root = as_record(data);
+            state.sessions = parse_sessions_from_response(data);
             const session = parse_session(root?.["session"] ?? as_record(root?.["raw"])?.["session"]);
             if (session) {
                 state.session = session;
+                state.pending_manual_session = false;
                 const engine = session_engine_label(session);
                 set_status_message(
                     `Session ${session.session_id} · ${session.status}${engine ? ` · ${engine}` : ""}`,
                 );
             }
+            render_session_list();
             const task_summary = parse_task_summary(root?.["task_summary"] ?? as_record(root?.["raw"])?.["task_summary"]);
             sync_task_registry_from_summary(task_summary);
             const events = parse_events_from_response(data);
@@ -2032,6 +2335,11 @@ function post_message(message: string): void {
     const form = new FormData();
     form.append("message", trimmed);
     form.append("client_msg_id", client_msg_id);
+    if (state.pending_manual_session) {
+        form.append("session_create_mode", "manual");
+    } else if (state.session?.session_id) {
+        form.append("session_id", state.session.session_id);
+    }
     for (const [key, value] of Object.entries(context_payload)) {
         form.append(key, String(value));
     }
@@ -2054,6 +2362,22 @@ function post_message(message: string): void {
             set_warning("");
             try {
                 const response_data: unknown = JSON.parse(xhr.responseText);
+                const root = as_record(response_data);
+                state.sessions = parse_sessions_from_response(response_data);
+                const session = parse_session(root?.["session"] ?? as_record(root?.["raw"])?.["session"]);
+                if (session) {
+                    state.session = session;
+                    state.pending_manual_session = false;
+                    const engine = session_engine_label(session);
+                    set_status_message(
+                        `Session ${session.session_id} · ${session.status}${engine ? ` · ${engine}` : ""}`,
+                    );
+                }
+                render_session_list();
+                const task_summary = parse_task_summary(
+                    root?.["task_summary"] ?? as_record(root?.["raw"])?.["task_summary"],
+                );
+                sync_task_registry_from_summary(task_summary);
                 const events = parse_events_from_response(response_data);
                 append_events(events);
             } catch {
@@ -2174,6 +2498,23 @@ export function initialize(): void {
         e.preventDefault();
         const message = String($("#foundry-supervisor-sidebar-input").val() ?? "");
         post_message(message);
+    });
+
+    $("body").on("click", "#foundry-supervisor-new-session", (e) => {
+        e.preventDefault();
+        activate_session(null, {pending_manual: true});
+        $("#foundry-supervisor-sidebar-input").trigger("focus");
+    });
+
+    $("body").on("click", ".foundry-supervisor-session-item[data-session-id]", function (e) {
+        e.preventDefault();
+        const session_id = $(this).attr("data-session-id") ?? "";
+        const session = state.sessions.find((item) => item.session_id === session_id) ?? null;
+        if (!session || session.session_id === state.session?.session_id) {
+            return;
+        }
+        activate_session(session, {pending_manual: false});
+        schedule_poll(20);
     });
 
     $("body").on("wheel", "#foundry-supervisor-sidebar-timeline", (e) => {

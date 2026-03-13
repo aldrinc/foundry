@@ -462,6 +462,20 @@ export function AgentsProvider(props: { orgId: string; children: JSX.Element }) 
       }
 
       try {
+        if (trimmedProvider === "codex") {
+          const result = await commands.connectFoundryProviderDesktopOauth(
+            props.orgId,
+            trimmedProvider,
+          )
+
+          if (result.status !== "ok") {
+            return { ok: false, error: result.error || "Failed to complete OAuth sign-in." }
+          }
+
+          await refreshProviders()
+          return { ok: true, authorizeUrl: null }
+        }
+
         const result = await commands.startFoundryProviderOauth(
           props.orgId,
           trimmedProvider,

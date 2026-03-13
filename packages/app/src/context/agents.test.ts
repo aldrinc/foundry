@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 
 import type { FoundryProviderAuth } from "@foundry/desktop/bindings"
+import { buildFoundryProviderOauthRedirectUri } from "./provider-oauth"
 import {
   buildSupervisorDelegateContextFromDelegates,
   getProviderConnectionStatus,
@@ -58,6 +59,19 @@ function createDelegate(overrides: Partial<DelegateAgent> = {}): DelegateAgent {
 }
 
 describe("agents helpers", () => {
+  test("builds the provider OAuth callback against the current org realm", () => {
+    expect(
+      buildFoundryProviderOauthRedirectUri("https://foundry-labs.zulip-dev-live.5.161.60.86.sslip.io/"),
+    ).toBe(
+      "https://foundry-labs.zulip-dev-live.5.161.60.86.sslip.io/json/foundry/providers/oauth/callback",
+    )
+  })
+
+  test("returns null when the org realm URL is not usable", () => {
+    expect(buildFoundryProviderOauthRedirectUri("")).toBeNull()
+    expect(buildFoundryProviderOauthRedirectUri("not a url")).toBeNull()
+  })
+
   test("maps active provider credentials to a connected status", () => {
     const provider = {
       provider: "codex",

@@ -8,6 +8,7 @@ const PROVIDER_AUTH_PATH: &str = "/api/v1/foundry/providers/auth";
 const PROVIDER_CONNECT_PATH: &str = "/api/v1/foundry/providers/connect";
 const PROVIDER_DISCONNECT_PATH: &str = "/api/v1/foundry/providers/disconnect";
 const PROVIDER_OAUTH_START_PATH: &str = "/api/v1/foundry/providers/oauth/start";
+const SUPERVISOR_MESSAGE_TIMEOUT: Duration = Duration::from_secs(120);
 
 impl ZulipClient {
     /// POST /api/v1/foundry/inbox/priorities
@@ -42,6 +43,7 @@ impl ZulipClient {
     pub async fn get_supervisor_session(
         &self,
         topic_scope_id: &str,
+        session_id: Option<&str>,
         after_id: i64,
         limit: u32,
     ) -> Result<SupervisorSessionResponse, String> {
@@ -50,12 +52,17 @@ impl ZulipClient {
             urlencoding::encode(topic_scope_id)
         );
 
+        let mut query = vec![
+            ("after_id", after_id.to_string()),
+            ("limit", limit.to_string()),
+        ];
+        if let Some(value) = session_id.map(str::trim).filter(|value| !value.is_empty()) {
+            query.push(("session_id", value.to_string()));
+        }
+
         let resp = self
             .get(&path)
-            .query(&[
-                ("after_id", after_id.to_string()),
-                ("limit", limit.to_string()),
-            ])
+            .query(&query)
             .send()
             .await
             .map_err(|e| format!("Failed to poll supervisor session: {}", e))?;
@@ -80,6 +87,9 @@ impl ZulipClient {
         &self,
         topic_scope_id: &str,
         message: &str,
+        session_id: Option<&str>,
+        session_create_mode: Option<&str>,
+        session_title: Option<&str>,
         client_msg_id: &str,
         stream_id: Option<u64>,
         stream_name: Option<&str>,
@@ -94,6 +104,21 @@ impl ZulipClient {
             ("message", message.to_string()),
             ("client_msg_id", client_msg_id.to_string()),
         ];
+        if let Some(value) = session_id.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("session_id", value.to_string()));
+        }
+        if let Some(value) = session_create_mode
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            params.push(("session_create_mode", value.to_string()));
+        }
+        if let Some(value) = session_title
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            params.push(("session_title", value.to_string()));
+        }
 
         if let Some(sid) = stream_id {
             params.push(("stream_id", sid.to_string()));
@@ -110,7 +135,13 @@ impl ZulipClient {
         // accepted upstream.
         let mut attempt = 0;
         let resp = loop {
-            match self.post(&path).form(&params).send().await {
+            match self
+                .post(&path)
+                .timeout(SUPERVISOR_MESSAGE_TIMEOUT)
+                .form(&params)
+                .send()
+                .await
+            {
                 Ok(resp) => break resp,
                 Err(error) if attempt == 0 => {
                     tracing::warn!(
@@ -144,14 +175,18 @@ impl ZulipClient {
     pub async fn get_supervisor_sidebar(
         &self,
         topic_scope_id: &str,
+        session_id: Option<&str>,
     ) -> Result<SupervisorSidebarResponse, String> {
         let path = format!(
             "/api/v1/foundry/topics/{}/sidebar",
             urlencoding::encode(topic_scope_id)
         );
 
-        let resp = self
-            .get(&path)
+        let mut request = self.get(&path);
+        if let Some(value) = session_id.map(str::trim).filter(|value| !value.is_empty()) {
+            request = request.query(&[("session_id", value)]);
+        }
+        let resp = request
             .send()
             .await
             .map_err(|e| format!("Failed to get supervisor sidebar: {}", e))?;
@@ -281,6 +316,60 @@ impl ZulipClient {
         resp.json()
             .await
             .map_err(|e| format!("Failed to parse provider connect response: {}", e))
+    }
+
+    /// POST /api/v1/foundry/providers/connect
+    /// Connect a provider using OAuth token material
+    pub async fn connect_foundry_provider_oauth(
+        &self,
+        provider: &str,
+        access_token: &str,
+        refresh_token: Option<&str>,
+        id_token: Option<&str>,
+        account_id: Option<&str>,
+        label: Option<&str>,
+    ) -> Result<FoundryProviderCredentialResponse, String> {
+        let mut params = vec![
+            ("provider", provider.to_string()),
+            ("auth_mode", "oauth".to_string()),
+            ("access_token", access_token.to_string()),
+        ];
+
+        if let Some(value) = refresh_token
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            params.push(("refresh_token", value.to_string()));
+        }
+        if let Some(value) = id_token.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("id_token", value.to_string()));
+        }
+        if let Some(value) = account_id.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("account_id", value.to_string()));
+        }
+        if let Some(value) = label.map(str::trim).filter(|value| !value.is_empty()) {
+            params.push(("label", value.to_string()));
+        }
+
+        let resp = self
+            .post(PROVIDER_CONNECT_PATH)
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to connect provider with OAuth: {}", e))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Provider OAuth connect failed ({}): {}",
+                status, body
+            ));
+        }
+
+        resp.json()
+            .await
+            .map_err(|e| format!("Failed to parse provider OAuth connect response: {}", e))
     }
 
     /// POST /api/v1/foundry/providers/disconnect

@@ -61,6 +61,7 @@ export function SettingsGeneral() {
         >
           <option value="small">Small</option>
           <option value="normal">Normal</option>
+          <option value="medium">Medium</option>
           <option value="large">Large</option>
         </select>
       </SettingRow>

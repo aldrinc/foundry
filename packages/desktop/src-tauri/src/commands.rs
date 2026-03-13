@@ -1,20 +1,21 @@
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 
-use serde::de::DeserializeOwned;
+use serde::Serialize;
+use specta::Type;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{AppHandle, Emitter, Manager, State, Url, WebviewUrl};
+use tauri::{Emitter, Manager, State, Url, WebviewUrl};
 
 use crate::server::load_desktop_settings;
 use crate::zulip::types::*;
-use crate::zulip::ZulipClient;
+use crate::zulip::{is_auth_failure_message, sanitize_event_id, ZulipClient};
 use crate::AppState;
 
 const AUTH_CALLBACK_EVENT: &str = "deep-link://new-url";
 const AUTH_WINDOW_LABEL_PREFIX: &str = "sso-auth-";
-const FOUNDRY_SERVER_URL_KEY: &str = "foundry_server_url";
-const DEFAULT_FOUNDRY_SERVER_URL: &str = "http://127.0.0.1:8090";
 const FOUNDRY_CLOUD_LOGIN_TITLE: &str = "Foundry Cloud Login";
 const MAX_PRIORITY_CANDIDATES: usize = 8;
 const MAX_PRIORITY_MESSAGES: u32 = 8;
@@ -32,7 +33,7 @@ struct PriorityMessageContext {
     timestamp: i64,
 }
 
-fn next_auth_window_label() -> String {
+pub(crate) fn next_auth_window_label() -> String {
     format!(
         "{AUTH_WINDOW_LABEL_PREFIX}{}",
         AUTH_WINDOW_COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -51,7 +52,7 @@ async fn explain_server_settings_error(client: &ZulipClient, error: String) -> S
     match client.get_unauth("/login").send().await {
         Ok(response) if response.status().is_success() => match response.text().await {
             Ok(body) if looks_like_foundry_cloud_login_html(&body) => {
-                "This URL is a Foundry server control plane, not a tenant organization URL. Use your organization URL here, then configure the Assistant backend URL separately in Settings > Servers.".to_string()
+                "This URL is a Foundry server control plane, not a tenant organization URL. Use your organization URL here.".to_string()
             }
             _ => error,
         },
@@ -64,7 +65,7 @@ fn is_sso_callback_url(url: &Url) -> bool {
         && (url.host_str() == Some("login") || url.path() == "/login")
 }
 
-fn close_auth_windows(app: &tauri::AppHandle) {
+pub(crate) fn close_auth_windows(app: &tauri::AppHandle) {
     for (label, window) in app.webview_windows() {
         if label.starts_with(AUTH_WINDOW_LABEL_PREFIX) {
             let _ = window.close();
@@ -72,7 +73,7 @@ fn close_auth_windows(app: &tauri::AppHandle) {
     }
 }
 
-fn focus_main_window(app: &tauri::AppHandle) {
+pub(crate) fn focus_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();
@@ -86,7 +87,7 @@ fn handle_sso_callback(app: tauri::AppHandle, callback_url: String) {
     close_auth_windows(&app);
 }
 
-fn build_auth_window(
+pub(crate) fn build_auth_window(
     app: &tauri::AppHandle,
     label: String,
     url: Url,
@@ -218,64 +219,22 @@ async fn connect_with_api_key(
     })
 }
 
-fn load_foundry_server_base_url(app: &AppHandle) -> Result<(String, bool), String> {
-    let configured = crate::server::get_config(app.clone(), FOUNDRY_SERVER_URL_KEY.to_string())?;
-    let Some(raw_value) = configured else {
-        return Ok((DEFAULT_FOUNDRY_SERVER_URL.to_string(), false));
-    };
-
-    let parsed = serde_json::from_str::<String>(&raw_value).unwrap_or(raw_value);
-    let normalized = parsed
-        .trim()
-        .trim_matches('"')
-        .trim_end_matches('/')
-        .to_string();
-    if normalized.is_empty() {
-        return Ok((DEFAULT_FOUNDRY_SERVER_URL.to_string(), false));
-    }
-    Ok((normalized, true))
-}
-
-async fn post_inbox_secretary_request<T: DeserializeOwned>(
-    app: &AppHandle,
-    client: &ZulipClient,
-    path: &str,
-    payload: serde_json::Value,
-) -> Result<T, String> {
-    let (base_url, configured) = load_foundry_server_base_url(app)?;
-    let request_url = format!("{base_url}{path}");
-    let http_client = client.build_external_client(Duration::from_secs(90))?;
-    let response = http_client
-        .post(&request_url)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|error| {
-            if !configured && base_url == DEFAULT_FOUNDRY_SERVER_URL {
-                format!(
-                    "Inbox assistant backend is not configured. Set Desktop > Servers > Assistant backend URL, or run Foundry Server locally on {DEFAULT_FOUNDRY_SERVER_URL}. Original error: {error}"
-                )
-            } else {
-                format!("Inbox assistant request failed: {error}")
-            }
-        })?;
-
+async fn parse_inbox_assistant_response(
+    response: reqwest::Response,
+    operation: &str,
+) -> Result<InboxSecretarySession, String> {
     let status = response.status();
     let body = response
         .text()
         .await
-        .map_err(|error| format!("Failed to read inbox assistant response: {error}"))?;
+        .map_err(|error| format!("Failed to read {operation} response: {error}"))?;
     if !status.is_success() {
-        return Err(format!(
-            "Inbox assistant request failed ({}): {}",
-            status,
-            body.trim()
-        ));
+        return Err(format!("{operation} failed ({}): {}", status, body.trim()));
     }
 
-    serde_json::from_str::<T>(&body).map_err(|error| {
+    serde_json::from_str::<InboxSecretarySession>(&body).map_err(|error| {
         format!(
-            "Invalid inbox assistant response: {error}. Body: {}",
+            "Failed to parse {operation} response: {error}. Body: {}",
             body.trim()
         )
     })
@@ -826,6 +785,7 @@ pub async fn logout(state: State<'_, AppState>, org_id: String) -> Result<(), St
 #[tauri::command]
 #[specta::specta]
 pub async fn get_messages(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     narrow: Vec<NarrowFilter>,
@@ -833,30 +793,43 @@ pub async fn get_messages(
     num_before: u32,
     num_after: u32,
 ) -> Result<MessageResponse, String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .get_messages(&narrow, &anchor, num_before, num_after)
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .get_messages(&narrow, &anchor, num_before, num_after)
+            .await
+    })
+    .await
 }
 
 /// Analyze unread conversations and return citation-backed inbox priorities.
 #[tauri::command]
 #[specta::specta]
 pub async fn get_inbox_priorities(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     candidates: Vec<InboxPriorityCandidate>,
 ) -> Result<InboxPrioritiesResponse, String> {
-    let client = get_client(&state, &org_id)?;
+    let client = get_client(state.inner(), &org_id)?;
     let current_user_id = get_current_user_id(&state, &org_id)?;
 
     let mut ranked_candidates = candidates;
     rank_candidates(&mut ranked_candidates);
 
     if ranked_candidates.len() < MAX_PRIORITY_CANDIDATES {
-        let discovered = discover_priority_candidates(&client, current_user_id, &ranked_candidates)
-            .await
-            .unwrap_or_default();
+        let discovered = match discover_priority_candidates(
+            &client,
+            current_user_id,
+            &ranked_candidates,
+        )
+        .await
+        {
+            Ok(candidates) => candidates,
+            Err(error) => {
+                handle_org_command_error(&app, state.inner(), &org_id, &error);
+                return Err(error);
+            }
+        };
         ranked_candidates.extend(discovered);
         rank_candidates(&mut ranked_candidates);
     }
@@ -899,17 +872,14 @@ pub async fn get_inbox_assistant_session(
     state: State<'_, AppState>,
     org_id: String,
 ) -> Result<InboxSecretarySession, String> {
-    let client = get_client(&state, &org_id)?;
-    post_inbox_secretary_request(
-        &app,
-        &client,
-        "/api/v1/desktop/inbox-secretary/session",
-        serde_json::json!({
-            "org_key": org_id,
-            "realm_url": client.base_url.clone(),
-            "user_email": client.email().to_string(),
-        }),
-    )
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        let response = client
+            .get("/api/v1/foundry/inbox/assistant/session")
+            .send()
+            .await
+            .map_err(|error| format!("Failed to load inbox assistant session: {error}"))?;
+        parse_inbox_assistant_response(response, "Inbox assistant session").await
+    })
     .await
 }
 
@@ -922,21 +892,24 @@ pub async fn send_inbox_assistant_message(
     org_id: String,
     message: String,
 ) -> Result<InboxSecretarySession, String> {
-    let client = get_client(&state, &org_id)?;
     let current_user_id = get_current_user_id(&state, &org_id)?;
-    post_inbox_secretary_request(
-        &app,
-        &client,
-        "/api/v1/desktop/inbox-secretary/chat",
-        serde_json::json!({
-            "org_key": org_id,
-            "realm_url": client.base_url.clone(),
-            "user_email": client.email().to_string(),
-            "api_key": client.api_key().to_string(),
-            "current_user_id": current_user_id,
-            "message": message,
-        }),
-    )
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        let mut params = vec![
+            ("api_key", client.api_key().to_string()),
+            ("message", message),
+        ];
+        if let Some(user_id) = current_user_id {
+            params.push(("current_user_id", user_id.to_string()));
+        }
+
+        let response = client
+            .post("/api/v1/foundry/inbox/assistant/chat")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to send inbox assistant message: {error}"))?;
+        parse_inbox_assistant_response(response, "Inbox assistant message").await
+    })
     .await
 }
 
@@ -952,21 +925,24 @@ pub async fn record_inbox_assistant_feedback(
     action: String,
     note: Option<String>,
 ) -> Result<InboxSecretarySession, String> {
-    let client = get_client(&state, &org_id)?;
-    post_inbox_secretary_request(
-        &app,
-        &client,
-        "/api/v1/desktop/inbox-secretary/feedback",
-        serde_json::json!({
-            "org_key": org_id,
-            "realm_url": client.base_url.clone(),
-            "user_email": client.email().to_string(),
-            "item_key": item_key,
-            "conversation_key": conversation_key,
-            "action": action,
-            "note": note.unwrap_or_default(),
-        }),
-    )
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        let mut params = vec![
+            ("item_key", item_key),
+            ("conversation_key", conversation_key),
+            ("action", action),
+        ];
+        if let Some(note) = note {
+            params.push(("note", note));
+        }
+
+        let response = client
+            .post("/api/v1/foundry/inbox/assistant/feedback")
+            .form(&params)
+            .send()
+            .await
+            .map_err(|error| format!("Failed to record inbox assistant feedback: {error}"))?;
+        parse_inbox_assistant_response(response, "Inbox assistant feedback").await
+    })
     .await
 }
 
@@ -974,6 +950,7 @@ pub async fn record_inbox_assistant_feedback(
 #[tauri::command]
 #[specta::specta]
 pub async fn send_message(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     msg_type: String,
@@ -981,82 +958,99 @@ pub async fn send_message(
     content: String,
     topic: Option<String>,
 ) -> Result<SendResult, String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .send_message(&msg_type, &to, &content, topic.as_deref())
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .send_message(&msg_type, &to, &content, topic.as_deref())
+            .await
+    })
+    .await
 }
 
 /// Edit a message
 #[tauri::command]
 #[specta::specta]
 pub async fn edit_message(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     message_id: u64,
     content: Option<String>,
     topic: Option<String>,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .edit_message(message_id, content.as_deref(), topic.as_deref())
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .edit_message(message_id, content.as_deref(), topic.as_deref())
+            .await
+    })
+    .await
 }
 
 /// Delete a message
 #[tauri::command]
 #[specta::specta]
 pub async fn delete_message(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     message_id: u64,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.delete_message(message_id).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.delete_message(message_id).await
+    })
+    .await
 }
 
 /// Add an emoji reaction
 #[tauri::command]
 #[specta::specta]
 pub async fn add_reaction(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     message_id: u64,
     emoji_name: String,
     emoji_code: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .add_reaction(message_id, &emoji_name, &emoji_code)
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .add_reaction(message_id, &emoji_name, &emoji_code)
+            .await
+    })
+    .await
 }
 
 /// Remove an emoji reaction
 #[tauri::command]
 #[specta::specta]
 pub async fn remove_reaction(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     message_id: u64,
     emoji_name: String,
     emoji_code: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .remove_reaction(message_id, &emoji_name, &emoji_code)
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .remove_reaction(message_id, &emoji_name, &emoji_code)
+            .await
+    })
+    .await
 }
 
 /// Update own presence status
 #[tauri::command]
 #[specta::specta]
 pub async fn update_presence(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     status: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.update_presence(&status).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.update_presence(&status).await
+    })
+    .await
 }
 
 /// Send typing notification
@@ -1065,6 +1059,7 @@ pub async fn update_presence(
 #[tauri::command]
 #[specta::specta]
 pub async fn send_typing(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     op: String,
@@ -1072,10 +1067,12 @@ pub async fn send_typing(
     to: String,
     topic: Option<String>,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .send_typing(&op, &typing_type, &to, topic.as_deref())
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .send_typing(&op, &typing_type, &to, topic.as_deref())
+            .await
+    })
+    .await
 }
 
 /// Save bytes to a temporary file and return its path (for paste/drag-drop uploads)
@@ -1104,153 +1101,189 @@ pub async fn save_temp_file(file_name: String, data: Vec<u8>) -> Result<String, 
 #[tauri::command]
 #[specta::specta]
 pub async fn upload_file(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     file_path: String,
 ) -> Result<UploadResult, String> {
-    let client = get_client(&state, &org_id)?;
-    client.upload_file(&file_path).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.upload_file(&file_path).await
+    })
+    .await
 }
 
 /// Fetch an authenticated media URL and convert it to a data URL for the webview.
 #[tauri::command]
 #[specta::specta]
 pub async fn fetch_authenticated_media_data_url(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     media_url: String,
 ) -> Result<String, String> {
-    let client = get_client(&state, &org_id)?;
-    client.fetch_authenticated_media_data_url(&media_url).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.fetch_authenticated_media_data_url(&media_url).await
+    })
+    .await
 }
 
 /// Update message flags (read, starred, etc.)
 #[tauri::command]
 #[specta::specta]
 pub async fn update_message_flags(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     messages: Vec<u64>,
     op: String,
     flag: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.update_flags(&messages, &op, &flag).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.update_flags(&messages, &op, &flag).await
+    })
+    .await
 }
 
 /// Mark all messages in a stream as read
 #[tauri::command]
 #[specta::specta]
 pub async fn mark_stream_as_read(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_id: u64,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.mark_stream_as_read(stream_id).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.mark_stream_as_read(stream_id).await
+    })
+    .await
 }
 
 /// Mark all messages in a topic as read
 #[tauri::command]
 #[specta::specta]
 pub async fn mark_topic_as_read(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_id: u64,
     topic_name: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.mark_topic_as_read(stream_id, &topic_name).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.mark_topic_as_read(stream_id, &topic_name).await
+    })
+    .await
 }
 
 /// Get topics within a stream
 #[tauri::command]
 #[specta::specta]
 pub async fn get_stream_topics(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_id: u64,
 ) -> Result<Vec<Topic>, String> {
-    let client = get_client(&state, &org_id)?;
-    client.get_stream_topics(stream_id).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.get_stream_topics(stream_id).await
+    })
+    .await
 }
 
 /// Subscribe to streams
 #[tauri::command]
 #[specta::specta]
 pub async fn subscribe_stream(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_names: Vec<String>,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.subscribe(&stream_names).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.subscribe(&stream_names).await
+    })
+    .await
 }
 
 /// Unsubscribe from streams
 #[tauri::command]
 #[specta::specta]
 pub async fn unsubscribe_stream(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_names: Vec<String>,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.unsubscribe(&stream_names).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.unsubscribe(&stream_names).await
+    })
+    .await
 }
 
 /// Update one or more subscription properties for channels the user is subscribed to.
 #[tauri::command]
 #[specta::specta]
 pub async fn update_subscription_properties(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     subscription_data: Vec<SubscriptionPropertyChange>,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .update_subscription_properties(&subscription_data)
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .update_subscription_properties(&subscription_data)
+            .await
+    })
+    .await
 }
 
 /// Update the current user's topic visibility policy within a channel.
 #[tauri::command]
 #[specta::specta]
 pub async fn update_topic_visibility_policy(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     stream_id: u64,
     topic: String,
     visibility_policy: UserTopicVisibilityPolicy,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client
-        .update_topic_visibility_policy(stream_id, &topic, visibility_policy)
-        .await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .update_topic_visibility_policy(stream_id, &topic, visibility_policy)
+            .await
+    })
+    .await
 }
 
 /// Move or rename all messages in a topic.
 #[tauri::command]
 #[specta::specta]
 pub async fn move_topic(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     request: MoveTopicRequest,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.move_topic(&request).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.move_topic(&request).await
+    })
+    .await
 }
 
 /// Resolve or unresolve all messages in a topic.
 #[tauri::command]
 #[specta::specta]
 pub async fn set_topic_resolved(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     request: ResolveTopicRequest,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.set_topic_resolved(&request).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.set_topic_resolved(&request).await
+    })
+    .await
 }
 
 /// Update Zulip user settings (syncs to server)
@@ -1258,23 +1291,280 @@ pub async fn set_topic_resolved(
 #[tauri::command]
 #[specta::specta]
 pub async fn update_zulip_settings(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
     settings_json: String,
 ) -> Result<(), String> {
-    let client = get_client(&state, &org_id)?;
-    client.update_user_settings(&settings_json).await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.update_user_settings(&settings_json).await
+    })
+    .await
 }
 
 /// Fetch current Zulip user settings from server
 #[tauri::command]
 #[specta::specta]
 pub async fn get_zulip_settings(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
 ) -> Result<String, String> {
-    let client = get_client(&state, &org_id)?;
-    client.get_user_settings().await
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.get_user_settings().await
+    })
+    .await
+}
+
+// ── Link preview ─────────────────────────────────────────────────────
+
+/// OpenGraph link preview data returned to the frontend.
+#[derive(Debug, Clone, Serialize, Type)]
+pub struct LinkPreview {
+    pub url: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+    pub site_name: Option<String>,
+}
+
+/// Simple bounded cache for link previews (avoids fetching the same URL twice).
+struct LinkPreviewCache {
+    entries: HashMap<String, LinkPreview>,
+    order: Vec<String>,
+    max_size: usize,
+}
+
+impl LinkPreviewCache {
+    fn new(max_size: usize) -> Self {
+        Self {
+            entries: HashMap::with_capacity(max_size),
+            order: Vec::with_capacity(max_size),
+            max_size,
+        }
+    }
+
+    fn get(&self, url: &str) -> Option<&LinkPreview> {
+        self.entries.get(url)
+    }
+
+    fn insert(&mut self, url: String, preview: LinkPreview) {
+        if self.order.len() >= self.max_size {
+            if let Some(oldest) = self.order.first().cloned() {
+                self.entries.remove(&oldest);
+                self.order.remove(0);
+            }
+        }
+        self.order.push(url.clone());
+        self.entries.insert(url, preview);
+    }
+}
+
+static LINK_PREVIEW_CACHE: std::sync::LazyLock<StdMutex<LinkPreviewCache>> =
+    std::sync::LazyLock::new(|| StdMutex::new(LinkPreviewCache::new(500)));
+
+/// Maximum body size to download when fetching a page for OG metadata (256 KB).
+const LINK_PREVIEW_MAX_BODY: usize = 256 * 1024;
+
+/// Parse OpenGraph `<meta property="og:..." content="...">` tags from raw HTML.
+fn parse_og_tags(html: &str) -> HashMap<String, String> {
+    let mut tags: HashMap<String, String> = HashMap::new();
+
+    // Simple regex-free parser: scan for <meta and extract property/content pairs.
+    // This is intentionally lightweight — no HTML parsing crate needed for OG extraction.
+    let lower = html.to_lowercase();
+
+    let mut pos = 0;
+    while pos < lower.len() {
+        // Find next <meta
+        let Some(meta_start) = lower[pos..].find("<meta") else {
+            break;
+        };
+        let meta_start = pos + meta_start;
+
+        // Find the closing >
+        let Some(tag_end) = lower[meta_start..].find('>') else {
+            break;
+        };
+        let tag_end = meta_start + tag_end;
+
+        let tag = &html[meta_start..=tag_end];
+        let tag_lower = &lower[meta_start..=tag_end];
+
+        // Extract property="..." or property='...'
+        let property = extract_attr_value(tag, tag_lower, "property");
+        let name = extract_attr_value(tag, tag_lower, "name");
+
+        if let Some(content) = extract_attr_value(tag, tag_lower, "content") {
+            if let Some(ref prop) = property {
+                if prop.starts_with("og:") {
+                    tags.insert(prop.clone(), content.clone());
+                }
+            }
+
+            // Also handle <meta name="description"> as fallback
+            if let Some(ref n) = name {
+                if n == "description" && !tags.contains_key("og:description") {
+                    tags.insert("meta:description".to_string(), content);
+                }
+            }
+        }
+
+        pos = tag_end + 1;
+    }
+
+    tags
+}
+
+/// Extract an HTML attribute value by name from a tag string.
+fn extract_attr_value(tag: &str, tag_lower: &str, attr: &str) -> Option<String> {
+    let search = format!("{}=", attr);
+    let idx = tag_lower.find(&search)?;
+    let after_eq = idx + search.len();
+    let remaining = &tag[after_eq..];
+    let trimmed = remaining.trim_start();
+
+    if trimmed.starts_with('"') {
+        let content = &trimmed[1..];
+        let end = content.find('"')?;
+        Some(html_decode_basic(&content[..end]))
+    } else if trimmed.starts_with('\'') {
+        let content = &trimmed[1..];
+        let end = content.find('\'')?;
+        Some(html_decode_basic(&content[..end]))
+    } else {
+        // Unquoted value — take until whitespace or >
+        let end = trimmed
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(trimmed.len());
+        Some(html_decode_basic(&trimmed[..end]))
+    }
+}
+
+/// Decode common HTML entities.
+fn html_decode_basic(s: &str) -> String {
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+}
+
+/// Extract `<title>` tag content as fallback.
+fn extract_title_tag(html: &str) -> Option<String> {
+    let lower = html.to_lowercase();
+    let start = lower.find("<title")?;
+    let after_open = lower[start..].find('>')?;
+    let content_start = start + after_open + 1;
+    let end = lower[content_start..].find("</title>")?;
+    let title = html[content_start..content_start + end].trim();
+    if title.is_empty() {
+        None
+    } else {
+        Some(html_decode_basic(title))
+    }
+}
+
+/// Fetch OpenGraph link preview metadata for a URL.
+///
+/// Downloads the first 256 KB of the page, parses OG meta tags, and returns
+/// structured preview data. Results are cached in memory (up to 500 entries).
+#[tauri::command]
+#[specta::specta]
+pub async fn fetch_link_preview(url: String) -> Result<LinkPreview, String> {
+    // Check cache
+    {
+        let cache = LINK_PREVIEW_CACHE
+            .lock()
+            .map_err(|e| format!("Cache lock error: {}", e))?;
+        if let Some(cached) = cache.get(&url) {
+            return Ok(cached.clone());
+        }
+    }
+
+    // Validate URL
+    let parsed_url = reqwest::Url::parse(&url).map_err(|e| format!("Invalid URL: {}", e))?;
+
+    if !matches!(parsed_url.scheme(), "http" | "https") {
+        return Err("Only http/https URLs are supported".to_string());
+    }
+
+    // Fetch the page with sensible limits
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(8))
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .user_agent("FoundryBot/1.0 (Link Preview)")
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .get(parsed_url)
+        .header("Accept", "text/html,application/xhtml+xml")
+        .send()
+        .await
+        .map_err(|e| format!("Fetch error: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+
+    // Only parse HTML content types
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+
+    if !content_type.contains("text/html") && !content_type.contains("application/xhtml") {
+        return Err("Not an HTML page".to_string());
+    }
+
+    // Read body with size limit
+    let body_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Read error: {}", e))?;
+
+    let body = if body_bytes.len() > LINK_PREVIEW_MAX_BODY {
+        String::from_utf8_lossy(&body_bytes[..LINK_PREVIEW_MAX_BODY]).to_string()
+    } else {
+        String::from_utf8_lossy(&body_bytes).to_string()
+    };
+
+    // Parse OG tags
+    let og = parse_og_tags(&body);
+
+    let title = og
+        .get("og:title")
+        .cloned()
+        .or_else(|| extract_title_tag(&body));
+
+    let description = og
+        .get("og:description")
+        .cloned()
+        .or_else(|| og.get("meta:description").cloned());
+
+    let image_url = og.get("og:image").cloned();
+    let site_name = og.get("og:site_name").cloned();
+
+    let preview = LinkPreview {
+        url: url.clone(),
+        title,
+        description,
+        image_url,
+        site_name,
+    };
+
+    // Store in cache
+    {
+        let mut cache = LINK_PREVIEW_CACHE
+            .lock()
+            .map_err(|e| format!("Cache lock error: {}", e))?;
+        cache.insert(url, preview.clone());
+    }
+
+    Ok(preview)
 }
 
 /// Helper: Get a cloned ZulipClient for an org
@@ -1287,6 +1577,71 @@ pub fn get_client(state: &AppState, org_id: &str) -> Result<ZulipClient, String>
         .get(org_id)
         .ok_or_else(|| format!("Not connected to org: {}", org_id))?;
     Ok(org.client.clone())
+}
+
+fn disconnect_org_session(state: &AppState, org_id: &str) -> Result<(), String> {
+    let mut orgs = state
+        .orgs
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+
+    if let Some(org) = orgs.remove(org_id) {
+        if let Some(task) = org.event_task {
+            task.abort();
+        }
+        if let Some(task) = org.supervisor_task {
+            task.abort();
+        }
+    }
+
+    Ok(())
+}
+
+fn emit_auth_invalid_disconnect(app: &tauri::AppHandle, org_id: &str, error: &str) {
+    let _ = app.emit(
+        &format!("zulip:{}:disconnected", sanitize_event_id(org_id)),
+        serde_json::json!({
+            "auth_invalid": true,
+            "code": "UNAUTHORIZED",
+            "error": error,
+        }),
+    );
+}
+
+fn handle_org_command_error(app: &tauri::AppHandle, state: &AppState, org_id: &str, error: &str) {
+    if !is_auth_failure_message(error) {
+        return;
+    }
+
+    if let Err(disconnect_error) = disconnect_org_session(state, org_id) {
+        tracing::warn!(
+            ?disconnect_error,
+            org_id = %org_id,
+            "Failed to disconnect org after auth failure"
+        );
+    }
+
+    emit_auth_invalid_disconnect(app, org_id, error);
+}
+
+pub async fn with_org_client<T, F, Fut>(
+    app: &tauri::AppHandle,
+    state: &AppState,
+    org_id: &str,
+    operation: F,
+) -> Result<T, String>
+where
+    F: FnOnce(ZulipClient) -> Fut,
+    Fut: Future<Output = Result<T, String>>,
+{
+    let client = get_client(state, org_id)?;
+    match operation(client).await {
+        Ok(value) => Ok(value),
+        Err(error) => {
+            handle_org_command_error(app, state, org_id, &error);
+            Err(error)
+        }
+    }
 }
 
 fn get_current_user_id(state: &AppState, org_id: &str) -> Result<Option<u64>, String> {

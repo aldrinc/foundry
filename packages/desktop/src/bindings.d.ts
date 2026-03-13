@@ -288,15 +288,15 @@ export declare const commands: {
     /**
      * Poll supervisor session state and events
      */
-    getSupervisorSession(orgId: string, topicScopeId: string, afterId: number, limit: number): Promise<Result<SupervisorSessionResponse, string>>;
+    getSupervisorSession(orgId: string, topicScopeId: string, sessionId: string | null, afterId: number, limit: number): Promise<Result<SupervisorSessionResponse, string>>;
     /**
      * Send a message to the supervisor
      */
-    postSupervisorMessage(orgId: string, topicScopeId: string, message: string, clientMsgId: string, streamId: number | null, streamName: string | null, topic: string | null): Promise<Result<SupervisorMessageResponse, string>>;
+    postSupervisorMessage(orgId: string, request: SupervisorMessageCommand): Promise<Result<SupervisorMessageResponse, string>>;
     /**
      * Get task list for the supervisor dashboard
      */
-    getSupervisorSidebar(orgId: string, topicScopeId: string): Promise<Result<SupervisorSidebarResponse, string>>;
+    getSupervisorSidebar(orgId: string, topicScopeId: string, sessionId: string | null): Promise<Result<SupervisorSidebarResponse, string>>;
     /**
      * Control a task (pause/resume/cancel)
      */
@@ -330,7 +330,7 @@ export declare const commands: {
      * This connects to the Zulip server's SSE proxy endpoint and emits
      * Tauri events as new supervisor events arrive in real time.
      */
-    startSupervisorStream(orgId: string, topicScopeId: string, afterId: number): Promise<Result<null, string>>;
+    startSupervisorStream(orgId: string, topicScopeId: string, sessionId: string | null, afterId: number): Promise<Result<null, string>>;
     /**
      * Stop the supervisor SSE event stream for an org.
      */
@@ -852,7 +852,7 @@ export type SupervisorEvent = {
     ts: string;
     /**
      * Event kind: "message", "thinking", "tool_call", "tool_result",
-     * "dispatch_result", "plan_draft", "assistant"
+     * "execution_result", "plan_draft", "assistant"
      */
     kind: string;
     /**
@@ -869,11 +869,27 @@ export type SupervisorEvent = {
     client_msg_id?: string | null;
 };
 /**
+ * Typed request for posting a supervisor message through the desktop bridge.
+ */
+export type SupervisorMessageCommand = {
+    topicScopeId: string;
+    message: string;
+    sessionId: string | null;
+    sessionCreateMode: string | null;
+    sessionTitle: string | null;
+    clientMsgId: string;
+    streamId: number | null;
+    streamName: string | null;
+    topic: string | null;
+};
+/**
  * Response from POST /json/foundry/topics/{scope}/supervisor/message
  */
 export type SupervisorMessageResponse = {
     session?: SupervisorSession | null;
+    sessions?: SupervisorSession[];
     events?: SupervisorEvent[];
+    task_summary?: SupervisorTaskSummary | null;
 };
 /**
  * A supervisor session tied to a topic scope
@@ -882,6 +898,7 @@ export type SupervisorSession = {
     session_id: string;
     topic_scope_id: string;
     status: string;
+    created_at?: string | null;
     updated_at?: string | null;
     metadata?: SupervisorSessionMetadata;
 };
@@ -891,13 +908,27 @@ export type SupervisorSession = {
 export type SupervisorSessionMetadata = {
     engine?: string | null;
     moltis_model?: string | null;
+    title?: string | null;
+    created_by_user_id?: string | null;
+    created_by_name?: string | null;
+    created_via?: string | null;
 };
 /**
  * Response from GET /json/foundry/topics/{scope}/supervisor/session
  */
 export type SupervisorSessionResponse = {
     session?: SupervisorSession | null;
+    sessions?: SupervisorSession[];
     events?: SupervisorEvent[];
+    task_summary?: SupervisorTaskSummary | null;
+};
+/**
+ * Condensed task dashboard state returned with supervisor session snapshots
+ */
+export type SupervisorTaskSummary = {
+    active_plan_revision_id?: string | null;
+    filtered_plan_revision_id?: string | null;
+    tasks?: SupervisorTask[];
 };
 /**
  * Response from GET /json/foundry/topics/{scope}/sidebar

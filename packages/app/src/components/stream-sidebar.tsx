@@ -3,7 +3,6 @@ import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
 import { commands } from "@foundry/desktop/bindings"
-import type { Topic } from "@foundry/desktop/bindings"
 import { DirectMessageList } from "./dm-list"
 import { SearchBar } from "./search-bar"
 import { PersonalMenu } from "./personal-menu"
@@ -127,7 +126,7 @@ export function StreamSidebar(props: {
 
       {/* Channels header with search and add icons */}
       <div class="px-3 py-2 flex items-center justify-between">
-        <span class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Channels</span>
+        <span class="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Channels</span>
         <div class="flex items-center gap-0.5">
           <button
             class="p-0.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
@@ -205,7 +204,7 @@ export function StreamSidebar(props: {
         {/* Muted */}
         <Show when={mutedStreams().length > 0}>
           <div class="px-3 py-1 mt-2">
-            <span class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+            <span class="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
               Muted
             </span>
           </div>
@@ -242,12 +241,12 @@ function StreamItem(props: {
   const nav = useNavigation()
   const sync = useZulipSync()
   const [expanded, setExpanded] = createSignal(false)
-  const [topics, setTopics] = createSignal<Topic[]>([])
   const [loadingTopics, setLoadingTopics] = createSignal(false)
   const [topicError, setTopicError] = createSignal("")
-  const [topicsLoaded, setTopicsLoaded] = createSignal(false)
   const [contextMenu, setContextMenu] = createSignal<{ x: number; y: number; type: "stream" | "topic"; topicName?: string } | null>(null)
   const [moveDialog, setMoveDialog] = createSignal<{ topicName: string } | null>(null)
+  const topics = () => sync.store.topicsByStream[props.stream.stream_id] || []
+  const topicsLoaded = () => sync.isStreamTopicsHydrated(props.stream.stream_id)
   const topicSections = createMemo(() => buildTopicSidebarSections(
     props.stream.stream_id,
     topics(),
@@ -255,21 +254,14 @@ function StreamItem(props: {
   ))
 
   /** Fetch topics if not already loaded */
-  const ensureTopicsLoaded = async () => {
-    if (topics().length > 0 || loadingTopics()) return
+  const ensureTopicsLoaded = async (force = false) => {
+    if (!force && (loadingTopics() || topicsLoaded())) return
+
     setLoadingTopics(true)
     setTopicError("")
     try {
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Request timed out")), 15000)
-      )
-      const result = await Promise.race([
-        commands.getStreamTopics(org.orgId, props.stream.stream_id),
-        timeoutPromise,
-      ])
-      if (result.status === "ok") {
-        setTopics(result.data)
-      } else {
+      const result = await sync.ensureStreamTopics(props.stream.stream_id, { force })
+      if (result.status === "error") {
         console.error(`[Topics] Failed to load topics for stream ${props.stream.name}:`, result.error)
         setTopicError(result.error || "Failed to load")
       }
@@ -278,7 +270,6 @@ function StreamItem(props: {
       setTopicError(e?.message || "Failed to load topics")
     } finally {
       setLoadingTopics(false)
-      setTopicsLoaded(true)
     }
   }
 
@@ -407,11 +398,12 @@ function StreamItem(props: {
         resolved: !isResolved,
       })
 
-      setTopics((currentTopics) => currentTopics.map((topic) => (
-        topic.name === topicName
-          ? { ...topic, name: nextTopicName }
-          : topic
-      )))
+      if (nav.activeNarrow() === `stream:${props.stream.stream_id}/topic:${topicName}`) {
+        nav.setActiveNarrow(`stream:${props.stream.stream_id}/topic:${nextTopicName}`)
+      }
+
+      sync.invalidateStreamTopics(props.stream.stream_id)
+      void ensureTopicsLoaded(true)
     } catch (e) {
       console.error("Failed to resolve/unresolve topic:", e)
     }
@@ -489,19 +481,18 @@ function StreamItem(props: {
       <Show when={expanded()}>
         <div class="ml-6 border-l border-[var(--border-default)]">
           <Show when={loadingTopics()}>
-            <div class="text-[10px] text-[var(--text-tertiary)] px-3 py-1">Loading topics...</div>
+            <div class="text-[11px] text-[var(--text-tertiary)] px-3 py-1">Loading topics...</div>
           </Show>
 
           <Show when={topicError() && !loadingTopics()}>
             <div class="px-3 py-1 flex items-center gap-1">
-              <span class="text-[10px] text-[var(--status-error)]">Failed to load</span>
+              <span class="text-[11px] text-[var(--status-error)]">Failed to load</span>
               <button
-                class="text-[10px] text-[var(--interactive-primary)] hover:underline"
+                class="text-[11px] text-[var(--interactive-primary)] hover:underline"
                 onClick={(e) => {
                   e.stopPropagation()
                   setTopicError("")
-                  setTopics([])
-                  toggleExpand(e as any)
+                  void ensureTopicsLoaded(true)
                 }}
               >
                 Retry
@@ -511,7 +502,7 @@ function StreamItem(props: {
 
           {/* Empty state when no topics exist */}
           <Show when={topicsLoaded() && topicSections().active.length === 0 && topicSections().completed.length === 0 && !loadingTopics() && !topicError()}>
-            <div class="text-[10px] text-[var(--text-tertiary)] px-3 py-1">No topics yet</div>
+            <div class="text-[11px] text-[var(--text-tertiary)] px-3 py-1">No topics yet</div>
           </Show>
 
           <For each={topicSections().active}>
@@ -548,7 +539,7 @@ function StreamItem(props: {
 
           <Show when={topicSections().completed.length > 0}>
             <div class="px-3 pt-2 pb-1">
-              <span class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
+              <span class="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">
                 Completed
               </span>
             </div>
@@ -839,7 +830,7 @@ function MoveTopicDialog(props: {
         <h3 class="text-sm font-semibold text-[var(--text-primary)]">Move topic</h3>
 
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">New topic name</label>
+          <label class="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">New topic name</label>
           <input
             type="text"
             class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
@@ -851,7 +842,7 @@ function MoveTopicDialog(props: {
         </div>
 
         <div>
-          <label class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Destination channel</label>
+          <label class="text-[11px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider block mb-1">Destination channel</label>
           <select
             class="w-full text-xs bg-[var(--background-base)] border border-[var(--border-default)] rounded-[var(--radius-sm)] px-2 py-1.5 text-[var(--text-primary)]"
             value={newStreamId()}

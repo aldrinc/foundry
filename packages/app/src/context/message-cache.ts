@@ -57,6 +57,10 @@ export function cacheKeysForMessage(message: CacheableMessage): string[] {
     keys.add(primary)
   }
 
+  if (message.stream_id) {
+    keys.add(`stream:${message.stream_id}`)
+  }
+
   keys.add(ALL_MESSAGES_NARROW)
 
   if (hasStarredFlag(message)) {

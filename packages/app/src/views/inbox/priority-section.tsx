@@ -115,7 +115,12 @@ export function PrioritySection(props: {
           </div>
         </button>
         <button
-          class="px-2.5 py-1.5 rounded-[var(--radius-sm)] border border-[var(--border-default)] text-xs text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors shrink-0 flex items-center gap-1.5"
+          class={`px-2.5 py-1.5 rounded-[var(--radius-sm)] border text-xs transition-colors shrink-0 flex items-center gap-1.5 ${
+            props.configured
+              ? "border-[var(--border-default)] text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+              : "border-[var(--border-default)]/60 text-[var(--text-tertiary)] bg-[var(--background-elevated)] cursor-not-allowed"
+          }`}
+          disabled={!props.configured}
           onClick={() => props.onReview()}
         >
           <Show when={props.assistantLoading}>

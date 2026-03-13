@@ -1,7 +1,5 @@
-import { createSignal, For, Show, onMount } from "solid-js"
-import { commands } from "@foundry/desktop/bindings"
-import type { Topic } from "@foundry/desktop/bindings"
-import { useOrg } from "../context/org"
+import { createSignal, For, Show } from "solid-js"
+import { useZulipSync } from "../context/zulip-sync"
 
 export function TopicPicker(props: {
   streamId: number
@@ -9,22 +7,13 @@ export function TopicPicker(props: {
   onChange: (topic: string) => void
   onSubmit?: () => void
 }) {
-  const org = useOrg()
-  const [topics, setTopics] = createSignal<Topic[]>([])
+  const sync = useZulipSync()
   const [focused, setFocused] = createSignal(false)
-  const [loaded, setLoaded] = createSignal(false)
+  const topics = () => sync.store.topicsByStream[props.streamId] || []
+  const loaded = () => sync.isStreamTopicsHydrated(props.streamId)
 
   const loadTopics = async () => {
-    if (loaded()) return
-    try {
-      const result = await commands.getStreamTopics(org.orgId, props.streamId)
-      if (result.status === "ok") {
-        setTopics(result.data)
-      }
-    } catch {
-      // Non-critical
-    }
-    setLoaded(true)
+    await sync.ensureStreamTopics(props.streamId)
   }
 
   const filteredTopics = () => {

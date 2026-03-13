@@ -981,9 +981,9 @@ export const commands = {
     /**
      * Poll supervisor session state and events
      */
-    async getSupervisorSession(orgId, topicScopeId, afterId, limit) {
+    async getSupervisorSession(orgId, topicScopeId, sessionId, afterId, limit) {
         try {
-            return { status: "ok", data: await TAURI_INVOKE("get_supervisor_session", { orgId, topicScopeId, afterId, limit }) };
+            return { status: "ok", data: await TAURI_INVOKE("get_supervisor_session", { orgId, topicScopeId, sessionId, afterId, limit }) };
         }
         catch (e) {
             if (e instanceof Error)
@@ -995,9 +995,22 @@ export const commands = {
     /**
      * Send a message to the supervisor
      */
-    async postSupervisorMessage(orgId, topicScopeId, message, clientMsgId, streamId, streamName, topic) {
+    async postSupervisorMessage(orgId, requestOrTopicScopeId, message, sessionId, sessionCreateMode, sessionTitle, clientMsgId, streamId, streamName, topic) {
         try {
-            return { status: "ok", data: await TAURI_INVOKE("post_supervisor_message", { orgId, topicScopeId, message, clientMsgId, streamId, streamName, topic }) };
+            const request = (requestOrTopicScopeId && typeof requestOrTopicScopeId === "object")
+                ? requestOrTopicScopeId
+                : {
+                    topicScopeId: requestOrTopicScopeId,
+                    message,
+                    sessionId,
+                    sessionCreateMode,
+                    sessionTitle,
+                    clientMsgId,
+                    streamId,
+                    streamName,
+                    topic,
+                };
+            return { status: "ok", data: await TAURI_INVOKE("post_supervisor_message", { orgId, request }) };
         }
         catch (e) {
             if (e instanceof Error)
@@ -1009,9 +1022,9 @@ export const commands = {
     /**
      * Get task list for the supervisor dashboard
      */
-    async getSupervisorSidebar(orgId, topicScopeId) {
+    async getSupervisorSidebar(orgId, topicScopeId, sessionId) {
         try {
-            return { status: "ok", data: await TAURI_INVOKE("get_supervisor_sidebar", { orgId, topicScopeId }) };
+            return { status: "ok", data: await TAURI_INVOKE("get_supervisor_sidebar", { orgId, topicScopeId, sessionId }) };
         }
         catch (e) {
             if (e instanceof Error)
@@ -1123,9 +1136,9 @@ export const commands = {
      * This connects to the Zulip server's SSE proxy endpoint and emits
      * Tauri events as new supervisor events arrive in real time.
      */
-    async startSupervisorStream(orgId, topicScopeId, afterId) {
+    async startSupervisorStream(orgId, topicScopeId, sessionId, afterId) {
         try {
-            return { status: "ok", data: await TAURI_INVOKE("start_supervisor_stream", { orgId, topicScopeId, afterId }) };
+            return { status: "ok", data: await TAURI_INVOKE("start_supervisor_stream", { orgId, topicScopeId, sessionId, afterId }) };
         }
         catch (e) {
             if (e instanceof Error)

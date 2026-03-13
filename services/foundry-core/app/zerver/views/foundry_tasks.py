@@ -1,22 +1,49 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import re
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
+from django.core.files.uploadedfile import UploadedFile
 from django.http import HttpRequest, HttpResponse, StreamingHttpResponse
 from django.utils.translation import gettext as _
 from pydantic import Json, NonNegativeInt
 
 from zerver.lib.exceptions import ErrorCode, JsonableError
+from zerver.lib.upload import check_upload_within_quota, upload_message_attachment_from_request
 from zerver.lib.response import json_success
 from zerver.lib.streams import access_stream_by_id
 from zerver.lib.topic import messages_for_topic
 from zerver.lib.typed_endpoint import PathOnly, typed_endpoint, typed_endpoint_without_parameters
-from zerver.models import UserProfile
+from zerver.models import Realm, UserProfile
+from zerver.views.upload import generate_unauthed_file_access_url
+
+
+_USER_UPLOAD_LINK_RE = re.compile(r"(?P<url>(?:https?://[^\s)]+)?/user_uploads/(?!temporary/)[^\s)]+)")
+
+
+def _host_prefers_https(host: str) -> bool:
+    normalized_host = host.strip().split(":", 1)[0].lower()
+    if not normalized_host or normalized_host in {"localhost", "testserver"}:
+        return False
+    if normalized_host.endswith(".testserver"):
+        return False
+    if normalized_host in {"127.0.0.1", "::1"}:
+        return False
+    if re.match(r"^127\.\d+\.\d+\.\d+$", normalized_host):
+        return False
+    if re.match(r"^10\.\d+\.\d+\.\d+$", normalized_host):
+        return False
+    if re.match(r"^192\.168\.\d+\.\d+$", normalized_host):
+        return False
+    if re.match(r"^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$", normalized_host):
+        return False
+    return True
 
 
 def _first_env(*names: str, default: str = "") -> str:
@@ -57,7 +84,7 @@ class FoundryOrchestratorConfigurationError(JsonableError):
         super().__init__(
             _(
                 "Foundry task orchestration is not configured on this server."
-                " Set FOUNDRY_CODER_ORCHESTRATOR_URL."
+                " Set FOUNDRY_SERVER_URL or FOUNDRY_CODER_ORCHESTRATOR_URL."
             )
         )
 
@@ -69,8 +96,37 @@ class FoundryOrchestratorRequestError(JsonableError):
         super().__init__(message)
 
 
+class FoundryServerConfigurationError(JsonableError):
+    code = ErrorCode.BAD_REQUEST
+
+    def __init__(self) -> None:
+        super().__init__(
+            _(
+                "Foundry inbox assistant is not configured on this server."
+                " Set FOUNDRY_SERVER_URL."
+            )
+        )
+
+
+class FoundryServerRequestError(JsonableError):
+    code = ErrorCode.BAD_REQUEST
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
 def _orchestrator_url() -> str:
-    return _first_env("FOUNDRY_CODER_ORCHESTRATOR_URL").rstrip("/")
+    explicit = _first_env(
+        "FOUNDRY_CODER_ORCHESTRATOR_URL",
+        "MERIDIAN_CODER_ORCHESTRATOR_URL",
+        "FOUNDRY_URL",
+    ).rstrip("/")
+    if explicit:
+        return explicit
+    foundry_server_url = _foundry_server_url()
+    if foundry_server_url:
+        return f"{foundry_server_url}/api/v1/meridian"
+    return ""
 
 
 def _orchestrator_configured() -> bool:
@@ -78,7 +134,7 @@ def _orchestrator_configured() -> bool:
 
 
 def _orchestrator_token() -> str:
-    return _first_env("FOUNDRY_CODER_ORCHESTRATOR_TOKEN")
+    return _first_env("FOUNDRY_CODER_ORCHESTRATOR_TOKEN", "FOUNDRY_TOKEN")
 
 
 def _orchestrator_timeout_seconds() -> float:
@@ -100,7 +156,50 @@ def _orchestrator_supervisor_timeout_seconds() -> float:
 
 
 def _orchestrator_verify_tls() -> bool:
-    return _env_bool("FOUNDRY_CODER_ORCHESTRATOR_VERIFY_TLS", default=True)
+    return _env_bool("FOUNDRY_CODER_ORCHESTRATOR_VERIFY_TLS", "FOUNDRY_VERIFY_TLS", default=True)
+
+
+def _provider_oauth_redirect_uri(
+    request: HttpRequest,
+    redirect_uri: str | None,
+) -> str | None:
+    normalized_redirect_uri = (redirect_uri or "").strip()
+    if normalized_redirect_uri:
+        return normalized_redirect_uri
+    host = request.get_host().strip()
+    if host:
+        scheme = "https" if request.is_secure() or _host_prefers_https(host) else "http"
+        return f"{scheme}://{host}/json/foundry/providers/oauth/callback"
+    try:
+        return request.build_absolute_uri("/json/foundry/providers/oauth/callback").strip() or None
+    except Exception:
+        return None
+
+
+def _foundry_server_url() -> str:
+    return _first_env("FOUNDRY_SERVER_URL").rstrip("/")
+
+
+def _foundry_server_timeout_seconds() -> float:
+    raw = _first_env("FOUNDRY_SERVER_TIMEOUT_SECONDS", default="90")
+    try:
+        value = float(raw)
+    except Exception:
+        value = 90.0
+    return max(2.0, value)
+
+
+def _foundry_server_verify_tls() -> bool:
+    return _env_bool("FOUNDRY_SERVER_VERIFY_TLS", default=True)
+
+
+def _orchestrator_inline_upload_max_bytes() -> int:
+    raw = _first_env("FOUNDRY_CODER_ORCHESTRATOR_INLINE_UPLOAD_MAX_BYTES", default=str(2 * 1024 * 1024))
+    try:
+        value = int(raw)
+    except Exception:
+        value = 2 * 1024 * 1024
+    return max(0, value)
 
 
 def _repo_url_map() -> dict[str, str]:
@@ -151,6 +250,38 @@ def _empty_sidebar_payload(topic_scope_id: str) -> dict[str, Any]:
         "task_count": 0,
         "counts": {},
         "tasks": [],
+    }
+
+
+def _empty_task_summary_payload() -> dict[str, Any]:
+    return {
+        "active_plan_revision_id": None,
+        "filtered_plan_revision_id": None,
+        "task_count": 0,
+        "counts": {},
+        "all_task_count": 0,
+        "all_counts": {},
+        "tasks": [],
+    }
+
+
+def _empty_runtime_payload(topic_scope_id: str) -> dict[str, Any]:
+    return {
+        "topic_scope_id": topic_scope_id,
+        "workspace_path": "",
+        "uploads_path": "",
+        "outputs_path": "",
+        "checkpoints_path": "",
+        "memory_summary": "",
+        "memory_highlights": [],
+        "uploads": [],
+        "new_uploads": [],
+        "upload_count": 0,
+        "checkpoint_count": 0,
+        "last_request_checkpoint": "",
+        "last_response_checkpoint": "",
+        "sessions": [],
+        "session_count": 0,
     }
 
 
@@ -231,6 +362,131 @@ def _parse_topic_scope_id(topic_scope_id: str) -> tuple[int, str] | None:
         return None
     topic_name = topic.strip()
     return stream_id, topic_name
+
+
+def _raise_file_too_large(user_profile: UserProfile, max_size_mib: int) -> None:
+    if user_profile.realm.plan_type != Realm.PLAN_TYPE_SELF_HOSTED:
+        raise JsonableError(
+            _(
+                "File is larger than the maximum upload size ({max_size} MiB) allowed by your organization's plan."
+            ).format(max_size=max_size_mib)
+        )
+    raise JsonableError(
+        _("File is larger than this server's configured maximum upload size ({max_size} MiB).").format(
+            max_size=max_size_mib
+        )
+    )
+
+
+def _temporary_upload_absolute_url(user_profile: UserProfile, upload_url: str) -> str:
+    raw = str(upload_url or "").strip()
+    if not raw:
+        return ""
+
+    parsed = urlparse(raw)
+    path = parsed.path if parsed.scheme or parsed.netloc else raw
+    path = str(path or "").strip()
+    if not path.startswith("/user_uploads/"):
+        return raw
+    if path.startswith("/user_uploads/temporary/"):
+        return raw
+
+    realm_host = urlparse(user_profile.realm.url).netloc.strip().lower()
+    if parsed.netloc and parsed.netloc.strip().lower() != realm_host:
+        return raw
+
+    if path.startswith("/user_uploads/download/"):
+        path_id = path.removeprefix("/user_uploads/download/")
+    else:
+        path_id = path.removeprefix("/user_uploads/")
+    path_id = path_id.lstrip("/")
+    if not path_id or path_id.startswith("temporary/"):
+        return raw
+
+    temporary_path = generate_unauthed_file_access_url(path_id)
+    return urljoin(f"{user_profile.realm.url}/", temporary_path.lstrip("/"))
+
+
+def _rewrite_supervisor_upload_links(message: str, user_profile: UserProfile) -> str:
+    raw = str(message or "").strip()
+    if not raw or "/user_uploads/" not in raw:
+        return raw
+
+    def replace(match: re.Match[str]) -> str:
+        url = match.group("url")
+        rewritten = _temporary_upload_absolute_url(user_profile, url)
+        return rewritten or url
+
+    return _USER_UPLOAD_LINK_RE.sub(replace, raw)
+
+
+def _supervisor_uploaded_files(
+    request: HttpRequest, user_profile: UserProfile
+) -> list[dict[str, Any]]:
+    uploaded_files: list[UploadedFile] = []
+    for _field_name, file_list in request.FILES.lists():
+        for user_file in file_list:
+            if isinstance(user_file, UploadedFile):
+                uploaded_files.append(user_file)
+
+    if not uploaded_files:
+        return []
+
+    max_size_mib = user_profile.realm.get_max_file_upload_size_mebibytes()
+    inline_upload_max_bytes = _orchestrator_inline_upload_max_bytes()
+    uploaded_links: list[dict[str, Any]] = []
+    for user_file in uploaded_files:
+        file_size = user_file.size
+        assert file_size is not None
+        if file_size > max_size_mib * 1024 * 1024:
+            _raise_file_too_large(user_profile, max_size_mib)
+        check_upload_within_quota(user_profile.realm, file_size)
+        inline_content_base64 = ""
+        if file_size <= inline_upload_max_bytes:
+            try:
+                inline_bytes = user_file.read()
+            except Exception:
+                inline_bytes = b""
+            if inline_bytes:
+                inline_content_base64 = base64.b64encode(inline_bytes).decode("ascii")
+            try:
+                user_file.seek(0)
+            except Exception:
+                pass
+        relative_url, filename = upload_message_attachment_from_request(user_file, user_profile)
+        absolute_url = _temporary_upload_absolute_url(user_profile, relative_url)
+        payload_item: dict[str, Any] = {
+            "filename": filename,
+            "url": absolute_url,
+            "size": int(file_size),
+            "media_type": str(getattr(user_file, "content_type", "") or "").strip() or None,
+        }
+        if inline_content_base64:
+            payload_item["content_base64"] = inline_content_base64
+        uploaded_links.append(payload_item)
+
+    return uploaded_links
+
+
+def _append_uploaded_files_to_message(
+    message: str, uploaded_files: list[dict[str, str]]
+) -> str:
+    normalized_message = message.strip()
+    if not uploaded_files:
+        return normalized_message
+
+    attachment_lines = [
+        f'- [{item["filename"]}]({item["url"]})'
+        for item in uploaded_files
+        if item.get("filename") and item.get("url")
+    ]
+    if not attachment_lines:
+        return normalized_message
+
+    attachment_block = "Attached files:\n" + "\n".join(attachment_lines)
+    if not normalized_message:
+        return attachment_block
+    return f"{normalized_message}\n\n{attachment_block}"
 
 
 def _fetch_topic_transcript(
@@ -408,6 +664,78 @@ def _orchestrator_stream_response(
     return streaming
 
 
+def _foundry_server_request(
+    method: str,
+    path: str,
+    *,
+    payload: dict[str, Any] | None = None,
+    timeout: float | tuple[float, float | None] | None = None,
+) -> dict[str, Any]:
+    base_url = _foundry_server_url()
+    if not base_url:
+        raise FoundryServerConfigurationError()
+
+    url = f"{base_url}{path}"
+    headers: dict[str, str] = {"Content-Type": "application/json"}
+
+    try:
+        with requests.Session() as session:
+            session.trust_env = False
+            response = session.request(
+                method=method.upper(),
+                url=url,
+                json=payload,
+                headers=headers,
+                timeout=timeout if timeout is not None else _foundry_server_timeout_seconds(),
+                verify=_foundry_server_verify_tls(),
+            )
+    except requests.RequestException as exc:
+        raise FoundryServerRequestError(
+            _("Foundry inbox assistant request failed: {error}").format(error=str(exc))
+        ) from exc
+
+    response_body_snippet = (response.text or "")[:700]
+    if response.status_code >= 400:
+        try:
+            parsed = response.json()
+        except Exception:
+            parsed = {}
+        detail = ""
+        if isinstance(parsed, dict):
+            detail = str(parsed.get("detail") or parsed.get("msg") or "").strip()
+        if not detail:
+            detail = response_body_snippet
+        raise FoundryServerRequestError(
+            _("Foundry inbox assistant returned {status}: {detail}").format(
+                status=response.status_code,
+                detail=detail or _("empty error response"),
+            )
+        )
+
+    try:
+        data = response.json()
+    except Exception as exc:
+        raise FoundryServerRequestError(
+            _("Foundry inbox assistant returned invalid JSON: {error}").format(error=str(exc))
+        ) from exc
+
+    if not isinstance(data, dict):
+        raise FoundryServerRequestError(
+            _("Foundry inbox assistant returned an unexpected response shape.")
+        )
+    return data
+
+
+def _foundry_inbox_assistant_payload(user_profile: UserProfile) -> dict[str, Any]:
+    actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
+    realm_url = user_profile.realm.url.rstrip("/")
+    return {
+        "org_key": realm_url,
+        "realm_url": realm_url,
+        "user_email": actor_email,
+    }
+
+
 @typed_endpoint
 def foundry_create_task(
     request: HttpRequest,
@@ -500,6 +828,71 @@ def foundry_create_task(
     )
 
 
+@typed_endpoint_without_parameters
+def foundry_inbox_assistant_session(
+    request: HttpRequest,
+    user_profile: UserProfile,
+) -> HttpResponse:
+    response = _foundry_server_request(
+        "POST",
+        "/api/v1/desktop/inbox-secretary/session",
+        payload=_foundry_inbox_assistant_payload(user_profile),
+    )
+    return json_success(request, data=response)
+
+
+@typed_endpoint
+def foundry_inbox_assistant_chat(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    api_key: str,
+    message: str,
+    current_user_id: Json[NonNegativeInt] | None = None,
+) -> HttpResponse:
+    payload = _foundry_inbox_assistant_payload(user_profile)
+    payload.update(
+        {
+            "api_key": api_key,
+            "message": message,
+            "current_user_id": int(current_user_id) if current_user_id is not None else None,
+        }
+    )
+    response = _foundry_server_request(
+        "POST",
+        "/api/v1/desktop/inbox-secretary/chat",
+        payload=payload,
+    )
+    return json_success(request, data=response)
+
+
+@typed_endpoint
+def foundry_inbox_assistant_feedback(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    item_key: str,
+    conversation_key: str | None = None,
+    action: str,
+    note: str | None = None,
+) -> HttpResponse:
+    payload = _foundry_inbox_assistant_payload(user_profile)
+    payload.update(
+        {
+            "item_key": item_key,
+            "conversation_key": (conversation_key or "").strip(),
+            "action": action.strip().lower(),
+            "note": (note or "").strip(),
+        }
+    )
+    response = _foundry_server_request(
+        "POST",
+        "/api/v1/desktop/inbox-secretary/feedback",
+        payload=payload,
+    )
+    return json_success(request, data=response)
+
+
 @typed_endpoint
 def foundry_topic_sidebar(
     request: HttpRequest,
@@ -507,16 +900,19 @@ def foundry_topic_sidebar(
     *,
     topic_scope_id: PathOnly[str],
     limit: Json[NonNegativeInt] = 50,
+    session_id: str | None = None,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
     if not _orchestrator_configured():
+        empty_sidebar = _empty_sidebar_payload(scoped)
         return json_success(
             request,
             data={
                 "configured": False,
+                **empty_sidebar,
                 "topic_scope_id": scoped,
-                "sidebar": _empty_sidebar_payload(scoped),
+                "sidebar": empty_sidebar,
                 "raw": {},
             },
         )
@@ -524,11 +920,20 @@ def foundry_topic_sidebar(
     response = _orchestrator_request(
         "GET",
         f"/api/topics/{encoded_scope}/sidebar",
-        params={"limit": int(limit)},
+        params={
+            "limit": int(limit),
+            **({"session_id": str(session_id).strip()} if str(session_id or "").strip() else {}),
+        },
     )
+    sidebar_payload = response if isinstance(response, dict) else {}
     return json_success(
         request,
-        data={"topic_scope_id": scoped, "sidebar": response.get("sidebar"), "raw": response},
+        data={
+            **sidebar_payload,
+            "topic_scope_id": scoped,
+            "sidebar": sidebar_payload,
+            "raw": response,
+        },
     )
 
 
@@ -563,6 +968,7 @@ def foundry_topic_supervisor_session(
     topic_scope_id: PathOnly[str],
     after_id: Json[NonNegativeInt] = 0,
     limit: Json[NonNegativeInt] = 200,
+    session_id: str | None = None,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
@@ -573,7 +979,9 @@ def foundry_topic_supervisor_session(
                 "configured": False,
                 "topic_scope_id": scoped,
                 "session": None,
+                "sessions": [],
                 "events": [],
+                "task_summary": _empty_task_summary_payload(),
                 "next_after_id": int(after_id),
                 "raw": {},
             },
@@ -582,15 +990,63 @@ def foundry_topic_supervisor_session(
     response = _orchestrator_request(
         "GET",
         f"/api/topics/{encoded_scope}/supervisor/session",
-        params={"after_id": int(after_id), "limit": int(limit)},
+        params={
+            "after_id": int(after_id),
+            "limit": int(limit),
+            **({"session_id": str(session_id).strip()} if str(session_id or "").strip() else {}),
+        },
     )
     return json_success(
         request,
         data={
             "topic_scope_id": scoped,
             "session": response.get("session"),
+            "sessions": response.get("sessions") or [],
             "events": response.get("events"),
+            "task_summary": response.get("task_summary") or _empty_task_summary_payload(),
             "next_after_id": response.get("next_after_id"),
+            "raw": response,
+        },
+    )
+
+
+@typed_endpoint
+def foundry_topic_supervisor_runtime(
+    request: HttpRequest,
+    user_profile: UserProfile,
+    *,
+    topic_scope_id: PathOnly[str],
+    session_id: str | None = None,
+) -> HttpResponse:
+    del user_profile  # authenticated access check only
+    scoped = topic_scope_id.strip().lower()
+    if not _orchestrator_configured():
+        return json_success(
+            request,
+            data={
+                "configured": False,
+                "topic_scope_id": scoped,
+                "session": None,
+                "sessions": [],
+                "runtime": _empty_runtime_payload(scoped),
+                "raw": {},
+            },
+        )
+    encoded_scope = quote(scoped, safe="")
+    response = _orchestrator_request(
+        "GET",
+        f"/api/topics/{encoded_scope}/supervisor/runtime",
+        params={
+            **({"session_id": str(session_id).strip()} if str(session_id or "").strip() else {}),
+        },
+    )
+    return json_success(
+        request,
+        data={
+            "topic_scope_id": scoped,
+            "session": response.get("session"),
+            "sessions": response.get("sessions") or [],
+            "runtime": response.get("runtime") or _empty_runtime_payload(scoped),
             "raw": response,
         },
     )
@@ -603,6 +1059,7 @@ def foundry_topic_supervisor_session_stream(
     *,
     topic_scope_id: PathOnly[str],
     after_id: Json[NonNegativeInt] = 0,
+    session_id: str | None = None,
     poll_interval_seconds: float | None = None,
     heartbeat_seconds: float | None = None,
 ) -> HttpResponse:
@@ -610,6 +1067,8 @@ def foundry_topic_supervisor_session_stream(
     scoped = topic_scope_id.strip().lower()
     encoded_scope = quote(scoped, safe="")
     params: dict[str, Any] = {"after_id": int(after_id)}
+    if session_id is not None and str(session_id).strip():
+        params["session_id"] = str(session_id).strip()
     if poll_interval_seconds is not None:
         params["poll_interval_seconds"] = float(poll_interval_seconds)
     if heartbeat_seconds is not None:
@@ -626,6 +1085,7 @@ def foundry_topic_supervisor_session_reset(
     user_profile: UserProfile,
     *,
     topic_scope_id: PathOnly[str],
+    session_id: str | None = None,
     clear_events: str | None = None,
 ) -> HttpResponse:
     scoped = topic_scope_id.strip().lower()
@@ -635,6 +1095,7 @@ def foundry_topic_supervisor_session_reset(
         "POST",
         f"/api/topics/{encoded_scope}/supervisor/session/reset",
         payload={
+            "session_id": (session_id or "").strip() or None,
             "clear_events": _boolish(clear_events, default=True),
             "actor_user_id": actor_email,
             "actor_email": actor_email,
@@ -645,6 +1106,7 @@ def foundry_topic_supervisor_session_reset(
         data={
             "topic_scope_id": scoped,
             "session": response.get("session"),
+            "sessions": response.get("sessions") or [],
             "events": response.get("events"),
             "next_after_id": response.get("next_after_id"),
             "raw": response,
@@ -659,6 +1121,9 @@ def foundry_topic_supervisor_message(
     *,
     topic_scope_id: PathOnly[str],
     message: str,
+    session_id: str | None = None,
+    session_create_mode: str | None = None,
+    session_title: str | None = None,
     client_msg_id: str | None = None,
     repo_id: str | None = None,
     repo_url: str | None = None,
@@ -668,7 +1133,9 @@ def foundry_topic_supervisor_message(
 ) -> HttpResponse:
     scoped = topic_scope_id.strip().lower()
     encoded_scope = quote(scoped, safe="")
-    normalized_message = message.strip()
+    uploaded_files = _supervisor_uploaded_files(request, user_profile)
+    normalized_message = _append_uploaded_files_to_message(message, uploaded_files)
+    normalized_message = _rewrite_supervisor_upload_links(normalized_message, user_profile)
     if not normalized_message:
         raise FoundryOrchestratorRequestError(_("message is required"))
 
@@ -684,6 +1151,9 @@ def foundry_topic_supervisor_message(
 
     payload: dict[str, Any] = {
         "message": normalized_message,
+        "session_id": (session_id or "").strip() or None,
+        "session_create_mode": (session_create_mode or "").strip() or None,
+        "session_title": (session_title or "").strip() or None,
         "client_msg_id": (client_msg_id or "").strip() or None,
         "actor_user_id": actor_email,
         "actor_email": actor_email,
@@ -694,6 +1164,7 @@ def foundry_topic_supervisor_message(
         "stream_name": (stream_name or "").strip() if stream_name is not None else None,
         "topic": (topic or "").strip() if topic is not None else None,
         "topic_transcript": [],
+        "uploaded_files": uploaded_files,
     }
 
     try:
@@ -735,8 +1206,11 @@ def foundry_topic_supervisor_message(
         data={
             "topic_scope_id": scoped,
             "session": response.get("session"),
+            "sessions": response.get("sessions") or [],
             "events": response.get("events"),
+            "task_summary": response.get("task_summary") or _empty_task_summary_payload(),
             "next_after_id": response.get("next_after_id"),
+            "uploaded_files": uploaded_files,
             "raw": response,
         },
     )
@@ -749,6 +1223,7 @@ def foundry_topic_plan_revisions(
     *,
     topic_scope_id: PathOnly[str],
     limit: Json[NonNegativeInt] = 50,
+    session_id: str | None = None,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
@@ -766,7 +1241,10 @@ def foundry_topic_plan_revisions(
     response = _orchestrator_request(
         "GET",
         f"/api/topics/{encoded_scope}/plan/revisions",
-        params={"limit": int(limit)},
+        params={
+            "limit": int(limit),
+            **({"session_id": str(session_id).strip()} if str(session_id or "").strip() else {}),
+        },
     )
     return json_success(
         request,
@@ -784,6 +1262,7 @@ def foundry_topic_plan_current(
     user_profile: UserProfile,
     *,
     topic_scope_id: PathOnly[str],
+    session_id: str | None = None,
 ) -> HttpResponse:
     del user_profile  # authenticated access check only
     scoped = topic_scope_id.strip().lower()
@@ -798,7 +1277,13 @@ def foundry_topic_plan_current(
             },
         )
     encoded_scope = quote(scoped, safe="")
-    response = _orchestrator_request("GET", f"/api/topics/{encoded_scope}/plan/current")
+    response = _orchestrator_request(
+        "GET",
+        f"/api/topics/{encoded_scope}/plan/current",
+        params={
+            **({"session_id": str(session_id).strip()} if str(session_id or "").strip() else {}),
+        },
+    )
     return json_success(
         request,
         data={
@@ -928,60 +1413,6 @@ def foundry_topic_plan_synthesize(
     )
 
 
-@typed_endpoint
-def foundry_topic_directive_dispatch(
-    request: HttpRequest,
-    user_profile: UserProfile,
-    *,
-    topic_scope_id: PathOnly[str],
-    user_id: str | None = None,
-    repo_id: str | None = None,
-    repo_url: str | None = None,
-    plan_revision_id: str | None = None,
-    directives: Json[list[dict[str, Any]]],
-    stream_id: Json[int] | None = None,
-    stream_name: str | None = None,
-    topic: str | None = None,
-) -> HttpResponse:
-    scoped = topic_scope_id.strip().lower()
-    encoded_scope = quote(scoped, safe="")
-    actor_email = (user_profile.delivery_email or user_profile.email).strip().lower()
-    effective_repo_id = str(repo_id or "").strip() or _default_repo_id()
-    effective_repo_url = _resolve_repo_url(effective_repo_id, repo_url) if effective_repo_id else None
-
-    thread_ref: dict[str, Any] = {}
-    if stream_id is not None:
-        thread_ref = {
-            "message_type": "stream",
-            "stream_id": int(stream_id),
-            "stream": (stream_name or "").strip(),
-            "topic": (topic or "").strip(),
-        }
-
-    payload = {
-        "supervisor_id": actor_email,
-        "user_id": (user_id or actor_email).strip(),
-        "repo_id": effective_repo_id or None,
-        "repo_url": effective_repo_url,
-        "zulip_thread_ref": thread_ref,
-        "plan_revision_id": (plan_revision_id or "").strip() or None,
-        "directives": [item for item in directives if isinstance(item, dict)],
-    }
-    response = _orchestrator_request(
-        "POST",
-        f"/api/topics/{encoded_scope}/directives/dispatch",
-        payload=payload,
-    )
-    return json_success(
-        request,
-        data={
-            "topic_scope_id": scoped,
-            "tasks": response.get("tasks"),
-            "raw": response,
-        },
-    )
-
-
 @typed_endpoint_without_parameters
 def foundry_provider_catalog(
     request: HttpRequest,
@@ -1051,6 +1482,8 @@ def foundry_provider_auth_connect(
     api_key: str | None = None,
     access_token: str | None = None,
     refresh_token: str | None = None,
+    id_token: str | None = None,
+    account_id: str | None = None,
     expires_at: str | None = None,
     metadata: Json[dict[str, Any]] | None = None,
 ) -> HttpResponse:
@@ -1065,6 +1498,8 @@ def foundry_provider_auth_connect(
         "api_key": (api_key or "").strip() or None,
         "access_token": (access_token or "").strip() or None,
         "refresh_token": (refresh_token or "").strip() or None,
+        "id_token": (id_token or "").strip() or None,
+        "account_id": (account_id or "").strip() or None,
         "expires_at": (expires_at or "").strip() or None,
         "metadata": metadata if isinstance(metadata, dict) else {},
         "actor_user_id": actor_email,
@@ -1137,7 +1572,7 @@ def foundry_provider_oauth_start(
         raise FoundryOrchestratorRequestError(_("provider is required"))
 
     payload = {
-        "redirect_uri": (redirect_uri or "").strip() or None,
+        "redirect_uri": _provider_oauth_redirect_uri(request, redirect_uri),
         "actor_user_id": actor_email,
         "actor_email": actor_email,
     }

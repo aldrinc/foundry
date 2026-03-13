@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
 import { commands } from "@foundry/desktop/bindings"
 import { useNavigation } from "../context/navigation"
 import { useOrg } from "../context/org"
@@ -51,6 +51,19 @@ export function ComposeBox(props: { narrow: string }) {
     setError("")
     setUploadError("")
   })
+
+  createEffect(on(
+    () => props.narrow,
+    () => {
+      const current = nav.parseNarrow(props.narrow)
+      if (current?.type === "topic") {
+        setTopic(current.topic || "")
+        return
+      }
+
+      setTopic("")
+    },
+  ))
 
   // Auto-resize textarea
   createEffect(() => {
@@ -408,6 +421,7 @@ export function ComposeBox(props: { narrow: string }) {
     const text = content().trim()
     if (!text || sending()) return
 
+    const currentNarrow = parsed()
     const target = messageTarget()
     if (!target) {
       setError("Cannot determine message destination")
@@ -430,6 +444,19 @@ export function ComposeBox(props: { narrow: string }) {
       if (result.status === "error") {
         setError(result.error || "Failed to send message")
         return
+      }
+
+      if (currentNarrow?.type === "stream" && currentNarrow.streamId && topic().trim()) {
+        const streamId = currentNarrow.streamId
+        const nextTopic = topic().trim()
+        sync.upsertStreamTopic(streamId, nextTopic, result.data.id)
+        sync.invalidateStreamTopics(streamId)
+        sync.markNarrowHydrated(`stream:${streamId}`, false)
+        setTopic("")
+        nav.setActiveNarrow(`stream:${streamId}/topic:${nextTopic}`)
+        void sync.ensureStreamTopics(streamId, { force: true })
+      } else if (currentNarrow?.type === "topic" && currentNarrow.streamId) {
+        sync.upsertStreamTopic(currentNarrow.streamId, currentNarrow.topic || "", result.data.id)
       }
 
       setContent("")
@@ -563,8 +590,13 @@ export function ComposeBox(props: { narrow: string }) {
     <div class="px-4 py-3" data-component="compose-box">
       {/* Typing indicator + errors — ABOVE the container */}
       <Show when={typingDisplay()}>
-        <div class="text-[11px] text-[var(--text-tertiary)] mb-1 italic">
-          {typingDisplay()}
+        <div class="flex items-center gap-1.5 text-xs text-[var(--text-tertiary)] mb-1" aria-live="polite">
+          <span class="inline-flex items-center gap-[3px]">
+            <span class="w-[5px] h-[5px] rounded-full bg-[var(--text-tertiary)] animate-[typing-dot_1.4s_ease-in-out_infinite]" style={{ "animation-delay": "0ms" }} />
+            <span class="w-[5px] h-[5px] rounded-full bg-[var(--text-tertiary)] animate-[typing-dot_1.4s_ease-in-out_infinite]" style={{ "animation-delay": "200ms" }} />
+            <span class="w-[5px] h-[5px] rounded-full bg-[var(--text-tertiary)] animate-[typing-dot_1.4s_ease-in-out_infinite]" style={{ "animation-delay": "400ms" }} />
+          </span>
+          <span>{typingDisplay()}</span>
         </div>
       </Show>
       <Show when={error()}>
@@ -613,8 +645,8 @@ export function ComposeBox(props: { narrow: string }) {
         {/* Textarea — borderless, transparent */}
         <textarea
           ref={textareaRef!}
-          class="w-full px-3 py-2.5 bg-transparent text-[var(--text-primary)] text-sm resize-none focus:outline-none"
-          style={{ "min-height": "42px", "max-height": "180px" }}
+          class="w-full px-3 py-2.5 bg-transparent text-[var(--text-primary)] resize-none focus:outline-none"
+          style={{ "font-size": "var(--font-size-base, 15px)", "min-height": "42px", "max-height": "180px" }}
           placeholder={placeholder()}
           value={content()}
           onInput={(e) => handleInput(e.currentTarget.value)}

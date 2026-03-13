@@ -99,6 +99,9 @@ from zerver.views.message_send import render_message_backend, send_message_backe
 from zerver.views.message_summary import get_messages_summary
 from zerver.views.foundry_tasks import (
     foundry_create_task,
+    foundry_inbox_assistant_chat,
+    foundry_inbox_assistant_feedback,
+    foundry_inbox_assistant_session,
     foundry_integration_catalog,
     foundry_integration_connect,
     foundry_integration_disconnect,
@@ -120,13 +123,13 @@ from zerver.views.foundry_tasks import (
     foundry_task_reply,
     foundry_task_resolve_clarification,
     foundry_task_status,
-    foundry_topic_directive_dispatch,
     foundry_topic_events,
     foundry_topic_plan_create,
     foundry_topic_plan_current,
     foundry_topic_plan_revisions,
     foundry_topic_plan_synthesize,
     foundry_topic_supervisor_message,
+    foundry_topic_supervisor_runtime,
     foundry_topic_supervisor_session,
     foundry_topic_supervisor_session_reset,
     foundry_topic_sidebar,
@@ -347,6 +350,9 @@ legacy_meridian_foundry_patterns = [
     ),
     rest_path("meridian/tasks/<path:task_id>/reply", POST=foundry_task_reply),
     rest_path("meridian/tasks/<path:task_id>", GET=foundry_task_status),
+    rest_path("meridian/inbox/assistant/session", GET=foundry_inbox_assistant_session),
+    rest_path("meridian/inbox/assistant/chat", POST=foundry_inbox_assistant_chat),
+    rest_path("meridian/inbox/assistant/feedback", POST=foundry_inbox_assistant_feedback),
     rest_path("meridian/providers/catalog", GET=foundry_provider_catalog),
     rest_path("meridian/providers/auth", GET=foundry_provider_auth_list),
     rest_path("meridian/providers/connect", POST=foundry_provider_auth_connect),
@@ -363,6 +369,10 @@ legacy_meridian_foundry_patterns = [
     rest_path(
         "meridian/topics/<path:topic_scope_id>/supervisor/session",
         GET=foundry_topic_supervisor_session,
+    ),
+    rest_path(
+        "meridian/topics/<path:topic_scope_id>/supervisor/runtime",
+        GET=foundry_topic_supervisor_runtime,
     ),
     rest_path(
         "meridian/topics/<path:topic_scope_id>/supervisor/session/stream",
@@ -385,10 +395,6 @@ legacy_meridian_foundry_patterns = [
     rest_path(
         "meridian/topics/<path:topic_scope_id>/plan/synthesize",
         POST=foundry_topic_plan_synthesize,
-    ),
-    rest_path(
-        "meridian/topics/<path:topic_scope_id>/directives/dispatch",
-        POST=foundry_topic_directive_dispatch,
     ),
     rest_path("meridian/supervisor/context", GET=foundry_supervisor_context),
     rest_path("meridian/supervisor/memory", POST=foundry_supervisor_memory_append),
@@ -524,6 +530,9 @@ v1_api_and_json_patterns = [
     ),
     rest_path("foundry/tasks/<path:task_id>/reply", POST=foundry_task_reply),
     rest_path("foundry/tasks/<path:task_id>", GET=foundry_task_status),
+    rest_path("foundry/inbox/assistant/session", GET=foundry_inbox_assistant_session),
+    rest_path("foundry/inbox/assistant/chat", POST=foundry_inbox_assistant_chat),
+    rest_path("foundry/inbox/assistant/feedback", POST=foundry_inbox_assistant_feedback),
     rest_path("foundry/providers/catalog", GET=foundry_provider_catalog),
     rest_path("foundry/providers/auth", GET=foundry_provider_auth_list),
     rest_path("foundry/providers/connect", POST=foundry_provider_auth_connect),
@@ -540,6 +549,10 @@ v1_api_and_json_patterns = [
     rest_path(
         "foundry/topics/<path:topic_scope_id>/supervisor/session",
         GET=foundry_topic_supervisor_session,
+    ),
+    rest_path(
+        "foundry/topics/<path:topic_scope_id>/supervisor/runtime",
+        GET=foundry_topic_supervisor_runtime,
     ),
     rest_path(
         "foundry/topics/<path:topic_scope_id>/supervisor/session/stream",
@@ -562,10 +575,6 @@ v1_api_and_json_patterns = [
     rest_path(
         "foundry/topics/<path:topic_scope_id>/plan/synthesize",
         POST=foundry_topic_plan_synthesize,
-    ),
-    rest_path(
-        "foundry/topics/<path:topic_scope_id>/directives/dispatch",
-        POST=foundry_topic_directive_dispatch,
     ),
     rest_path("foundry/supervisor/context", GET=foundry_supervisor_context),
     rest_path("foundry/supervisor/memory", POST=foundry_supervisor_memory_append),

@@ -172,7 +172,6 @@ let create_request_in_flight = false;
 let reply_request_in_flight = false;
 let supervisor_plan_request_in_flight = false;
 let supervisor_view_request_in_flight = false;
-let supervisor_dispatch_request_in_flight = false;
 let provider_auth_request_in_flight = false;
 let integration_request_in_flight = false;
 let task_events_stream: EventSource | null = null;
@@ -2949,13 +2948,6 @@ function render_supervisor_view(context: TopicContext, sidebar: FoundrySidebarPa
     const approval_points = plan?.approval_points ?? [];
     const steps = plan?.execution_steps ?? [];
     const seams = plan?.candidate_parallel_seams ?? [];
-    const recommended_raw = plan?.source?.["recommended_directives"];
-    const recommended = Array.isArray(recommended_raw)
-        ? (recommended_raw.filter((item) => typeof item === "object" && item !== null && !Array.isArray(item)) as Record<
-              string,
-              unknown
-          >[])
-        : [];
 
     const signature = [
         context.topic_scope_id,
@@ -2964,7 +2956,6 @@ function render_supervisor_view(context: TopicContext, sidebar: FoundrySidebarPa
         String(steps.length),
         String(seams.length),
         String(unknowns.length),
-        String(recommended.length),
         String(state.supervisor_context?.memory_tail.length ?? 0),
         String(sidebar.task_count),
     ].join("|");
@@ -3021,19 +3012,6 @@ function render_supervisor_view(context: TopicContext, sidebar: FoundrySidebarPa
         approval_points.length > 0
             ? `<ul class="foundry-supervisor-bullet-list">${approval_points
                   .map((item) => `<li>${_.escape(item)}</li>`)
-                  .join("")}</ul>`
-            : `<div class="foundry-supervisor-empty">None</div>`;
-
-    const recommended_markup =
-        recommended.length > 0
-            ? `<ul class="foundry-supervisor-bullet-list">${recommended
-                  .map((item) => {
-                      const instruction = as_string(item["instruction"]).trim();
-                      const worker = as_string(item["assigned_worker"]).trim();
-                      const role = as_string(item["assigned_role"]).trim();
-                      const meta = [worker, role].filter(Boolean).join(" / ");
-                      return `<li><div class="foundry-supervisor-reco-instruction">${_.escape(instruction || "Directive")}</div>${meta ? `<div class="foundry-supervisor-reco-meta">${_.escape(meta)}</div>` : ""}</li>`;
-                  })
                   .join("")}</ul>`
             : `<div class="foundry-supervisor-empty">None</div>`;
 
@@ -3104,29 +3082,10 @@ function render_supervisor_view(context: TopicContext, sidebar: FoundrySidebarPa
         </section>
 
         <section class="foundry-supervisor-card">
-            <h3>Recommended directives</h3>
-            ${recommended_markup}
-        </section>
-
-        <section class="foundry-supervisor-card">
-            <h3>Dispatch directive</h3>
-            <label class="foundry-task-create-label" for="foundry-supervisor-directive-instruction">Instruction</label>
-            <textarea id="foundry-supervisor-directive-instruction" class="modal_text_input foundry-task-create-textarea" rows="4" placeholder="Describe the directive the supervisor should assign to a worker"></textarea>
-            <div class="foundry-task-two-col-grid">
-                <div>
-                    <label class="foundry-task-create-label" for="foundry-supervisor-directive-worker">Assigned worker</label>
-                    <input id="foundry-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
-                </div>
-                <div>
-                    <label class="foundry-task-create-label" for="foundry-supervisor-directive-role">Role</label>
-                    <select id="foundry-supervisor-directive-role" class="modal_text_input">
-                        <option value="writer">writer</option>
-                        <option value="read_only">read_only</option>
-                        <option value="verify">verify</option>
-                    </select>
-                </div>
+            <h3>Execution</h3>
+            <div class="foundry-supervisor-empty">
+                Start execution from the supervisor sidebar by approving the active plan in plain language.
             </div>
-            <button type="button" class="button rounded foundry-supervisor-dispatch-button" id="foundry-supervisor-dispatch">Dispatch</button>
         </section>
 
         <details class="foundry-supervisor-card foundry-supervisor-context" ${
@@ -4232,67 +4191,6 @@ function submit_supervisor_synthesize_from_view(): void {
     });
 }
 
-function submit_supervisor_dispatch_from_view(): void {
-    const context = current_topic_context();
-    if (!context || supervisor_dispatch_request_in_flight) {
-        return;
-    }
-    const instruction = String($("#foundry-supervisor-directive-instruction").val() ?? "").trim();
-    if (!instruction) {
-        ui_report.generic_embed_error("Directive instruction is required.", 3500);
-        return;
-    }
-    const assigned_worker = String($("#foundry-supervisor-directive-worker").val() ?? "")
-        .trim()
-        .toLowerCase();
-    const assigned_role = String($("#foundry-supervisor-directive-role").val() ?? "writer")
-        .trim()
-        .toLowerCase();
-    const plan_revision_id = state.supervisor_plan_revision?.plan_revision_id || undefined;
-    const directives = [
-        {
-            instruction,
-            task_title: instruction.split("\n")[0] ?? "Supervisor directive",
-            provider: get_provider_preference(),
-            assigned_worker: assigned_worker || "worker-1",
-            assigned_role: assigned_role || "writer",
-            file_claims: [],
-            area_claims: [],
-        },
-    ];
-    supervisor_dispatch_request_in_flight = true;
-    channel.post({
-        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
-        data: {
-            plan_revision_id,
-            directives: JSON.stringify(directives),
-            stream_id: context.stream_id,
-            stream_name: context.stream_name,
-            topic: context.topic,
-        },
-        success(dispatch_data) {
-            supervisor_dispatch_request_in_flight = false;
-            $("#foundry-supervisor-directive-instruction").val("");
-            const dispatch_root = as_record(dispatch_data);
-            const tasks_raw = Array.isArray(dispatch_root?.["tasks"]) ? dispatch_root["tasks"] : [];
-            const first_task = parse_task_summary(tasks_raw[0]);
-            if (first_task) {
-                select_task(first_task.task_id, {
-                    open_view: true,
-                    stream_id: context.stream_id,
-                    topic: context.topic,
-                });
-                return;
-            }
-            refresh_topic_sidebar(true);
-        },
-        error(xhr) {
-            supervisor_dispatch_request_in_flight = false;
-            handle_error("Unable to dispatch directive", xhr);
-        },
-    });
-}
-
 function poll_selected_task_events(force = false): void {
     const context = current_topic_context();
     if (!context || !state.selected_task_id || !state.task_view_open) {
@@ -4745,13 +4643,6 @@ function submit_topic_task_creation(
     );
 }
 
-function split_csv_values(value: string): string[] {
-    return value
-        .split(",")
-        .map((item) => item.trim())
-        .filter((item) => item.length > 0);
-}
-
 function render_supervisor_plan_modal_content(context: TopicContext): string {
     return `
 <form id="${SUPERVISOR_PLAN_FORM_ID}" class="foundry-task-create-modal-form">
@@ -4761,34 +4652,6 @@ function render_supervisor_plan_modal_content(context: TopicContext): string {
     <label for="foundry-supervisor-plan-objective" class="foundry-task-create-label">Objective</label>
     <textarea id="foundry-supervisor-plan-objective" class="modal_text_input foundry-task-create-textarea" rows="4" placeholder="What should the supervisor accomplish for this topic?"></textarea>
     <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-supervisor-plan-activate" checked /> Activate synthesized revision</label>
-    <hr />
-    <label class="foundry-task-create-label foundry-task-checkbox-row"><input type="checkbox" id="foundry-supervisor-dispatch-enable" /> Dispatch one directive now</label>
-    <label for="foundry-supervisor-directive-instruction" class="foundry-task-create-label">Directive instruction</label>
-    <textarea id="foundry-supervisor-directive-instruction" class="modal_text_input foundry-task-create-textarea" rows="5" placeholder="Leave blank to only synthesize plan"></textarea>
-    <div class="foundry-task-two-col-grid">
-        <div>
-            <label for="foundry-supervisor-directive-worker" class="foundry-task-create-label">Assigned worker</label>
-            <input id="foundry-supervisor-directive-worker" class="modal_text_input" value="worker-1" autocomplete="off" />
-        </div>
-        <div>
-            <label for="foundry-supervisor-directive-role" class="foundry-task-create-label">Role</label>
-            <select id="foundry-supervisor-directive-role" class="modal_text_input">
-                <option value="writer">writer</option>
-                <option value="read_only">read_only</option>
-                <option value="verify">verify</option>
-            </select>
-        </div>
-    </div>
-    <div class="foundry-task-two-col-grid">
-        <div>
-            <label for="foundry-supervisor-directive-file-claims" class="foundry-task-create-label">File claims (comma separated)</label>
-            <input id="foundry-supervisor-directive-file-claims" class="modal_text_input" autocomplete="off" />
-        </div>
-        <div>
-            <label for="foundry-supervisor-directive-area-claims" class="foundry-task-create-label">Area claims (comma separated)</label>
-            <input id="foundry-supervisor-directive-area-claims" class="modal_text_input" autocomplete="off" />
-        </div>
-    </div>
 </form>`;
 }
 
@@ -4796,8 +4659,8 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
     dialog_widget.launch({
         id: SUPERVISOR_PLAN_MODAL_ID,
         form_id: SUPERVISOR_PLAN_FORM_ID,
-        modal_title_text: "Supervisor plan + dispatch",
-        modal_submit_button_text: "Run",
+        modal_title_text: "Supervisor plan",
+        modal_submit_button_text: "Synthesize",
         modal_content_html: render_supervisor_plan_modal_content(context),
         on_show() {
             setTimeout(() => {
@@ -4805,16 +4668,7 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
             }, 0);
         },
         validate_input() {
-            if (supervisor_plan_request_in_flight) {
-                return false;
-            }
-            const dispatch_enabled = $("#foundry-supervisor-dispatch-enable").prop("checked") === true;
-            const instruction = String($("#foundry-supervisor-directive-instruction").val() ?? "").trim();
-            if (dispatch_enabled && !instruction) {
-                ui_report.error("Directive instruction is required when dispatch is enabled.", undefined, $("#dialog_error"));
-                return false;
-            }
-            return true;
+            return !supervisor_plan_request_in_flight;
         },
         on_click() {
             if (supervisor_plan_request_in_flight) {
@@ -4824,22 +4678,6 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
             const summary = String($("#foundry-supervisor-plan-summary").val() ?? "").trim();
             const objective = String($("#foundry-supervisor-plan-objective").val() ?? "").trim();
             const activate = $("#foundry-supervisor-plan-activate").prop("checked") === true;
-            const dispatch_enabled = $("#foundry-supervisor-dispatch-enable").prop("checked") === true;
-            const directive_instruction = String(
-                $("#foundry-supervisor-directive-instruction").val() ?? "",
-            ).trim();
-            const assigned_worker = String($("#foundry-supervisor-directive-worker").val() ?? "")
-                .trim()
-                .toLowerCase();
-            const assigned_role = String($("#foundry-supervisor-directive-role").val() ?? "writer")
-                .trim()
-                .toLowerCase();
-            const file_claims = split_csv_values(
-                String($("#foundry-supervisor-directive-file-claims").val() ?? ""),
-            );
-            const area_claims = split_csv_values(
-                String($("#foundry-supervisor-directive-area-claims").val() ?? ""),
-            );
 
             supervisor_plan_request_in_flight = true;
             channel.post({
@@ -4853,61 +4691,14 @@ export function launch_supervisor_plan_modal(context: TopicContext): void {
                     const root = as_record(data);
                     const plan_revision = as_record(root?.["plan_revision"]);
                     const plan_revision_id = as_string(plan_revision?.["plan_revision_id"]).trim();
-                    if (!dispatch_enabled || !directive_instruction) {
-                        supervisor_plan_request_in_flight = false;
-                        ui_report.success(
-                            plan_revision_id
-                                ? `Plan synthesized: ${plan_revision_id}`
-                                : "Plan synthesized.",
-                            $("#dialog_error"),
-                        );
-                        refresh_topic_sidebar(true);
-                        return;
-                    }
-
-                    const directives = [
-                        {
-                            instruction: directive_instruction,
-                            task_title: directive_instruction.split("\n")[0] ?? "Supervisor directive",
-                            provider: get_provider_preference(),
-                            assigned_worker: assigned_worker || "worker-1",
-                            assigned_role: assigned_role || "writer",
-                            file_claims,
-                            area_claims,
-                        },
-                    ];
-                    channel.post({
-                        url: `/json/foundry/topics/${encodeURIComponent(context.topic_scope_id)}/directives/dispatch`,
-                        data: {
-                            plan_revision_id: plan_revision_id || undefined,
-                            directives: JSON.stringify(directives),
-                            stream_id: context.stream_id,
-                            stream_name: context.stream_name,
-                            topic: context.topic,
-                        },
-                        success(dispatch_data) {
-                            supervisor_plan_request_in_flight = false;
-                            const dispatch_root = as_record(dispatch_data);
-                            const tasks_raw = Array.isArray(dispatch_root?.["tasks"])
-                                ? dispatch_root["tasks"]
-                                : [];
-                            const first_task = parse_task_summary(tasks_raw[0]);
-                            ui_report.success("Directive dispatched.", $("#dialog_error"));
-                            if (first_task) {
-                                select_task(first_task.task_id, {
-                                    open_view: true,
-                                    stream_id: context.stream_id,
-                                    topic: context.topic,
-                                });
-                                return;
-                            }
-                            refresh_topic_sidebar(true);
-                        },
-                        error(xhr) {
-                            supervisor_plan_request_in_flight = false;
-                            handle_error("Unable to dispatch directive", xhr);
-                        },
-                    });
+                    supervisor_plan_request_in_flight = false;
+                    ui_report.success(
+                        plan_revision_id
+                            ? `Plan synthesized: ${plan_revision_id}`
+                            : "Plan synthesized.",
+                        $("#dialog_error"),
+                    );
+                    refresh_topic_sidebar(true);
                 },
                 error(xhr) {
                     supervisor_plan_request_in_flight = false;
@@ -5422,12 +5213,6 @@ export function initialize(): void {
         e.preventDefault();
         e.stopPropagation();
         submit_supervisor_synthesize_from_view();
-    });
-
-    $("body").on("click", "#foundry-supervisor-dispatch", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        submit_supervisor_dispatch_from_view();
     });
 
     $("body").on("click", "#foundry-task-supervisor-plan", (e) => {

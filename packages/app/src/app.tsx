@@ -1,4 +1,5 @@
 import { type JSX, createSignal, createEffect, Show, onMount, onCleanup } from "solid-js"
+import { listen } from "@tauri-apps/api/event"
 import { ZulipSyncProvider, useZulipSync, registerActiveNarrowGetter } from "./context/zulip-sync"
 import { OrgProvider, useOrg } from "./context/org"
 import { NavigationProvider, useNavigation } from "./context/navigation"
@@ -31,6 +32,7 @@ import {
 } from "./manual-logout"
 import {
   getAutoLoginServer,
+  getSavedServerLoginSeed,
   getPreferredServerId,
   setPreferredServerId,
 } from "./preferred-server"
@@ -46,10 +48,22 @@ import {
   startInstallingUpdate,
   type UpdatePromptState,
 } from "./update-prompt-state"
+import { buildAuthInvalidMessage, isAuthInvalidDisconnectPayload } from "./auth-session"
+import { sanitizeEventId } from "./tauri-event-utils"
+import { homeViewToNarrow } from "./home-view"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
 const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
+const HAS_TAURI_BRIDGE =
+  typeof window !== "undefined"
+  && typeof (window as any).__TAURI_INTERNALS__?.invoke === "function"
+
+type LoginRecoveryState = {
+  email: string
+  error: string
+  serverUrl: string
+}
 
 function createDemoLoginResult(): LoginResult {
   return {
@@ -113,6 +127,7 @@ export function App(props: {
 }) {
   const [loginResult, setLoginResult] = createSignal<LoginResult | null>(null)
   const [loginEmail, setLoginEmail] = createSignal<string>("")
+  const [loginRecovery, setLoginRecovery] = createSignal<LoginRecoveryState | null>(null)
   const [autoLoginLoading, setAutoLoginLoading] = createSignal(true)
 
   // Try auto-login from saved servers (or use demo mode)
@@ -125,19 +140,36 @@ export function App(props: {
     }
 
     try {
-      if (shouldSkipAutoLogin(window.localStorage)) {
-        return
-      }
-
       const result = await commands.getServers()
       if (result.status === "ok" && result.data.length > 0) {
-        const server = getAutoLoginServer(result.data, getPreferredServerId(window.localStorage))
+        const preferredServerId = getPreferredServerId(window.localStorage)
+        const loginSeed = getSavedServerLoginSeed(result.data, preferredServerId)
+        if (loginSeed) {
+          setLoginEmail(loginSeed.email)
+          setLoginRecovery((current) => current ?? {
+            email: loginSeed.email,
+            error: "",
+            serverUrl: loginSeed.serverUrl,
+          })
+        }
+
+        if (shouldSkipAutoLogin(window.localStorage)) {
+          return
+        }
+
+        const server = getAutoLoginServer(result.data, preferredServerId)
         if (!server) return
         setLoginEmail(server.email)
         const loginRes = await commands.login(server.url, server.email, server.api_key)
         if (loginRes.status === "ok") {
           setPreferredServerId(window.localStorage, loginRes.data.org_id)
           setLoginResult(loginRes.data)
+        } else {
+          setLoginRecovery({
+            email: server.email,
+            error: "Your saved session could not be restored. Sign in again to continue.",
+            serverUrl: server.url,
+          })
         }
       }
     } catch {
@@ -151,12 +183,14 @@ export function App(props: {
     clearManualLogout(window.localStorage)
     setPreferredServerId(window.localStorage, result.org_id)
     setLoginResult(result)
+    setLoginRecovery(null)
     if (email) setLoginEmail(email)
   }
 
   const handleManualLogout = () => {
     markManualLogout(window.localStorage)
     commands.setUnreadBadgeCount(null).catch(() => {})
+    setLoginRecovery(null)
     window.location.reload()
   }
 
@@ -184,6 +218,52 @@ export function App(props: {
     window.location.reload()
   }
 
+  createEffect(() => {
+    const currentLogin = loginResult()
+    if (IS_DEMO || !HAS_TAURI_BRIDGE || !currentLogin) {
+      return
+    }
+
+    const eventId = sanitizeEventId(currentLogin.org_id)
+    let active = true
+    const unlisteners: Array<() => void> = []
+    const handleDisconnect = (payload: any) => {
+      if (!isAuthInvalidDisconnectPayload(payload)) {
+        return
+      }
+
+      setLoginRecovery({
+        email: loginEmail(),
+        error: buildAuthInvalidMessage(payload?.error),
+        serverUrl: currentLogin.realm_url || "",
+      })
+      void commands.logout(currentLogin.org_id).catch(() => {})
+      setLoginResult(null)
+    }
+
+    for (const eventName of [
+      `zulip:${eventId}:disconnected`,
+      `supervisor:${eventId}:disconnected`,
+    ]) {
+      void listen<any>(eventName, (event) => {
+        handleDisconnect(event.payload)
+      }).then((unlisten) => {
+        if (!active) {
+          unlisten()
+          return
+        }
+        unlisteners.push(unlisten)
+      }).catch(() => {})
+    }
+
+    onCleanup(() => {
+      active = false
+      for (const unlisten of unlisteners) {
+        unlisten()
+      }
+    })
+  })
+
   return (
     <div class="h-screen w-screen flex flex-col" data-component="app-shell">
       <Show when={!autoLoginLoading()} fallback={<LoadingSplash />}>
@@ -194,7 +274,7 @@ export function App(props: {
             // Extract email from users list or saved servers
             // The LoginView will pass the email via the second arg
             handleLogin(result)
-          }} onLoginWithEmail={(result, email) => handleLogin(result, email)} />}
+          }} onLoginWithEmail={(result, email) => handleLogin(result, email)} initialServerUrl={loginRecovery()?.serverUrl} initialEmail={loginRecovery()?.email} initialError={loginRecovery()?.error} />}
         >
           {(result) => (
             <OrgProvider org={{
@@ -252,7 +332,7 @@ function AppShell(props: {
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
-  const { store: settingsStore, capabilities } = useSettings()
+  const { store: settingsStore, capabilities, loaded: settingsLoaded } = useSettings()
   const platform = usePlatform()
   const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("general")
   const [showSettings, setShowSettings] = createSignal(false)
@@ -260,6 +340,7 @@ function AppShell(props: {
   const [showShortcuts, setShowShortcuts] = createSignal(false)
   const [updatePrompt, setUpdatePrompt] = createSignal<UpdatePromptState>(hideUpdatePrompt())
   let autoUpdateCheckStarted = false
+  let initialHomeApplied = false
 
   const handleLogout = async () => {
     try {
@@ -325,19 +406,6 @@ function AppShell(props: {
       }
     }).catch(() => {})
 
-    // Apply homeView setting to set the initial navigation narrow
-    if (!IS_DEMO) {
-      const homeMap: Record<string, string | null> = {
-        inbox: null,
-        recent: "recent-topics",
-        all: "all-messages",
-      }
-      const initialNarrow = homeMap[settingsStore.homeView]
-      if (initialNarrow !== undefined) {
-        nav.setActiveNarrow(initialNarrow)
-      }
-    }
-
     // In demo mode, seed mock messages and navigate to a topic
     if (IS_DEMO) {
       const demoMessages = createDemoMessages()
@@ -349,6 +417,20 @@ function AppShell(props: {
       // Navigate to the welcome topic
       nav.setActiveNarrow("stream:1/topic:welcome")
     }
+  })
+
+  createEffect(() => {
+    if (IS_DEMO || initialHomeApplied || !settingsLoaded()) {
+      return
+    }
+
+    const initialNarrow = homeViewToNarrow(settingsStore.homeView)
+    if (initialNarrow === undefined) {
+      return
+    }
+
+    nav.setActiveNarrow(initialNarrow)
+    initialHomeApplied = true
   })
 
   // ── Unread badge count ──
@@ -469,7 +551,7 @@ function AppShell(props: {
   createEffect(() => {
     const size = settingsStore.fontSize
     const root = document.documentElement
-    const sizeMap: Record<string, string> = { small: "13px", normal: "14px", large: "16px" }
+    const sizeMap: Record<string, string> = { small: "13px", normal: "14px", medium: "15px", large: "16px" }
     root.style.setProperty("--font-size-base", sizeMap[size] || "14px")
   })
 

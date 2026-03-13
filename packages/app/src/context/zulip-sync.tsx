@@ -34,6 +34,7 @@ import {
   type RecentDirectMessageConversation,
   type RecentDirectMessageSnapshot,
 } from "./recent-dms"
+import { mergeTopicsByName, upsertTopicByName } from "./topic-cache"
 
 export type { UnreadItem } from "./unread-state"
 
@@ -136,6 +137,8 @@ export interface ZulipStore {
   unreadCounts: Record<number, number>
   typingUsers: Record<string, number[]>
   drafts: Record<string, string>
+  topicsByStream: Record<number, Topic[]>
+  streamTopicsHydrated: Record<number, boolean>
 
   // Derived data computed from events
   unreadItems: UnreadItem[]
@@ -159,6 +162,8 @@ const initialStore: ZulipStore = {
   unreadCounts: {},
   typingUsers: {},
   drafts: {},
+  topicsByStream: {},
+  streamTopicsHydrated: {},
   unreadItems: [],
   userTopics: [],
 }
@@ -184,6 +189,16 @@ export interface ZulipSync {
   setMessageLoadState(narrow: string, state: "idle" | "loading" | "loaded-all"): void
   isNarrowHydrated(narrow: string): boolean
   markNarrowHydrated(narrow: string, hydrated: boolean): void
+  ensureStreamTopics(
+    streamId: number,
+    options?: {
+      force?: boolean
+    },
+  ): Promise<{ status: "ok" | "error"; fromCache: boolean; error?: string }>
+  isStreamTopicsHydrated(streamId: number): boolean
+  markStreamTopicsHydrated(streamId: number, hydrated: boolean): void
+  invalidateStreamTopics(streamId: number): void
+  upsertStreamTopic(streamId: number, topicName: string, maxId: number): void
   ensureMessages(
     narrow: string,
     filters: { operator: string; operand: string | number[] }[],
@@ -216,6 +231,7 @@ const ZulipSyncContext = createContext<ZulipSync>()
 export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element }) {
   const [store, setStore] = createStore<ZulipStore>({ ...initialStore })
   const inFlightFetches = new Map<string, Promise<{ status: "ok" | "error"; fromCache: boolean; error?: string }>>()
+  const inFlightTopicFetches = new Map<number, Promise<{ status: "ok" | "error"; fromCache: boolean; error?: string }>>()
   const unreadIndex = new Map<number, { kind: "stream"; streamId: number; topic: string } | { kind: "dm"; userIds: number[] }>()
   const platform = usePlatform()
   const { store: settings } = useSettings()
@@ -347,6 +363,8 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.currentUserId = resolvedUserId
         s.currentUserEmail = resolvedEmail
         s.userTopics = userTopics || []
+        s.topicsByStream = {}
+        s.streamTopicsHydrated = {}
       }))
 
       seedUnreadState(unreadMessages, subscriptions, users, resolvedUserId)
@@ -361,6 +379,8 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.recentDirectMessages = []
         s.unreadCounts = {}
         s.unreadItems = []
+        s.topicsByStream = {}
+        s.streamTopicsHydrated = {}
       }))
     },
 
@@ -385,6 +405,75 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
 
     markNarrowHydrated(narrow, hydrated) {
       setStore("messageHydrated", narrow, hydrated)
+    },
+
+    async ensureStreamTopics(streamId, options) {
+      const force = options?.force ?? false
+
+      if (!force && sync.isStreamTopicsHydrated(streamId)) {
+        return { status: "ok" as const, fromCache: true }
+      }
+
+      const existingRequest = inFlightTopicFetches.get(streamId)
+      if (existingRequest) {
+        return existingRequest
+      }
+
+      const request = (async () => {
+        try {
+          const result = await commands.getStreamTopics(props.orgId, streamId)
+
+          if (result.status === "error") {
+            return { status: "error" as const, fromCache: false, error: result.error }
+          }
+
+          setStore(produce(s => {
+            s.topicsByStream[streamId] = mergeTopicsByName(
+              force ? ([] as Topic[]) : (s.topicsByStream[streamId] || []),
+              result.data,
+            )
+          }))
+          sync.markStreamTopicsHydrated(streamId, true)
+
+          return { status: "ok" as const, fromCache: false }
+        } catch (error: any) {
+          return {
+            status: "error" as const,
+            fromCache: false,
+            error: error?.toString() || "Failed to load topics",
+          }
+        } finally {
+          inFlightTopicFetches.delete(streamId)
+        }
+      })()
+
+      inFlightTopicFetches.set(streamId, request)
+      return request
+    },
+
+    isStreamTopicsHydrated(streamId) {
+      return !!store.streamTopicsHydrated[streamId]
+    },
+
+    markStreamTopicsHydrated(streamId, hydrated) {
+      setStore("streamTopicsHydrated", streamId, hydrated)
+    },
+
+    invalidateStreamTopics(streamId) {
+      setStore("streamTopicsHydrated", streamId, false)
+    },
+
+    upsertStreamTopic(streamId, topicName, maxId) {
+      if (!topicName.trim()) {
+        return
+      }
+
+      setStore(produce(s => {
+        s.topicsByStream[streamId] = upsertTopicByName(s.topicsByStream[streamId] || [], {
+          name: topicName,
+          max_id: maxId,
+        })
+      }))
     },
 
     async ensureMessages(narrow, filters, options) {
@@ -471,6 +560,10 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
     handleMessageEvent(data: any) {
       if (!data?.message) return
       const msg = data.message as Message
+
+      if (typeof msg.stream_id === "number" && msg.subject) {
+        sync.upsertStreamTopic(msg.stream_id, msg.subject, msg.id)
+      }
 
       setStore(
         "recentDirectMessages",
@@ -629,12 +722,14 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       if (!data?.message_id) return
       const messageId = data.message_id as number
       let unreadChanged = false
+      let previousStreamId: number | null = null
 
       setStore(produce(s => {
         for (const narrow of Object.keys(s.messages)) {
           const msgs = s.messages[narrow]
           const idx = msgs.findIndex(m => m.id === messageId)
           if (idx >= 0) {
+            previousStreamId = typeof msgs[idx].stream_id === "number" ? msgs[idx].stream_id : null
             if (data.content) msgs[idx].content = data.content
             if (data.subject) {
               msgs[idx].subject = data.subject
@@ -651,6 +746,23 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         }) || unreadChanged
       }
 
+      const topicMetadataChanged =
+        typeof data.subject === "string"
+        || typeof data.new_stream_id === "number"
+
+      if (topicMetadataChanged && previousStreamId !== null) {
+        sync.invalidateStreamTopics(previousStreamId)
+      }
+
+      if (topicMetadataChanged && typeof data.new_stream_id === "number" && data.new_stream_id !== previousStreamId) {
+        sync.invalidateStreamTopics(data.new_stream_id)
+      }
+
+      const nextStreamId = typeof data.new_stream_id === "number" ? data.new_stream_id : previousStreamId
+      if (nextStreamId !== null && typeof data.subject === "string" && data.subject) {
+        sync.upsertStreamTopic(nextStreamId, data.subject, messageId)
+      }
+
       if (unreadChanged) {
         syncUnreadUi()
       }
@@ -664,15 +776,25 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         : [data.message_id as number]
 
       const deleteSet = new Set(deleteIds)
+      const affectedStreamIds = new Set<number>()
 
       setStore(produce(s => {
         for (const narrow of Object.keys(s.messages)) {
+          for (const message of s.messages[narrow]) {
+            if (deleteSet.has(message.id) && typeof message.stream_id === "number") {
+              affectedStreamIds.add(message.stream_id)
+            }
+          }
           s.messages[narrow] = s.messages[narrow].filter(m => !deleteSet.has(m.id))
         }
       }))
 
       if (removeUnreadMessages(unreadIndex, deleteIds)) {
         syncUnreadUi()
+      }
+
+      for (const streamId of affectedStreamIds) {
+        sync.invalidateStreamTopics(streamId)
       }
     },
 
@@ -774,6 +896,8 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         s.messages = {}
         s.messageLoadState = {}
         s.messageHydrated = {}
+        s.topicsByStream = {}
+        s.streamTopicsHydrated = {}
       }))
 
       seedUnreadState(

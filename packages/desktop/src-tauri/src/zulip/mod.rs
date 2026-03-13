@@ -21,6 +21,17 @@ pub fn sanitize_event_id(org_id: &str) -> String {
     org_id.replace('.', "_")
 }
 
+pub fn is_auth_failure_message(error: &str) -> bool {
+    let normalized = error.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+
+    normalized.contains("invalid api key")
+        || normalized.contains("\"code\":\"unauthorized\"")
+        || normalized.contains("401 unauthorized")
+}
+
 /// HTTP client for Zulip REST API with connection pooling
 #[derive(Clone)]
 pub struct ZulipClient {
@@ -336,6 +347,21 @@ mod tests {
                 name
             );
         }
+    }
+
+    #[test]
+    fn auth_failure_detection_matches_invalid_api_key_errors() {
+        assert!(is_auth_failure_message(
+            "Get topics failed (401 Unauthorized): {\"result\":\"error\",\"msg\":\"Invalid API key\",\"code\":\"UNAUTHORIZED\"}"
+        ));
+    }
+
+    #[test]
+    fn auth_failure_detection_ignores_non_auth_errors() {
+        assert!(!is_auth_failure_message(
+            "Get topics failed (502 Bad Gateway):"
+        ));
+        assert!(!is_auth_failure_message(""));
     }
 
     #[test]

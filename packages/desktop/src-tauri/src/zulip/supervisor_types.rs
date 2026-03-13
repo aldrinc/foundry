@@ -7,6 +7,14 @@ pub struct SupervisorSessionMetadata {
     pub engine: Option<String>,
     #[serde(default)]
     pub moltis_model: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub created_by_user_id: Option<String>,
+    #[serde(default)]
+    pub created_by_name: Option<String>,
+    #[serde(default)]
+    pub created_via: Option<String>,
 }
 
 /// A supervisor session tied to a topic scope
@@ -15,6 +23,8 @@ pub struct SupervisorSession {
     pub session_id: String,
     pub topic_scope_id: String,
     pub status: String,
+    #[serde(default)]
+    pub created_at: Option<String>,
     #[serde(default)]
     pub updated_at: Option<String>,
     #[serde(default)]
@@ -29,7 +39,7 @@ pub struct SupervisorEvent {
     pub session_id: String,
     pub ts: String,
     /// Event kind: "message", "thinking", "tool_call", "tool_result",
-    /// "dispatch_result", "plan_draft", "assistant"
+    /// "execution_result", "plan_draft", "assistant"
     pub kind: String,
     /// Role: "user", "assistant", "system"
     pub role: String,
@@ -52,7 +62,13 @@ pub struct SupervisorSessionResponse {
     #[serde(default)]
     pub session: Option<SupervisorSession>,
     #[serde(default)]
+    pub sessions: Vec<SupervisorSession>,
+    #[serde(default)]
     pub events: Vec<SupervisorEvent>,
+    #[serde(default)]
+    pub task_summary: Option<SupervisorTaskSummary>,
+    #[serde(default)]
+    pub runtime_projection: Option<RuntimeProjection>,
 }
 
 /// Response from POST /json/foundry/topics/{scope}/supervisor/message
@@ -61,7 +77,76 @@ pub struct SupervisorMessageResponse {
     #[serde(default)]
     pub session: Option<SupervisorSession>,
     #[serde(default)]
+    pub sessions: Vec<SupervisorSession>,
+    #[serde(default)]
     pub events: Vec<SupervisorEvent>,
+    #[serde(default)]
+    pub task_summary: Option<SupervisorTaskSummary>,
+    #[serde(default)]
+    pub runtime_projection: Option<RuntimeProjection>,
+}
+
+/// Condensed task dashboard state returned with supervisor session snapshots
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+pub struct SupervisorTaskSummary {
+    #[serde(default)]
+    pub active_plan_revision_id: Option<String>,
+    #[serde(default)]
+    pub filtered_plan_revision_id: Option<String>,
+    #[serde(default)]
+    pub tasks: Vec<SupervisorTask>,
+    #[serde(default)]
+    pub task_count: Option<u32>,
+    #[serde(default)]
+    pub counts: Option<serde_json::Value>,
+    #[serde(default)]
+    pub all_task_count: Option<u32>,
+    #[serde(default)]
+    pub all_counts: Option<serde_json::Value>,
+    #[serde(default)]
+    pub completion_follow_up_required: Option<bool>,
+    #[serde(default)]
+    pub completion_missing_evidence: Option<Vec<String>>,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub runtime_state: Option<serde_json::Value>,
+}
+
+/// Typed projection of the orchestrator runtime payload.
+/// Consumed by the desktop app for runtime-first UI surfaces.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
+pub struct RuntimeProjection {
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub phase_reason: Option<String>,
+    #[serde(default)]
+    pub approval_required: Option<bool>,
+    #[serde(default)]
+    pub clarification_required: Option<bool>,
+    #[serde(default)]
+    pub execution_requested: Option<bool>,
+    #[serde(default)]
+    pub execution_prerequisites_ready: Option<bool>,
+    #[serde(default)]
+    pub execution_blockers: Option<Vec<String>>,
+    #[serde(default)]
+    pub completion_follow_up_required: Option<bool>,
+    #[serde(default)]
+    pub completion_missing_evidence: Option<Vec<String>>,
+    #[serde(default)]
+    pub observed_artifacts: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub repo_attachment: Option<serde_json::Value>,
+    #[serde(default)]
+    pub worker_backend_ready: Option<bool>,
+    #[serde(default)]
+    pub active_plan_revision_id: Option<String>,
+    #[serde(default)]
+    pub contract: Option<serde_json::Value>,
+    #[serde(default)]
+    pub runtime_state: Option<serde_json::Value>,
 }
 
 /// A task entry from the supervisor sidebar/dashboard

@@ -1,0 +1,115 @@
+{
+  "lifecycle": {
+    "strict_transitions": true,
+    "max_retries": 1,
+    "retry_backoff_seconds": 5.0,
+    "max_backoff_seconds": 60.0,
+    "circuit_breaker_failures": 3,
+    "circuit_breaker_cooldown_seconds": 120.0,
+    "allowed_transitions": {
+      "queued": [
+        "running",
+        "paused",
+        "stalled",
+        "blocked_approval",
+        "blocked_dependency",
+        "blocked_information",
+        "at_risk",
+        "canceled",
+        "failed",
+        "done"
+      ],
+      "running": [
+        "queued",
+        "paused",
+        "stalled",
+        "blocked_information",
+        "blocked_approval",
+        "at_risk",
+        "done",
+        "failed",
+        "canceled"
+      ],
+      "paused": ["queued", "running", "blocked_information", "failed", "canceled"],
+      "stalled": ["queued", "paused", "at_risk", "failed", "canceled"],
+      "blocked_approval": ["queued", "paused", "failed", "canceled"],
+      "blocked_dependency": ["queued", "paused", "failed", "canceled"],
+      "blocked_information": ["queued", "paused", "failed", "canceled"],
+      "at_risk": ["queued", "paused", "done", "failed", "canceled"],
+      "done": ["queued"],
+      "failed": ["queued"],
+      "canceled": ["queued"]
+    }
+  },
+  "reactions": [
+    {
+      "name": "task-stalled-spawn-helper",
+      "trigger": "task.stalled",
+      "action": "spawn_helper",
+      "priority": 100,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "task-stalled-notify",
+      "trigger": "task.stalled",
+      "action": "notify_human",
+      "priority": 90,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "task-failed-spawn-helper",
+      "trigger": "task.failed",
+      "action": "spawn_helper",
+      "priority": 100,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "task-failed-notify",
+      "trigger": "task.failed",
+      "action": "notify_human",
+      "priority": 90,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "approval-required-pause",
+      "trigger": "approval.required",
+      "action": "pause",
+      "priority": 100,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "preview-failed-terminate-replan",
+      "trigger": "preview.failed",
+      "action": "terminate_replan",
+      "priority": 100,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "needs-clarification-pause",
+      "trigger": "needs_clarification",
+      "action": "pause",
+      "priority": 100,
+      "max_attempts": 1,
+      "enabled": true
+    },
+    {
+      "name": "task-completed-notify",
+      "trigger": "task.completed",
+      "action": "notify_human",
+      "priority": 80,
+      "max_attempts": 1,
+      "enabled": true
+    }
+  ],
+  "monitoring": {
+    "emit_progress_events": true,
+    "emit_evidence_events": true,
+    "evidence_cost_basis": "elapsed_seconds"
+  }
+}

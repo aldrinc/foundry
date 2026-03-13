@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createSignal } from "solid-js"
+import { For, Match, Show, Switch } from "solid-js"
 import type { SupervisorEvent, JsonValue } from "@foundry/desktop/bindings"
 
 // ── Main event dispatcher ──
@@ -15,11 +15,14 @@ export function EventItem(props: { event: SupervisorEvent }) {
       <Match when={props.event.kind === "tool_result"}>
         <ToolEvent event={props.event} type="result" />
       </Match>
-      <Match when={props.event.kind === "dispatch_result"}>
-        <DispatchEvent event={props.event} />
+      <Match when={props.event.kind === "execution_result"}>
+        <ExecutionEvent event={props.event} />
       </Match>
       <Match when={props.event.kind === "plan_draft"}>
         <PlanDraftEvent event={props.event} />
+      </Match>
+      <Match when={props.event.kind?.startsWith("lifecycle.")}>
+        <LifecycleEvent event={props.event} />
       </Match>
     </Switch>
   )
@@ -117,40 +120,89 @@ function ToolEvent(props: { event: SupervisorEvent; type: "call" | "result" }) {
   )
 }
 
-// ── Dispatch result (task cards) ──
+// ── Execution result ──
 
-function DispatchEvent(props: { event: SupervisorEvent }) {
+function ExecutionEvent(props: { event: SupervisorEvent }) {
   const payload = () => (props.event.payload || {}) as Record<string, JsonValue>
   const tasks = () => {
     const t = payload()?.tasks
     if (Array.isArray(t)) return t as Record<string, JsonValue>[]
     return []
   }
+  const planRevisionId = () => extractString(payload(), "plan_revision_id")
 
   return (
-    <div class="mb-2 rounded-lg border border-[var(--border-default)] bg-[var(--background-elevated)] p-2">
-      <div class="text-xs font-medium text-[var(--text-secondary)] mb-1">
-        Task Dispatch ({tasks().length} tasks)
+    <details class="mb-2 group" open>
+      <summary class="flex items-center gap-1.5 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] list-none">
+        <svg
+          width="10" height="10" viewBox="0 0 10 10" fill="none"
+          class="transition-transform group-open:rotate-90 shrink-0"
+        >
+          <path d="M3 1.5l4 3.5-4 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="text-[var(--status-info)]">⇒</span>
+        <span>Execution started for {tasks().length} task{tasks().length !== 1 ? "s" : ""}</span>
+        <Show when={planRevisionId()}>
+          <span class="text-[10px] text-[var(--text-tertiary)] font-mono">{planRevisionId()}</span>
+        </Show>
+      </summary>
+
+      <div class="ml-4 mt-1 space-y-0.5">
+        <Show when={props.event.content_md}>
+          <div class="text-[10px] text-[var(--text-tertiary)] whitespace-pre-wrap mb-1">
+            {props.event.content_md}
+          </div>
+        </Show>
+        <For each={tasks()}>
+          {(task) => {
+            const role = () => extractString(task, "assigned_role")
+            const worker = () => extractString(task, "assigned_worker")
+            const provider = () => extractString(task, "provider")
+            const status = () => extractString(task, "status") || "queued"
+            const taskId = () => extractString(task, "task_id")
+            const deps = () => {
+              const d = task.depends_on_task_ids
+              return Array.isArray(d) ? d.filter((v): v is string => typeof v === "string") : []
+            }
+
+            return (
+              <details class="group/dtask">
+                <summary class="flex items-center gap-1.5 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] list-none py-0.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] shrink-0" />
+                  <Show when={role()}>
+                    <span class="text-[10px] text-[var(--text-tertiary)] shrink-0">{role()}</span>
+                  </Show>
+                  <span class="truncate flex-1">
+                    {extractString(task, "title") || taskId() || "Task"}
+                  </span>
+                  <span class="text-[10px] text-[var(--text-tertiary)]">{status()}</span>
+                  <svg
+                    width="8" height="8" viewBox="0 0 10 10" fill="none"
+                    class="transition-transform group-open/dtask:rotate-90 shrink-0 text-[var(--text-tertiary)]"
+                  >
+                    <path d="M3 1.5l4 3.5-4 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </summary>
+                <div class="ml-5 mt-0.5 mb-1 space-y-0.5 text-[10px] text-[var(--text-tertiary)]">
+                  <Show when={taskId()}>
+                    <div>id: <span class="font-mono">{taskId()}</span></div>
+                  </Show>
+                  <Show when={worker()}>
+                    <div>worker: <span class="font-mono">{worker()}</span></div>
+                  </Show>
+                  <Show when={provider()}>
+                    <div>provider: {provider()}</div>
+                  </Show>
+                  <Show when={deps().length > 0}>
+                    <div>depends on: {deps().join(", ")}</div>
+                  </Show>
+                </div>
+              </details>
+            )
+          }}
+        </For>
       </div>
-      <Show when={props.event.content_md}>
-        <div class="text-xs text-[var(--text-tertiary)] mb-1 whitespace-pre-wrap">
-          {props.event.content_md}
-        </div>
-      </Show>
-      <Show when={tasks().length > 0}>
-        <div class="space-y-1">
-          <For each={tasks()}>
-            {(task) => (
-              <div class="flex items-center gap-1.5 text-[10px] text-[var(--text-secondary)]">
-                <span class="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] shrink-0" />
-                <span class="truncate">{extractString(task, "title") || "Task"}</span>
-                <span class="text-[var(--text-tertiary)]">{extractString(task, "assigned_role") || ""}</span>
-              </div>
-            )}
-          </For>
-        </div>
-      </Show>
-    </div>
+    </details>
   )
 }
 
@@ -168,6 +220,88 @@ function PlanDraftEvent(props: { event: SupervisorEvent }) {
     </div>
   )
 }
+
+// ── Lifecycle events (restore, cleanup, reaction, notice) ──
+
+function LifecycleEvent(props: { event: SupervisorEvent }) {
+  const payload = () => (props.event.payload || {}) as Record<string, JsonValue>
+  const subKind = () => props.event.kind?.replace("lifecycle.", "") || ""
+
+  const icon = () => {
+    switch (subKind()) {
+      case "restore": return "↻"
+      case "cleanup": return "×"
+      case "reaction": return "⚡"
+      case "notice": return "ℹ"
+      default: return "·"
+    }
+  }
+
+  const color = () => {
+    switch (subKind()) {
+      case "restore": return "var(--status-info)"
+      case "cleanup": return "var(--text-tertiary)"
+      case "reaction": return "var(--status-warning)"
+      case "notice": return "var(--text-secondary)"
+      default: return "var(--text-tertiary)"
+    }
+  }
+
+  const label = () => {
+    switch (subKind()) {
+      case "restore": return "Worker restored"
+      case "cleanup": return "Worker cleaned up"
+      case "reaction": return "Reaction"
+      case "notice": return "Notice"
+      default: return `lifecycle.${subKind()}`
+    }
+  }
+
+  const actor = () => extractString(payload(), "actor")
+  const taskId = () => extractString(payload(), "task_id")
+  const workerId = () => extractString(payload(), "worker_session_id")
+  const stopped = () => {
+    const v = payload().workspace_stopped
+    return v === true
+  }
+
+  return (
+    <details class="mb-2 group">
+      <summary class="flex items-center gap-1.5 cursor-pointer text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] list-none">
+        <svg
+          width="10" height="10" viewBox="0 0 10 10" fill="none"
+          class="transition-transform group-open:rotate-90"
+        >
+          <path d="M3 1.5l4 3.5-4 3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="shrink-0" style={{ color: color() }}>{icon()}</span>
+        <span style={{ color: color() }}>{label()}</span>
+        <Show when={actor()}>
+          <span class="text-[10px] text-[var(--text-tertiary)]">{actor()}</span>
+        </Show>
+      </summary>
+      <div class="ml-4 mt-1 space-y-0.5 text-[10px] text-[var(--text-tertiary)]">
+        <Show when={taskId()}>
+          <div>task: <span class="font-mono">{taskId()}</span></div>
+        </Show>
+        <Show when={workerId()}>
+          <div>worker: <span class="font-mono">{workerId()}</span></div>
+        </Show>
+        <Show when={subKind() === "cleanup" && stopped()}>
+          <div>workspace stopped</div>
+        </Show>
+        <Show when={props.event.content_md}>
+          <div class="text-[var(--text-secondary)] whitespace-pre-wrap">{props.event.content_md}</div>
+        </Show>
+      </div>
+    </details>
+  )
+}
+
+// ── REMOVED: PlanSection, PlanItem, TaskGroupSection, TaskGroupRow ──
+// The backend never emits "plan" or "job_started" event kinds.
+// Real events are "plan_draft" and "execution_result" (handled above).
+// Task state flows through session_state SSE (store.tasks), rendered by SupervisorTaskList.
 
 // ── Trace fields (engine, model, etc.) ──
 

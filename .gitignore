@@ -36,6 +36,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+data/
+services/foundry-server/data/
 
 .terraform/
 *.tfstate

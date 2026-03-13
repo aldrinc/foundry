@@ -6,6 +6,8 @@ import type {
   SupervisorSession,
   SupervisorEvent,
   SupervisorTask,
+  SupervisorTaskSummary,
+  RuntimeProjection,
   JsonValue,
 } from "@foundry/desktop/bindings"
 import {
@@ -14,6 +16,10 @@ import {
 } from "./agent-runtime"
 import { useAgents } from "./agents"
 import { useNavigation } from "./navigation"
+import {
+  extractRuntimeProjection,
+  type RuntimeProjectionCarrier,
+} from "./supervisor-runtime"
 import { shouldKeepSupervisorOpenForNarrow } from "./supervisor-navigation"
 
 // ── Store shape ──
@@ -26,6 +32,9 @@ export interface SupervisorStore {
   topicName: string
 
   session: SupervisorSession | null
+  sessions: SupervisorSession[]
+  selectedSessionId: string | null
+  draftingNewSession: boolean
   status: "idle" | "connecting" | "connected" | "disconnected"
 
   events: SupervisorEvent[]
@@ -33,13 +42,32 @@ export interface SupervisorStore {
   seenEventIds: Set<number>
 
   sendingMessage: boolean
+  awaitingResponse: boolean              // true from send until first non-user event
   pendingUserEchoes: Map<string, number> // clientMsgId -> localId
   nextLocalEventId: number
 
   lastThinkingPreview: string
   lastThinkingEventMs: number
+  streamingMessageId: number | null      // event ID currently being streamed into
 
   tasks: SupervisorTask[]
+
+  // Runtime summary — authoritative state from orchestrator
+  runtimePhase: string | null
+  runtimePhaseReason: string | null
+  approvalRequired: boolean
+  clarificationRequired: boolean
+  executionRequested: boolean
+  executionReady: boolean
+  executionBlockers: string[]
+  completionFollowUpRequired: boolean
+  completionMissingEvidence: string[]
+  repoAttachment: JsonValue | null
+  workerBackendReady: boolean
+  observedArtifacts: JsonValue[]
+  activePlanRevisionId: string | null
+  taskCounts: { total: number; pending: number; running: number; completed: number; failed: number } | null
+
   warning: string
   warningTone: "info" | "error"
 }
@@ -51,16 +79,35 @@ const initialStore: SupervisorStore = {
   streamName: "",
   topicName: "",
   session: null,
+  sessions: [],
+  selectedSessionId: null,
+  draftingNewSession: false,
   status: "idle",
   events: [],
   afterId: 0,
   seenEventIds: new Set(),
   sendingMessage: false,
+  awaitingResponse: false,
   pendingUserEchoes: new Map(),
   nextLocalEventId: -1,
   lastThinkingPreview: "",
   lastThinkingEventMs: 0,
+  streamingMessageId: null,
   tasks: [],
+  runtimePhase: null,
+  runtimePhaseReason: null,
+  approvalRequired: false,
+  clarificationRequired: false,
+  executionRequested: false,
+  executionReady: false,
+  executionBlockers: [],
+  completionFollowUpRequired: false,
+  completionMissingEvidence: [],
+  repoAttachment: null,
+  workerBackendReady: false,
+  observedArtifacts: [],
+  activePlanRevisionId: null,
+  taskCounts: null,
   warning: "",
   warningTone: "info",
 }
@@ -71,11 +118,15 @@ export interface SupervisorContext {
   store: SupervisorStore
   openForTopic(streamId: number, streamName: string, topic: string): void
   close(): void
+  selectSession(sessionId: string): void
+  startNewSession(): void
   sendMessage(text: string): Promise<void>
   controlTask(taskId: string, action: string): Promise<void>
   replyToClarification(taskId: string, message: string): Promise<void>
   isThinkingFresh(): boolean
   livePreviewMode(): "thinking" | "reconnecting" | null
+  isAwaitingFirstResponse(): boolean
+  isStreaming(eventId: number): boolean
 }
 
 const SupervisorCtx = createContext<SupervisorContext>()
@@ -123,9 +174,73 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     return HAS_TAURI_BRIDGE && !IS_DEMO
   }
 
+  function requestedSessionId(state: SupervisorStore = store) {
+    if (state.draftingNewSession) return null
+    return state.selectedSessionId || state.session?.session_id || null
+  }
+
+  function replaceSessionView(sessionId: string | null, draft = false) {
+    setStore(produce(s => {
+      s.selectedSessionId = sessionId
+      s.draftingNewSession = draft
+      s.session = sessionId
+        ? (s.sessions.find(item => item.session_id === sessionId) || null)
+        : null
+      s.events = []
+      s.afterId = 0
+      s.seenEventIds = new Set()
+      s.pendingUserEchoes = new Map()
+      s.nextLocalEventId = -1
+      s.lastThinkingPreview = ""
+      s.lastThinkingEventMs = 0
+      s.awaitingResponse = false
+      s.streamingMessageId = null
+      s.tasks = []
+      s.runtimePhase = null
+      s.runtimePhaseReason = null
+      s.approvalRequired = false
+      s.clarificationRequired = false
+      s.executionRequested = false
+      s.executionReady = false
+      s.executionBlockers = []
+      s.completionFollowUpRequired = false
+      s.completionMissingEvidence = []
+      s.repoAttachment = null
+      s.workerBackendReady = false
+      s.observedArtifacts = []
+      s.activePlanRevisionId = null
+      s.taskCounts = null
+      s.warning = ""
+      s.warningTone = "info"
+      s.status = draft ? "connected" : "connecting"
+    }))
+  }
+
   function applySupervisorEvent(state: SupervisorStore, evt: SupervisorEvent) {
+    if (state.draftingNewSession) return
+    if (state.selectedSessionId && evt.session_id && evt.session_id !== state.selectedSessionId) return
     if (state.seenEventIds.has(evt.id)) return
     state.seenEventIds.add(evt.id)
+
+    // Always update cursor
+    if (evt.id > state.afterId) {
+      state.afterId = evt.id
+    }
+
+    const kind = evt.kind
+    const payload = (evt.payload || {}) as Record<string, any>
+
+    // ── DEAD HANDLERS ──
+    // The backend never emits "plan_update", "task_update", or "content_delta".
+    // Real task state flows through session_state SSE → mergeTaskSummary().
+    // Real plan updates come as new plan_draft events.
+    // These guards remain as defensive no-ops in case a future backend revision
+    // starts emitting them — they silently swallow the event to avoid duplication.
+    if (kind === "plan_update" || kind === "task_update" || kind === "content_delta") {
+      return
+    }
+
+    // ── Standard events (push to timeline) ──
 
     const nextEvent =
       evt.role === "user"
@@ -141,37 +256,111 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       state.pendingUserEchoes.delete(nextEvent.client_msg_id)
     }
 
-    state.events.push(nextEvent)
-
-    if (nextEvent.id > state.afterId) {
-      state.afterId = nextEvent.id
+    // Clear awaiting response when first non-user event arrives
+    if (nextEvent.role !== "user") {
+      state.awaitingResponse = false
     }
 
-    if (nextEvent.kind === "thinking") {
+    state.events.push(nextEvent)
+
+    // REMOVED: plan/job_started indexing — backend never emits these event kinds.
+    // Task state is authoritative from session_state SSE → store.tasks.
+
+    // Existing thinking/message tracking
+    if (kind === "thinking") {
       state.lastThinkingPreview = nextEvent.content_md || ""
       state.lastThinkingEventMs = Date.now()
-    } else if (nextEvent.kind === "message" && nextEvent.role === "assistant") {
+    } else if (kind === "message" && nextEvent.role === "assistant") {
       state.lastThinkingPreview = ""
       state.lastThinkingEventMs = 0
+      state.streamingMessageId = null
+    }
+  }
+
+  function mergeRuntimeProjection(s: SupervisorStore, proj: RuntimeProjection) {
+    s.runtimePhase = proj.phase ?? s.runtimePhase
+    s.runtimePhaseReason = proj.phase_reason ?? s.runtimePhaseReason
+    s.approvalRequired = proj.approval_required ?? s.approvalRequired
+    s.clarificationRequired = proj.clarification_required ?? s.clarificationRequired
+    s.executionRequested = proj.execution_requested ?? s.executionRequested
+    s.executionReady = proj.execution_prerequisites_ready ?? s.executionReady
+    s.executionBlockers = proj.execution_blockers ?? s.executionBlockers
+    s.completionFollowUpRequired = proj.completion_follow_up_required ?? s.completionFollowUpRequired
+    s.completionMissingEvidence = proj.completion_missing_evidence ?? s.completionMissingEvidence
+    s.repoAttachment = proj.repo_attachment ?? s.repoAttachment
+    s.workerBackendReady = proj.worker_backend_ready ?? s.workerBackendReady
+    s.observedArtifacts = (proj.observed_artifacts as JsonValue[] | null) ?? s.observedArtifacts
+    s.activePlanRevisionId = proj.active_plan_revision_id ?? s.activePlanRevisionId
+  }
+
+  function mergeTaskSummary(s: SupervisorStore, summary: SupervisorTaskSummary) {
+    if (summary.tasks) s.tasks = summary.tasks
+    if (summary.phase != null) s.runtimePhase = summary.phase
+    if (summary.active_plan_revision_id != null) s.activePlanRevisionId = summary.active_plan_revision_id
+    if (summary.completion_follow_up_required != null) s.completionFollowUpRequired = summary.completion_follow_up_required
+    if (summary.completion_missing_evidence != null) s.completionMissingEvidence = summary.completion_missing_evidence
+
+    const taskRuntimeProjection = extractRuntimeProjection({
+      phase: summary.phase ?? null,
+      runtime_state: summary.runtime_state ?? null,
+    })
+    if (taskRuntimeProjection) {
+      mergeRuntimeProjection(s, taskRuntimeProjection)
+    }
+
+    // Parse counts into taskCounts
+    if (summary.counts != null && typeof summary.counts === "object") {
+      const c = summary.counts as Record<string, number>
+      s.taskCounts = {
+        total: summary.task_count ?? 0,
+        pending: c.pending ?? 0,
+        running: c.running ?? 0,
+        completed: c.completed ?? 0,
+        failed: c.failed ?? 0,
+      }
     }
   }
 
   function mergeSupervisorSnapshot(payload: {
     session?: SupervisorSession | null
+    sessions?: SupervisorSession[]
     events?: SupervisorEvent[]
     tasks?: SupervisorTask[]
+    taskSummary?: SupervisorTaskSummary | null
+    runtimeProjection?: RuntimeProjection | null
   }) {
     setStore(produce(s => {
+      const sessionRuntimeProjection = payload.session
+        ? extractRuntimeProjection(payload.session as RuntimeProjectionCarrier)
+        : null
+
+      if (payload.sessions) {
+        s.sessions = payload.sessions
+      }
       if (payload.session) {
         s.session = payload.session
+        if (s.draftingNewSession || !s.selectedSessionId) {
+          s.selectedSessionId = payload.session.session_id
+          s.draftingNewSession = false
+        }
       }
 
       for (const evt of payload.events || []) {
         applySupervisorEvent(s, evt)
       }
 
-      if (payload.tasks) {
+      // Merge runtime state from authoritative sources
+      if (payload.taskSummary) {
+        mergeTaskSummary(s, payload.taskSummary)
+      } else if (payload.tasks) {
         s.tasks = payload.tasks
+      }
+
+      if (sessionRuntimeProjection) {
+        mergeRuntimeProjection(s, sessionRuntimeProjection)
+      }
+      if (payload.runtimeProjection) {
+        mergeRuntimeProjection(s, payload.runtimeProjection)
       }
     }))
   }
@@ -192,13 +381,13 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     clearConnectionTimer()
   }
 
-  async function refreshSidebar(topicScopeId: string) {
-    if (sidebarPollInFlight || store.topicScopeId !== topicScopeId || !store.active) return
+  async function refreshSidebar(topicScopeId: string, sessionId: string | null) {
+    if (sidebarPollInFlight || store.topicScopeId !== topicScopeId || !store.active || store.draftingNewSession) return
     sidebarPollInFlight = true
 
     try {
-      const result = await commands.getSupervisorSidebar(props.orgId, topicScopeId)
-      if (result.status === "ok" && store.topicScopeId === topicScopeId) {
+      const result = await commands.getSupervisorSidebar(props.orgId, topicScopeId, sessionId)
+      if (result.status === "ok" && store.topicScopeId === topicScopeId && requestedSessionId() === sessionId) {
         mergeSupervisorSnapshot({ tasks: result.data.tasks })
       }
     } catch (error) {
@@ -208,19 +397,21 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     }
   }
 
-  async function pollSession(topicScopeId: string, useFallbackWarning: boolean) {
-    if (sessionPollInFlight || store.topicScopeId !== topicScopeId || !store.active) return
+  async function pollSession(topicScopeId: string, sessionId: string | null, useFallbackWarning: boolean) {
+    if (sessionPollInFlight || store.topicScopeId !== topicScopeId || !store.active || store.draftingNewSession) return
     sessionPollInFlight = true
 
     try {
-      const result = await commands.getSupervisorSession(props.orgId, topicScopeId, store.afterId, 200)
-      if (store.topicScopeId !== topicScopeId) return
+      const result = await commands.getSupervisorSession(props.orgId, topicScopeId, sessionId, store.afterId, 200)
+      if (store.topicScopeId !== topicScopeId || requestedSessionId() !== sessionId) return
 
       if (result.status === "ok") {
         mergeSupervisorSnapshot({
           session: result.data.session,
+          sessions: result.data.sessions,
           events: result.data.events,
-          tasks: (result.data as any).task_summary?.tasks,
+          taskSummary: result.data.task_summary,
+          runtimeProjection: result.data.runtime_projection,
         })
         setStore("status", "connected")
         if (useFallbackWarning) {
@@ -247,7 +438,7 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     }
   }
 
-  function startPollingFallback(topicScopeId: string) {
+  function startPollingFallback(topicScopeId: string, sessionId: string | null) {
     if (store.topicScopeId !== topicScopeId || !store.active) return
     if (pollingFallbackActive) return
 
@@ -265,13 +456,17 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       s.warningTone = "info"
     }))
 
-    void pollSession(topicScopeId, true)
-    void refreshSidebar(topicScopeId)
+    if (!store.draftingNewSession) {
+      void pollSession(topicScopeId, sessionId, true)
+      void refreshSidebar(topicScopeId, sessionId)
+    }
 
     if (!pollTimer) {
       pollTimer = setInterval(() => {
-        void pollSession(topicScopeId, true)
-        void refreshSidebar(topicScopeId)
+        if (store.draftingNewSession) return
+        const currentSessionId = requestedSessionId()
+        void pollSession(topicScopeId, currentSessionId, true)
+        void refreshSidebar(topicScopeId, currentSessionId)
       }, SUPERVISOR_POLL_INTERVAL_MS)
     }
   }
@@ -289,12 +484,31 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     if (!store.active) return
 
     setStore(produce(s => {
+      const sessionTaskSummary = payload?.session?.task_summary as SupervisorTaskSummary | null | undefined
+      const sessionRuntimeProjection = extractRuntimeProjection(
+        payload?.session as RuntimeProjectionCarrier | null | undefined,
+      )
+
+      if (payload.sessions) {
+        s.sessions = payload.sessions
+      }
       if (payload.session) {
         s.session = payload.session
+        if (s.draftingNewSession || !s.selectedSessionId) {
+          s.selectedSessionId = payload.session.session_id
+          s.draftingNewSession = false
+        }
       }
-      // Update task summary from periodic session_state events
-      if (payload.task_summary?.tasks) {
-        s.tasks = payload.task_summary.tasks
+      // Update task summary and runtime projection from periodic session_state events
+      if (payload.task_summary) {
+        mergeTaskSummary(s, payload.task_summary)
+      } else if (sessionTaskSummary) {
+        mergeTaskSummary(s, sessionTaskSummary)
+      }
+      if (payload.runtime_projection) {
+        mergeRuntimeProjection(s, payload.runtime_projection)
+      } else if (sessionRuntimeProjection) {
+        mergeRuntimeProjection(s, sessionRuntimeProjection)
       }
     }))
   }
@@ -315,7 +529,7 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
     if (!store.topicScopeId) return
 
     console.warn("[Supervisor] Live stream disconnected:", payload)
-    startPollingFallback(store.topicScopeId)
+    startPollingFallback(store.topicScopeId, requestedSessionId())
   }
 
   async function setupEventListeners() {
@@ -357,16 +571,35 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
         s.streamName = streamName
         s.topicName = topic
         s.session = null
+        s.sessions = []
+        s.selectedSessionId = null
+        s.draftingNewSession = false
         s.status = "connecting"
         s.events = []
         s.afterId = 0
         s.seenEventIds = new Set()
         s.sendingMessage = false
+        s.awaitingResponse = false
         s.pendingUserEchoes = new Map()
         s.nextLocalEventId = -1
         s.lastThinkingPreview = ""
         s.lastThinkingEventMs = 0
+        s.streamingMessageId = null
         s.tasks = []
+        s.runtimePhase = null
+        s.runtimePhaseReason = null
+        s.approvalRequired = false
+        s.clarificationRequired = false
+        s.executionRequested = false
+        s.executionReady = false
+        s.executionBlockers = []
+        s.completionFollowUpRequired = false
+        s.completionMissingEvidence = []
+        s.repoAttachment = null
+        s.workerBackendReady = false
+        s.observedArtifacts = []
+        s.activePlanRevisionId = null
+        s.taskCounts = null
         s.warning = ""
         s.warningTone = "info"
       }))
@@ -383,12 +616,12 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       // Set up Tauri event listeners, then start the Rust SSE stream
       setupEventListeners()
         .then(() => {
-          return commands.startSupervisorStream(props.orgId, topicScopeId, 0)
+          return commands.startSupervisorStream(props.orgId, topicScopeId, null, 0)
         })
         .then((result) => {
           if (result.status === "error") {
             console.error("[Supervisor] Failed to start SSE stream:", result.error)
-            startPollingFallback(topicScopeId)
+            startPollingFallback(topicScopeId, null)
           }
         })
         .catch((err) => {
@@ -401,12 +634,11 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
         })
 
       // Initial one-shot GET to load existing session + event history
-      void pollSession(topicScopeId, false)
-      void refreshSidebar(topicScopeId)
+      void pollSession(topicScopeId, null, false)
 
       connectionTimer = setTimeout(() => {
         if (store.status === "connecting" && store.topicScopeId === topicScopeId) {
-          startPollingFallback(topicScopeId)
+          startPollingFallback(topicScopeId, null)
         }
       }, SUPERVISOR_CONNECTION_TIMEOUT_MS)
     },
@@ -422,9 +654,40 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
         s.active = false
         s.status = "idle"
         s.topicScopeId = null
+        s.session = null
+        s.sessions = []
+        s.selectedSessionId = null
+        s.draftingNewSession = false
         s.warning = ""
         s.warningTone = "info"
       }))
+    },
+
+    selectSession(sessionId) {
+      if (!store.topicScopeId || !supervisorRuntimeAvailable()) return
+      const targetSessionId = sessionId.trim()
+      if (!targetSessionId || targetSessionId === requestedSessionId()) return
+
+      stopPollingFallback()
+      replaceSessionView(targetSessionId, false)
+      void commands.startSupervisorStream(props.orgId, store.topicScopeId, targetSessionId, 0)
+        .then((result) => {
+          if (result.status === "error") {
+            console.error("[Supervisor] Failed to switch SSE stream:", result.error)
+            startPollingFallback(store.topicScopeId!, targetSessionId)
+          }
+        })
+      void pollSession(store.topicScopeId, targetSessionId, false)
+      void refreshSidebar(store.topicScopeId, targetSessionId)
+    },
+
+    startNewSession() {
+      if (!store.topicScopeId) return
+      stopPollingFallback()
+      if (supervisorRuntimeAvailable()) {
+        void commands.stopSupervisorStream(props.orgId)
+      }
+      replaceSessionView(null, true)
     },
 
     async sendMessage(text: string) {
@@ -436,18 +699,21 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
 
       const clientMsgId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
       const localId = store.nextLocalEventId
+      const sessionId = requestedSessionId()
+      const creatingSession = store.draftingNewSession || !sessionId
       const delegateContext = agents.buildSupervisorDelegateContext(store.streamId)
       const outboundMessage = wrapSupervisorMessageWithDelegates(text, delegateContext)
 
       // Local echo: immediately append as user message
       setStore(produce(s => {
         s.sendingMessage = true
+        s.awaitingResponse = true
         s.nextLocalEventId--
 
         const echo: SupervisorEvent = {
           id: localId,
           topic_scope_id: s.topicScopeId!,
-          session_id: s.session?.session_id || "",
+          session_id: sessionId || "",
           ts: new Date().toISOString(),
           kind: "message",
           role: "user",
@@ -461,12 +727,17 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       try {
         const result = await commands.postSupervisorMessage(
           props.orgId,
-          store.topicScopeId!,
-          outboundMessage,
-          clientMsgId,
-          store.streamId,
-          store.streamName || null,
-          store.topicName || null,
+          {
+            topicScopeId: store.topicScopeId!,
+            message: outboundMessage,
+            sessionId,
+            sessionCreateMode: creatingSession ? "manual" : null,
+            sessionTitle: creatingSession ? text : null,
+            clientMsgId,
+            streamId: store.streamId,
+            streamName: store.streamName || null,
+            topic: store.topicName || null,
+          },
         )
 
         if (result.status === "error") {
@@ -479,11 +750,25 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
         } else {
           // Process any events in the response (for immediate feedback)
           const data = result.data
-          if (data.session) {
-            setStore("session", data.session)
-          }
-          if (data.events) {
-            mergeSupervisorSnapshot({ events: data.events })
+          mergeSupervisorSnapshot({
+            session: data.session,
+            sessions: data.sessions,
+            events: data.events,
+            taskSummary: data.task_summary,
+            runtimeProjection: data.runtime_projection,
+          })
+          const nextSessionId = data.session?.session_id || sessionId
+          if (nextSessionId && supervisorRuntimeAvailable()) {
+            const streamResult = await commands.startSupervisorStream(
+              props.orgId,
+              store.topicScopeId!,
+              nextSessionId,
+              store.afterId,
+            )
+            if (streamResult.status === "error") {
+              console.error("[Supervisor] Failed to refresh SSE stream:", streamResult.error)
+              startPollingFallback(store.topicScopeId!, nextSessionId)
+            }
           }
           setStore(produce(s => {
             if (s.warningTone === "error") {
@@ -554,6 +839,14 @@ export function SupervisorProvider(props: { orgId: string; children: JSX.Element
       if (store.status === "disconnected") return "reconnecting"
       if (ctx.isThinkingFresh() && store.lastThinkingPreview) return "thinking"
       return null
+    },
+
+    isAwaitingFirstResponse() {
+      return store.awaitingResponse
+    },
+
+    isStreaming(eventId: number) {
+      return store.streamingMessageId === eventId
     },
   }
 

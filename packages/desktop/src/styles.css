@@ -189,8 +189,8 @@
   :root[data-theme="foundry"] [data-component="stream-sidebar"],
   :root[data-theme="foundry"] [data-component="right-sidebar"] {
     --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-tertiary: #64748b;
+    --text-secondary: #a8b8c8;
+    --text-tertiary: #829aab;
 
     --border-default: #2d4a4f;
     --border-strong: #3d5a5f;
@@ -253,17 +253,19 @@
 
   /* ===== MESSAGE CONTENT TYPOGRAPHY ===== */
 
-  /* Base typography — allow selection, improve line-height */
+  /* Base typography — allow selection, improve line-height
+     NNG research: optimal reading line-height is 1.4–1.5.
+     Discord ~1.375, Slack ~1.46. We use 1.46 for chat density. */
   [data-component="message-content"] {
     user-select: text;
-    line-height: 1.5;
+    line-height: 1.46;
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
 
   /* Paragraph spacing */
   [data-component="message-content"] p {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
 
   [data-component="message-content"] p:last-child {
@@ -560,18 +562,68 @@
     }
   }
 
-  /* Code blocks */
+  /* Code blocks — Mattermost-style with language label + copy button */
   [data-component="message-content"] pre {
+    position: relative;
     background: var(--background-elevated);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
     padding: 0.75rem 1rem;
+    padding-top: 2rem; /* space for language label / copy button */
     margin: 0.5rem 0;
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: 0.8125rem;
     line-height: 1.5;
     color: var(--text-primary);
+  }
+
+  /* Language label — top-left pill */
+  [data-component="message-content"] pre .code-block-lang {
+    position: absolute;
+    top: 0.375rem;
+    left: 0.75rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    font-family: var(--font-sans);
+    letter-spacing: 0.02em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Copy button — top-right */
+  [data-component="message-content"] pre .code-block-copy {
+    position: absolute;
+    top: 0.375rem;
+    right: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 140ms ease, color 140ms ease, background 140ms ease;
+  }
+
+  [data-component="message-content"] pre:hover .code-block-copy {
+    opacity: 1;
+  }
+
+  [data-component="message-content"] pre .code-block-copy:hover {
+    color: var(--text-primary);
+    background: var(--background-surface);
+  }
+
+  [data-component="message-content"] pre .code-block-copy--copied {
+    opacity: 1;
+    color: var(--status-success);
   }
 
   [data-component="message-content"] pre code {
@@ -603,16 +655,25 @@
     color: var(--text-primary);
   }
 
-  /* Blockquotes */
+  /* Blockquotes / Reply indicators — enhanced from Mattermost CommentedOn pattern */
   [data-component="message-content"] blockquote {
-    border-left: 3px solid var(--border-strong);
-    padding: 0.25rem 0 0.25rem 0.75rem;
-    margin: 0.5rem 0;
+    border-left: 3px solid var(--interactive-primary);
+    padding: 0.375rem 0.75rem;
+    margin: 0.375rem 0;
     color: var(--text-secondary);
+    background: color-mix(in srgb, var(--background-surface) 60%, var(--background-elevated) 40%);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    font-size: 0.9em;
   }
 
   [data-component="message-content"] blockquote p:last-child {
     margin-bottom: 0;
+  }
+
+  /* Nested blockquotes — subtle left border */
+  [data-component="message-content"] blockquote blockquote {
+    border-left-color: var(--border-strong);
+    background: transparent;
   }
 
   /* Lists — restore bullets/numbers stripped by Tailwind reset */
@@ -720,6 +781,84 @@
     color: var(--text-tertiary);
   }
 
+  /* File attachment cards — Mattermost FileAttachment pattern */
+  [data-component="message-content"] .file-attachment-card {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    max-width: 360px;
+    padding: 0.5rem 0.75rem;
+    margin: 0.375rem 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--background-surface);
+    transition: border-color 140ms ease;
+  }
+
+  [data-component="message-content"] .file-attachment-card:hover {
+    border-color: var(--border-strong);
+  }
+
+  [data-component="message-content"] .file-attachment-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  [data-component="message-content"] .file-attachment-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  [data-component="message-content"] .file-attachment-name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-family: var(--font-sans);
+  }
+
+  [data-component="message-content"] .file-attachment-meta {
+    font-size: 0.6875rem;
+    color: var(--text-tertiary);
+    font-family: var(--font-sans);
+  }
+
+  [data-component="message-content"] .file-attachment-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    text-decoration: none;
+    transition: color 140ms ease, background 140ms ease;
+  }
+
+  [data-component="message-content"] .file-attachment-download:hover {
+    color: var(--interactive-primary);
+    background: color-mix(in srgb, var(--interactive-primary) 10%, transparent);
+  }
+
+  /* Focus indicators — WCAG SC 2.4.7: focus must be visible */
+  :focus-visible {
+    outline: 2px solid var(--interactive-primary);
+    outline-offset: 2px;
+  }
+
+  /* Remove default outline for mouse clicks — keep for keyboard */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
   /* Scrollbar styling */
   ::-webkit-scrollbar {
     width: 6px;
@@ -738,9 +877,26 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--border-strong);
   }
+
+  /* Respect reduced-motion preference (WCAG SC 2.3.3) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 @layer components {
+  /* Typing indicator bounce animation (Slack/Discord-style) */
+  @keyframes typing-dot {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-3px); opacity: 1; }
+  }
+
   /* Supervisor pulse animation for live indicator */
   .supervisor-pulse {
     animation: supervisor-pulse 1.5s ease-in-out infinite;
@@ -749,6 +905,16 @@
   @keyframes supervisor-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
+  }
+
+  /* Supervisor task spinner for running status */
+  .supervisor-spin {
+    animation: supervisor-spin 0.8s linear infinite;
+  }
+
+  @keyframes supervisor-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   /* Supervisor content: rendered markdown styles */

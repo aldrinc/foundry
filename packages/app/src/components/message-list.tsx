@@ -301,6 +301,9 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
       <div
         ref={scrollContainer!}
         class="flex-1 overflow-y-auto"
+        role="log"
+        aria-live="polite"
+        aria-label="Message history"
         onScroll={handleScroll}
       >
         {/* Loading indicator at top */}

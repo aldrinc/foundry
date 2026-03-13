@@ -70,6 +70,7 @@ from .local_auth import (
     normalize_email,
     verify_password,
 )
+from .orchestration import create_orchestration_app
 from .store import FoundryStore
 
 
@@ -89,6 +90,22 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.store = FoundryStore(server_config.database_path)
     app.state.store.migrate()
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    if server_config.orchestration_enabled:
+        orchestration_app = create_orchestration_app(server_config)
+        app.state.orchestration_app = orchestration_app
+        app.mount(
+            server_config.orchestration_mount_path,
+            orchestration_app,
+            name="foundry-orchestration",
+        )
+
+        @app.on_event("startup")
+        async def start_orchestration() -> None:
+            await orchestration_app.router.startup()
+
+        @app.on_event("shutdown")
+        async def stop_orchestration() -> None:
+            await orchestration_app.router.shutdown()
 
     def ensure_bootstrap_admin() -> None:
         if server_config.auth_provider.value != "local_password":

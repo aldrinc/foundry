@@ -52,7 +52,7 @@ export interface AppSettings {
 const DEFAULTS: AppSettings = {
   // Local
   theme: "foundry",
-  fontSize: "normal",
+  fontSize: "medium",
   homeView: "inbox",
   animateImages: "always",
   language: "en",

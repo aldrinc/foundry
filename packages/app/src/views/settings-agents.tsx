@@ -7,6 +7,8 @@ import {
   type DelegateAgent,
   useAgents,
 } from "../context/agents"
+import { useOrg } from "../context/org"
+import { buildFoundryProviderOauthRedirectUri } from "../context/provider-oauth"
 import {
   getProviderCredentialLabel,
   getProviderConnectionStatus,
@@ -453,6 +455,7 @@ export function SettingsAgents() {
 
 function ProviderCard(props: { provider: FoundryProviderAuth }) {
   const agents = useAgents()
+  const org = useOrg()
   const platform = usePlatform()
   const [showApiKeyForm, setShowApiKeyForm] = createSignal(false)
   const [apiKey, setApiKey] = createSignal("")
@@ -460,12 +463,15 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
   const [error, setError] = createSignal("")
   const [busyAction, setBusyAction] = createSignal<"api_key" | "oauth" | "disconnect" | null>(null)
   const [oauthPending, setOauthPending] = createSignal(false)
+  const oauthRedirectUri = createMemo(() => buildFoundryProviderOauthRedirectUri(org.realmUrl))
   const label = () => props.provider.display_name || props.provider.provider
   const defaultModel = () => getProviderDefaultModel(props.provider)
   const status = () => getProviderConnectionStatus(props.provider)
   const connected = () => isProviderConnected(props.provider)
   const supportsOauth = () => providerSupportsOauth(props.provider)
-  const oauthConfigured = () => isProviderOauthConfigured(props.provider)
+  const desktopNativeOauth = () =>
+    platform.platform === "desktop" && props.provider.provider === "codex"
+  const oauthConfigured = () => isProviderOauthConfigured(props.provider) || desktopNativeOauth()
   const supportsApiKey = () => (props.provider.auth_modes || []).includes("api_key")
   const credentialLabel = () => getProviderCredentialLabel(props.provider)
   const authLabels = () => {
@@ -532,7 +538,10 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
     resetFeedback()
     setBusyAction("oauth")
 
-    const result = await agents.startProviderOauth(props.provider.provider)
+    const result = await agents.startProviderOauth(
+      props.provider.provider,
+      oauthRedirectUri(),
+    )
     if (!result.ok) {
       setError(result.error || "Failed to start OAuth sign-in.")
       setBusyAction(null)
@@ -541,6 +550,12 @@ function ProviderCard(props: { provider: FoundryProviderAuth }) {
 
     if (result.authorizeUrl) {
       platform.openLink(result.authorizeUrl)
+    }
+
+    if (!result.authorizeUrl && desktopNativeOauth()) {
+      setMessage("Provider connected.")
+      setBusyAction(null)
+      return
     }
 
     setMessage("OAuth sign-in started. Finish in your browser; this card will refresh automatically.")

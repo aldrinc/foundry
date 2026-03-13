@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use tauri::Emitter;
 
-use super::{sanitize_event_id, ZulipClient};
+use super::{is_auth_failure_message, sanitize_event_id, ZulipClient};
 
 /// Start a long-lived SSE connection to the supervisor session stream.
 /// Events are parsed and emitted to the frontend via Tauri's event system.
@@ -12,6 +12,7 @@ pub async fn start_supervisor_stream(
     client: ZulipClient,
     org_id: String,
     topic_scope_id: String,
+    session_id: Option<String>,
     initial_after_id: i64,
 ) {
     let mut backoff = Duration::from_secs(1);
@@ -32,10 +33,18 @@ pub async fn start_supervisor_stream(
 
     loop {
         let encoded_scope = urlencoding::encode(&topic_scope_id);
-        let path = format!(
+        let mut path = format!(
             "/api/v1/foundry/topics/{}/supervisor/session/stream?after_id={}",
             encoded_scope, cursor,
         );
+        if let Some(value) = session_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            path.push_str("&session_id=");
+            path.push_str(&urlencoding::encode(value));
+        }
 
         tracing::info!(
             org_id = %org_id,
@@ -99,6 +108,14 @@ pub async fn start_supervisor_stream(
                     body = %body.chars().take(500).collect::<String>(),
                     "SSE connection failed with HTTP error"
                 );
+
+                if is_auth_failure_message(&format!("{status}: {body}")) {
+                    let _ = app.emit(
+                        &format!("supervisor:{}:disconnected", event_id),
+                        serde_json::json!({"auth_invalid": true, "code": "UNAUTHORIZED", "error": body, "cursor": cursor}),
+                    );
+                    return;
+                }
             }
             Err(e) => {
                 tracing::warn!(
@@ -106,6 +123,15 @@ pub async fn start_supervisor_stream(
                     org_id = %org_id,
                     "SSE connection error"
                 );
+
+                let error = e.to_string();
+                if is_auth_failure_message(&error) {
+                    let _ = app.emit(
+                        &format!("supervisor:{}:disconnected", event_id),
+                        serde_json::json!({"auth_invalid": true, "code": "UNAUTHORIZED", "error": error, "cursor": cursor}),
+                    );
+                    return;
+                }
             }
         }
 
