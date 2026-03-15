@@ -83,6 +83,7 @@ impl ZulipClient {
 
     /// POST /api/v1/foundry/topics/{scope}/supervisor/message
     /// Send a message to the supervisor
+    #[allow(clippy::too_many_arguments)]
     pub async fn post_supervisor_message(
         &self,
         topic_scope_id: &str,

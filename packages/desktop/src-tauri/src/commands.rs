@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex as StdMutex;
+use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::Duration;
 
 use serde::Serialize;
@@ -1452,8 +1452,11 @@ impl LinkPreviewCache {
     }
 }
 
-static LINK_PREVIEW_CACHE: std::sync::LazyLock<StdMutex<LinkPreviewCache>> =
-    std::sync::LazyLock::new(|| StdMutex::new(LinkPreviewCache::new(500)));
+static LINK_PREVIEW_CACHE: OnceLock<StdMutex<LinkPreviewCache>> = OnceLock::new();
+
+fn link_preview_cache() -> &'static StdMutex<LinkPreviewCache> {
+    LINK_PREVIEW_CACHE.get_or_init(|| StdMutex::new(LinkPreviewCache::new(500)))
+}
 
 /// Maximum body size to download when fetching a page for OG metadata (256 KB).
 const LINK_PREVIEW_MAX_BODY: usize = 256 * 1024;
@@ -1516,12 +1519,10 @@ fn extract_attr_value(tag: &str, tag_lower: &str, attr: &str) -> Option<String> 
     let remaining = &tag[after_eq..];
     let trimmed = remaining.trim_start();
 
-    if trimmed.starts_with('"') {
-        let content = &trimmed[1..];
+    if let Some(content) = trimmed.strip_prefix('"') {
         let end = content.find('"')?;
         Some(html_decode_basic(&content[..end]))
-    } else if trimmed.starts_with('\'') {
-        let content = &trimmed[1..];
+    } else if let Some(content) = trimmed.strip_prefix('\'') {
         let end = content.find('\'')?;
         Some(html_decode_basic(&content[..end]))
     } else {
@@ -1567,7 +1568,7 @@ fn extract_title_tag(html: &str) -> Option<String> {
 pub async fn fetch_link_preview(url: String) -> Result<LinkPreview, String> {
     // Check cache
     {
-        let cache = LINK_PREVIEW_CACHE
+        let cache = link_preview_cache()
             .lock()
             .map_err(|e| format!("Cache lock error: {}", e))?;
         if let Some(cached) = cache.get(&url) {
@@ -1650,7 +1651,7 @@ pub async fn fetch_link_preview(url: String) -> Result<LinkPreview, String> {
 
     // Store in cache
     {
-        let mut cache = LINK_PREVIEW_CACHE
+        let mut cache = link_preview_cache()
             .lock()
             .map_err(|e| format!("Cache lock error: {}", e))?;
         cache.insert(url, preview.clone());

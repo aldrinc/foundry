@@ -442,11 +442,15 @@ impl ZulipClient {
             0 => Err("This organization has not configured a call provider.".to_string()),
             1 => {
                 let Some(base_url) = request.base_jitsi_url.as_deref().map(str::trim) else {
-                    return Err("This organization's Jitsi configuration is incomplete.".to_string());
+                    return Err(
+                        "This organization's Jitsi configuration is incomplete.".to_string()
+                    );
                 };
 
                 if base_url.is_empty() {
-                    return Err("This organization's Jitsi configuration is incomplete.".to_string());
+                    return Err(
+                        "This organization's Jitsi configuration is incomplete.".to_string()
+                    );
                 }
 
                 let room_seed = SystemTime::now()
