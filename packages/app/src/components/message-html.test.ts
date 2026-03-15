@@ -4,7 +4,9 @@ import {
   findImageCarouselRanges,
   getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
+  isMessageImageLink,
   normalizeGalleryIndex,
+  openMessageImageViewerFromLink,
   resolveAuthenticatedMediaUrl,
   resolveMessageUrl,
   shouldFetchAuthenticatedMedia,
@@ -195,6 +197,64 @@ describe("normalizeGalleryIndex", () => {
   })
 })
 
+describe("isMessageImageLink", () => {
+  test("detects inline image links", () => {
+    const link = document.createElement("a")
+    link.setAttribute("href", "/user_uploads/1/files/report.png")
+    link.innerHTML = `<img src="/user_uploads/thumbnail/1/files/report.png/200x200.webp" alt="Report">`
+
+    expect(isMessageImageLink(link, "https://chat.example.invalid")).toBe(true)
+  })
+
+  test("detects image-file links without an inline thumbnail", () => {
+    const link = document.createElement("a")
+    link.setAttribute("href", "https://example.com/report.webp")
+
+    expect(isMessageImageLink(link, "https://chat.example.invalid")).toBe(true)
+  })
+
+  test("ignores normal document links", () => {
+    const link = document.createElement("a")
+    link.setAttribute("href", "/user_uploads/1/files/spec.pdf")
+
+    expect(isMessageImageLink(link, "https://chat.example.invalid")).toBe(false)
+  })
+})
+
+describe("openMessageImageViewerFromLink", () => {
+  test("opens a standalone viewer for a single clicked image link", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `
+      <p>
+        <a href="https://example.com/image-full.png">
+          <img src="https://example.com/image-thumb.png" alt="Screenshot">
+        </a>
+      </p>
+    `
+
+    const link = container.querySelector<HTMLAnchorElement>("a")!
+    const opened = openMessageImageViewerFromLink(container, link, {
+      serverUrl: "https://example.com",
+    })
+
+    expect(opened).toBe(true)
+
+    const lightbox = container.querySelector<HTMLDivElement>(".foundry-image-lightbox")
+    const viewerImage = container.querySelector<HTMLImageElement>(".foundry-image-lightbox-image")
+    const downloadLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-download")
+    const externalLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-link")
+    const closeButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-close")
+
+    expect(lightbox).toBeTruthy()
+    expect(viewerImage?.getAttribute("src")).toBe("https://example.com/image-full.png")
+    expect(downloadLink?.getAttribute("href")).toBe("https://example.com/image-full.png")
+    expect(externalLink?.getAttribute("href")).toBe("https://example.com/image-full.png")
+
+    click(closeButton!)
+    expect(container.querySelector(".foundry-image-lightbox")).toBeNull()
+  })
+})
+
 describe("hydrateMessageImageCarousels", () => {
   test("replaces consecutive image-only blocks with a thumbnail gallery and in-app viewer", () => {
     const container = document.createElement("div")
@@ -212,6 +272,8 @@ describe("hydrateMessageImageCarousels", () => {
 
     expect(container.children).toHaveLength(1)
     expect(container.querySelectorAll(".foundry-image-gallery-thumb")).toHaveLength(3)
+    expect(container.querySelectorAll(".foundry-image-gallery-download")).toHaveLength(3)
+    expect(container.querySelector(".foundry-image-gallery-download-all")).toBeTruthy()
     expect(container.querySelector(".foundry-image-lightbox")).toBeTruthy()
 
     const thumbButtons = Array.from(
@@ -222,12 +284,14 @@ describe("hydrateMessageImageCarousels", () => {
     const lightbox = container.querySelector<HTMLDivElement>(".foundry-image-lightbox")
     const viewerImage = container.querySelector<HTMLImageElement>(".foundry-image-lightbox-image")
     const counter = container.querySelector<HTMLSpanElement>(".foundry-image-lightbox-counter")
+    const downloadLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-download")
     const externalLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-link")
     const dialog = container.querySelector<HTMLDivElement>(".foundry-image-lightbox-dialog")
 
     expect(lightbox?.hidden).toBe(false)
     expect(counter?.textContent).toBe("2 / 3")
     expect(viewerImage?.getAttribute("src")).toBe("https://example.com/image-2-full.png")
+    expect(downloadLink?.getAttribute("href")).toBe("https://example.com/image-2-full.png")
     expect(externalLink?.getAttribute("href")).toBe("https://example.com/image-2-full.png")
     expect(notifications).toHaveLength(1)
 
@@ -238,6 +302,40 @@ describe("hydrateMessageImageCarousels", () => {
 
     pressKey(dialog!, "Escape")
     expect(lightbox?.hidden).toBe(true)
+
+    cleanup()
+  })
+
+  test("removes duplicate image upload links and downloads the full set from the gallery", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `
+      <p>
+        <a href="/user_uploads/1/files/image-1.png">image-1.png</a><br>
+        <a href="/user_uploads/1/files/image-2.png">image-2.png</a><br>
+        <a href="/user_uploads/1/files/image-3.png">image-3.png</a>
+      </p>
+      <p><a href="/user_uploads/1/files/image-1.png"><img src="/user_uploads/thumbnail/1/files/image-1.png/200x200.webp" alt="Image 1"></a></p>
+      <p><a href="/user_uploads/1/files/image-2.png"><img src="/user_uploads/thumbnail/1/files/image-2.png/200x200.webp" alt="Image 2"></a></p>
+      <p><a href="/user_uploads/1/files/image-3.png"><img src="/user_uploads/thumbnail/1/files/image-3.png/200x200.webp" alt="Image 3"></a></p>
+    `
+
+    const downloads: string[] = []
+    const cleanup = hydrateMessageImageCarousels(container, {
+      openLink: (url) => downloads.push(url),
+      serverUrl: "https://chat.example.invalid",
+    })
+
+    expect(container.children).toHaveLength(1)
+    expect(container.textContent || "").not.toContain("image-1.png")
+
+    const downloadAllButton = container.querySelector<HTMLButtonElement>(".foundry-image-gallery-download-all")
+    click(downloadAllButton!)
+
+    expect(downloads).toEqual([
+      "https://chat.example.invalid/user_uploads/download/1/files/image-1.png",
+      "https://chat.example.invalid/user_uploads/download/1/files/image-2.png",
+      "https://chat.example.invalid/user_uploads/download/1/files/image-3.png",
+    ])
 
     cleanup()
   })

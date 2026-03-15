@@ -1,6 +1,7 @@
 use base64::Engine as _;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::types::*;
 use super::ZulipClient;
@@ -17,6 +18,26 @@ struct RealmSettingsRegisterResponse {
 #[derive(Debug, Clone, Deserialize)]
 struct MessageSummaryResponse {
     summary: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct ZulipApiErrorResponse {
+    msg: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct SavedSnippetsResponse {
+    saved_snippets: Vec<SavedSnippet>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CreateSavedSnippetResponse {
+    saved_snippet_id: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CallLinkResponse {
+    url: String,
 }
 
 fn is_resolved_topic(topic_name: &str) -> bool {
@@ -45,6 +66,60 @@ fn json_value_to_form_value(value: serde_json::Value) -> String {
         serde_json::Value::String(string) => string,
         other => other.to_string(),
     }
+}
+
+fn map_upload_error_message(
+    status: reqwest::StatusCode,
+    content_type: Option<&str>,
+    body: &str,
+) -> String {
+    if let Ok(parsed) = serde_json::from_str::<ZulipApiErrorResponse>(body) {
+        if let Some(message) = parsed.msg {
+            let trimmed = message.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    if status == reqwest::StatusCode::PAYLOAD_TOO_LARGE {
+        return "This file is larger than the current upload limit.".to_string();
+    }
+
+    let trimmed = body.trim();
+    let is_html = content_type
+        .map(|value| value.contains("text/html"))
+        .unwrap_or(false)
+        || trimmed.starts_with("<!DOCTYPE")
+        || trimmed.starts_with("<html");
+
+    if trimmed.is_empty() {
+        return format!("Upload failed ({}).", status);
+    }
+
+    if is_html {
+        return "Upload failed before Foundry could process the file.".to_string();
+    }
+
+    trimmed.to_string()
+}
+
+fn map_api_error_message(status: reqwest::StatusCode, body: &str, fallback: &str) -> String {
+    if let Ok(parsed) = serde_json::from_str::<ZulipApiErrorResponse>(body) {
+        if let Some(message) = parsed.msg {
+            let trimmed = message.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return format!("{fallback} ({}).", status);
+    }
+
+    format!("{fallback}: {trimmed}")
 }
 
 fn resolve_realm_media_url(base_url: &str, media_url: &str) -> Result<reqwest::Url, String> {
@@ -191,6 +266,9 @@ impl ZulipClient {
                     "realm_user",
                     "user_topic",
                     "heartbeat",
+                    "video_calls",
+                    "giphy",
+                    "tenor",
                 ],
                 &[
                     "subscription",
@@ -199,6 +277,9 @@ impl ZulipClient {
                     "realm_user",
                     "recent_private_conversations",
                     "user_topic",
+                    "video_calls",
+                    "giphy",
+                    "tenor",
                 ],
             )
             .await?;
@@ -218,6 +299,225 @@ impl ZulipClient {
         }
 
         Ok(response)
+    }
+
+    pub async fn get_saved_snippets(&self) -> Result<Vec<SavedSnippet>, String> {
+        let response = self
+            .get("/api/v1/saved_snippets")
+            .send()
+            .await
+            .map_err(|error| format!("Failed to load saved snippets: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(map_api_error_message(
+                status,
+                &body,
+                "Failed to load saved snippets",
+            ));
+        }
+
+        let payload: SavedSnippetsResponse = response
+            .json()
+            .await
+            .map_err(|error| format!("Failed to parse saved snippets: {error}"))?;
+
+        Ok(payload.saved_snippets)
+    }
+
+    pub async fn create_saved_snippet(
+        &self,
+        title: &str,
+        content: &str,
+    ) -> Result<CreateSavedSnippetResult, String> {
+        let response = self
+            .post("/api/v1/saved_snippets")
+            .form(&[
+                ("title", title.to_string()),
+                ("content", content.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(|error| format!("Failed to create saved snippet: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(map_api_error_message(
+                status,
+                &body,
+                "Failed to create saved snippet",
+            ));
+        }
+
+        let payload: CreateSavedSnippetResponse = response
+            .json()
+            .await
+            .map_err(|error| format!("Failed to parse saved snippet response: {error}"))?;
+
+        Ok(CreateSavedSnippetResult {
+            saved_snippet_id: payload.saved_snippet_id,
+        })
+    }
+
+    pub async fn update_saved_snippet(
+        &self,
+        saved_snippet_id: u64,
+        title: &str,
+        content: &str,
+    ) -> Result<(), String> {
+        let response = self
+            .patch(&format!("/api/v1/saved_snippets/{saved_snippet_id}"))
+            .form(&[
+                ("title", title.to_string()),
+                ("content", content.to_string()),
+            ])
+            .send()
+            .await
+            .map_err(|error| format!("Failed to update saved snippet: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(map_api_error_message(
+                status,
+                &body,
+                "Failed to update saved snippet",
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_saved_snippet(&self, saved_snippet_id: u64) -> Result<(), String> {
+        let response = self
+            .delete(&format!("/api/v1/saved_snippets/{saved_snippet_id}"))
+            .send()
+            .await
+            .map_err(|error| format!("Failed to delete saved snippet: {error}"))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(map_api_error_message(
+                status,
+                &body,
+                "Failed to delete saved snippet",
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub async fn create_call_link(
+        &self,
+        request: &CreateCallLinkRequest,
+    ) -> Result<CreateCallLinkResult, String> {
+        let label = if request.label.trim().is_empty() {
+            "Conversation".to_string()
+        } else {
+            request.label.trim().to_string()
+        };
+
+        let parse_response = |response: reqwest::Response| async move {
+            if !response.status().is_success() {
+                let status = response.status();
+                let body = response.text().await.unwrap_or_default();
+                return Err(map_api_error_message(
+                    status,
+                    &body,
+                    "Failed to create call link",
+                ));
+            }
+
+            let payload: CallLinkResponse = response
+                .json()
+                .await
+                .map_err(|error| format!("Failed to parse call response: {error}"))?;
+            Ok(CreateCallLinkResult { url: payload.url })
+        };
+
+        match request.provider_id {
+            0 => Err("This organization has not configured a call provider.".to_string()),
+            1 => {
+                let Some(base_url) = request.base_jitsi_url.as_deref().map(str::trim) else {
+                    return Err("This organization's Jitsi configuration is incomplete.".to_string());
+                };
+
+                if base_url.is_empty() {
+                    return Err("This organization's Jitsi configuration is incomplete.".to_string());
+                }
+
+                let room_seed = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos();
+                let room_id = 100_000_000_000_000u128 + (room_seed % 900_000_000_000_000u128);
+                let mut url = reqwest::Url::parse(base_url)
+                    .map_err(|error| format!("Invalid Jitsi server URL: {error}"))?;
+                url.path_segments_mut()
+                    .map_err(|_| "Invalid Jitsi server URL.".to_string())?
+                    .pop_if_empty()
+                    .push(&room_id.to_string());
+                url.set_fragment(Some(if request.is_audio_call {
+                    "config.startWithVideoMuted=true"
+                } else {
+                    "config.startWithVideoMuted=false"
+                }));
+
+                Ok(CreateCallLinkResult {
+                    url: url.to_string(),
+                })
+            }
+            3 | 5 => {
+                let response = self
+                    .post("/api/v1/calls/zoom/create")
+                    .form(&[("is_video_call", (!request.is_audio_call).to_string())])
+                    .send()
+                    .await
+                    .map_err(|error| format!("Failed to create call link: {error}"))?;
+                parse_response(response).await
+            }
+            4 => {
+                let response = self
+                    .get("/api/v1/calls/bigbluebutton/create")
+                    .query(&[
+                        ("meeting_name", format!("{label} meeting")),
+                        ("voice_only", request.is_audio_call.to_string()),
+                    ])
+                    .send()
+                    .await
+                    .map_err(|error| format!("Failed to create call link: {error}"))?;
+                parse_response(response).await
+            }
+            6 => {
+                if request.is_audio_call {
+                    return Err("Voice calls are not available for Constructor Groups.".to_string());
+                }
+
+                let response = self
+                    .post("/api/v1/calls/constructorgroups/create")
+                    .send()
+                    .await
+                    .map_err(|error| format!("Failed to create call link: {error}"))?;
+                parse_response(response).await
+            }
+            7 => {
+                if request.is_audio_call {
+                    return Err("Voice calls are not available for Nextcloud Talk.".to_string());
+                }
+
+                let response = self
+                    .post("/api/v1/calls/nextcloud_talk/create")
+                    .form(&[("room_name", format!("{label} conversation"))])
+                    .send()
+                    .await
+                    .map_err(|error| format!("Failed to create call link: {error}"))?;
+                parse_response(response).await
+            }
+            other => Err(format!("Unsupported video call provider: {other}")),
+        }
     }
 
     /// DELETE /api/v1/events — Delete a previously-registered event queue.
@@ -955,8 +1255,18 @@ impl ZulipClient {
             .map_err(|e| format!("Upload failed: {}", e))?;
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            let content_type = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .map(|value| value.to_string());
             let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Upload failed: {}", body));
+            return Err(map_upload_error_message(
+                status,
+                content_type.as_deref(),
+                &body,
+            ));
         }
 
         resp.json()

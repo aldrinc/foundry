@@ -6,6 +6,7 @@ const AUTHENTICATED_MEDIA_PATHS = [
   "/user_uploads/",
   "/external_content/",
 ]
+const IMAGE_EXTENSION_PATTERN = /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i
 
 const ALLOWED_TAGS = [
   "p", "br", "strong", "em", "code", "pre", "a", "img", "ul", "ol", "li",
@@ -219,18 +220,22 @@ export function findImageCarouselRanges(imageOnlyBlocks: readonly boolean[]): Ar
 const SVG_NS = "http://www.w3.org/2000/svg"
 const CHEVRON_LEFT_PATH = "M15.75 19.5 8.25 12l7.5-7.5"
 const CHEVRON_RIGHT_PATH = "M8.25 4.5 15.75 12l-7.5 7.5"
+const DOWNLOAD_ICON_PATH = "M12 3.75V14.25 M8.25 10.5 12 14.25 15.75 10.5 M5.25 18.75H18.75"
 const EXTERNAL_LINK_PATH = "M13.5 4.5H19.5V10.5 M10.5 13.5L19.5 4.5 M16.5 13.5V18C16.5 18.8284 15.8284 19.5 15 19.5H6C5.17157 19.5 4.5 18.8284 4.5 18V9C4.5 8.17157 5.17157 7.5 6 7.5H10.5"
 const CLOSE_ICON_PATH = "M6 6L18 18 M18 6L6 18"
 
 type MessageImageCarouselOptions = {
+  openLink?: (url: string) => void
   onViewerImageChange?: () => void
   serverUrl?: string
 }
 
 type GalleryImageSource = {
   alt: string
+  downloadHref: string
   externalHref: string
   thumbSrc: string
+  thumbnailImage?: HTMLImageElement
   title: string
   viewerSrc: string
 }
@@ -262,7 +267,15 @@ function createIcon(pathDefinition: string): SVGSVGElement {
   return icon
 }
 
-function extractGalleryImageSource(block: HTMLElement, index: number): GalleryImageSource | null {
+function resolveGalleryDownloadHref(url: string, serverUrl?: string): string {
+  return getUserUploadDownloadUrl(url, serverUrl) || resolveMessageUrl(url, serverUrl)
+}
+
+function extractGalleryImageSource(
+  block: HTMLElement,
+  index: number,
+  serverUrl?: string,
+): GalleryImageSource | null {
   const sourceImage = block.querySelector("img")
   if (!sourceImage) return null
 
@@ -276,20 +289,199 @@ function extractGalleryImageSource(block: HTMLElement, index: number): GalleryIm
 
   return {
     alt: sourceImage.getAttribute("alt") || sourceLink?.getAttribute("aria-label") || `Image ${index + 1}`,
-    externalHref,
-    thumbSrc,
+    downloadHref: resolveGalleryDownloadHref(externalHref || viewerSrc || thumbSrc, serverUrl),
+    externalHref: resolveMessageUrl(externalHref, serverUrl),
+    thumbSrc: resolveMessageUrl(thumbSrc, serverUrl),
     title: sourceImage.getAttribute("title") || sourceLink?.getAttribute("title") || "",
-    viewerSrc,
+    viewerSrc: resolveMessageUrl(viewerSrc, serverUrl),
   }
+}
+
+function isImageUrl(url: string): boolean {
+  const trimmed = url.trim()
+  if (!trimmed) return false
+  if (trimmed.startsWith("data:image/")) return true
+
+  try {
+    const resolved = new URL(trimmed, "https://foundry.invalid")
+    return IMAGE_EXTENSION_PATTERN.test(resolved.pathname)
+  } catch {
+    return IMAGE_EXTENSION_PATTERN.test(trimmed)
+  }
+}
+
+function extractLinkedImageSource(
+  link: HTMLAnchorElement,
+  serverUrl?: string,
+): GalleryImageSource | null {
+  const href = link.getAttribute("href")?.trim() || ""
+  const sourceImage = link.querySelector("img")
+  const thumbSrc = sourceImage?.getAttribute("src")?.trim() || resolveMessageUrl(href, serverUrl)
+  const originalSrc = sourceImage?.getAttribute("data-original-src")?.trim() || href || thumbSrc
+  const externalHref = href || originalSrc || thumbSrc
+  const viewerSrc = originalSrc || externalHref || thumbSrc
+
+  if (!viewerSrc || !thumbSrc) return null
+
+  return {
+    alt: sourceImage?.getAttribute("alt") || link.getAttribute("aria-label") || "Image",
+    downloadHref: resolveGalleryDownloadHref(externalHref || viewerSrc || thumbSrc, serverUrl),
+    externalHref: resolveMessageUrl(externalHref, serverUrl),
+    thumbSrc: resolveMessageUrl(thumbSrc, serverUrl),
+    thumbnailImage: sourceImage || undefined,
+    title: sourceImage?.getAttribute("title") || link.getAttribute("title") || "",
+    viewerSrc: resolveMessageUrl(viewerSrc, serverUrl),
+  }
+}
+
+export function isMessageImageLink(link: HTMLAnchorElement, serverUrl?: string): boolean {
+  if (link.classList.contains("foundry-image-gallery-open")) return false
+  if (link.classList.contains("foundry-image-gallery-download")) return false
+  if (link.classList.contains("foundry-image-lightbox-link")) return false
+  if (link.classList.contains("foundry-image-lightbox-download")) return false
+  if (link.querySelector("img, picture")) return true
+
+  const href = link.getAttribute("href")
+  if (!href) return false
+
+  const resolvedHref = resolveMessageUrl(href, serverUrl)
+  return isImageUrl(resolvedHref)
+}
+
+export function openMessageImageViewerFromLink(
+  container: HTMLElement,
+  link: HTMLAnchorElement,
+  options?: MessageImageCarouselOptions,
+): boolean {
+  const source = extractLinkedImageSource(link, options?.serverUrl)
+  if (!source) return false
+
+  container
+    .querySelector<HTMLElement>('.foundry-image-lightbox[data-foundry-standalone-viewer="true"]')
+    ?.remove()
+
+  const lightbox = document.createElement("div")
+  lightbox.className = "foundry-image-lightbox"
+  lightbox.dataset.foundryStandaloneViewer = "true"
+
+  const lightboxBackdrop = document.createElement("button")
+  lightboxBackdrop.type = "button"
+  lightboxBackdrop.className = "foundry-image-lightbox-backdrop"
+  lightboxBackdrop.setAttribute("aria-label", "Close image viewer")
+
+  const dialog = document.createElement("div")
+  dialog.className = "foundry-image-lightbox-dialog"
+  dialog.setAttribute("role", "dialog")
+  dialog.setAttribute("aria-modal", "true")
+  dialog.setAttribute("aria-label", "Image viewer")
+  dialog.tabIndex = -1
+
+  const toolbar = document.createElement("div")
+  toolbar.className = "foundry-image-lightbox-toolbar"
+
+  const counter = document.createElement("span")
+  counter.className = "foundry-image-lightbox-counter"
+  counter.textContent = "1 / 1"
+
+  const actions = document.createElement("div")
+  actions.className = "foundry-image-lightbox-actions"
+
+  const downloadLink = document.createElement("a")
+  downloadLink.className = "foundry-image-lightbox-download"
+  downloadLink.setAttribute("target", "_blank")
+  downloadLink.setAttribute("rel", "noopener noreferrer")
+  downloadLink.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
+
+  const externalLink = document.createElement("a")
+  externalLink.className = "foundry-image-lightbox-link"
+  externalLink.setAttribute("target", "_blank")
+  externalLink.setAttribute("rel", "noopener noreferrer")
+  externalLink.append(createIcon(EXTERNAL_LINK_PATH), document.createTextNode("Open in browser"))
+
+  const closeButton = document.createElement("button")
+  closeButton.type = "button"
+  closeButton.className = "foundry-image-lightbox-close"
+  closeButton.setAttribute("aria-label", "Close image viewer")
+  closeButton.appendChild(createIcon(CLOSE_ICON_PATH))
+
+  actions.append(downloadLink, externalLink, closeButton)
+  toolbar.append(counter, actions)
+
+  const stage = document.createElement("div")
+  stage.className = "foundry-image-lightbox-stage"
+
+  const prevButton = document.createElement("button")
+  prevButton.type = "button"
+  prevButton.className = "foundry-image-lightbox-nav is-prev"
+  prevButton.hidden = true
+  prevButton.setAttribute("aria-hidden", "true")
+
+  const nextButton = document.createElement("button")
+  nextButton.type = "button"
+  nextButton.className = "foundry-image-lightbox-nav is-next"
+  nextButton.hidden = true
+  nextButton.setAttribute("aria-hidden", "true")
+
+  const viewerFrame = document.createElement("div")
+  viewerFrame.className = "foundry-image-lightbox-frame"
+
+  const viewerImage = document.createElement("img")
+  viewerImage.className = "foundry-image-lightbox-image"
+  viewerImage.setAttribute("loading", "eager")
+  viewerFrame.appendChild(viewerImage)
+
+  stage.append(prevButton, viewerFrame, nextButton)
+  dialog.append(toolbar, stage)
+  lightbox.append(lightboxBackdrop, dialog)
+  container.appendChild(lightbox)
+
+  const setActiveSource = () => {
+    setViewerImageSource(viewerImage, source, options?.serverUrl)
+    downloadLink.hidden = !source.downloadHref
+    downloadLink.setAttribute("href", source.downloadHref || "#")
+    downloadLink.setAttribute("aria-label", "Download image")
+    externalLink.hidden = !source.externalHref
+    externalLink.setAttribute("href", source.externalHref || "#")
+    externalLink.setAttribute("aria-label", "Open image in browser")
+    options?.onViewerImageChange?.()
+  }
+
+  const cleanup = () => {
+    lightboxBackdrop.removeEventListener("click", handleClose)
+    closeButton.removeEventListener("click", handleClose)
+    dialog.removeEventListener("keydown", handleKeyDown)
+  }
+
+  const restoreFocus = link.querySelector<HTMLElement>("img") || link
+  const handleClose = () => {
+    cleanup()
+    viewerImage.removeAttribute("data-foundry-auth-prefer-original")
+    lightbox.remove()
+    restoreFocus.focus?.()
+  }
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Escape") return
+    event.preventDefault()
+    handleClose()
+  }
+
+  lightboxBackdrop.addEventListener("click", handleClose)
+  closeButton.addEventListener("click", handleClose)
+  dialog.addEventListener("keydown", handleKeyDown)
+
+  setActiveSource()
+  queueMicrotask(() => dialog.focus())
+  return true
 }
 
 function setViewerImageSource(
   viewerImage: HTMLImageElement,
-  item: GalleryImageItem,
+  item: GalleryImageSource,
   serverUrl?: string,
 ) {
   const requiresAuthenticatedFetch = shouldFetchAuthenticatedMedia(item.viewerSrc, serverUrl)
-  const thumbnailSrc = item.thumbnailImage.getAttribute("src") || item.thumbSrc
+  const thumbnailSrc = item.thumbnailImage?.getAttribute("src") || item.thumbSrc
 
   viewerImage.alt = item.alt
   if (item.title) {
@@ -315,6 +507,7 @@ function renderActiveGalleryImage(
   items: GalleryImageItem[],
   viewerImage: HTMLImageElement,
   counter: HTMLElement,
+  downloadLink: HTMLAnchorElement,
   externalLink: HTMLAnchorElement,
   nextIndex: number,
   options?: MessageImageCarouselOptions,
@@ -330,6 +523,9 @@ function renderActiveGalleryImage(
 
   setViewerImageSource(viewerImage, activeItem, options?.serverUrl)
   counter.textContent = `${activeIndex + 1} / ${items.length}`
+  downloadLink.hidden = !activeItem.downloadHref
+  downloadLink.setAttribute("href", activeItem.downloadHref || "#")
+  downloadLink.setAttribute("aria-label", `Download image ${activeIndex + 1}`)
   externalLink.hidden = !activeItem.externalHref
   externalLink.setAttribute("href", activeItem.externalHref || "#")
   externalLink.setAttribute("aria-label", `Open image ${activeIndex + 1} in browser`)
@@ -338,19 +534,78 @@ function renderActiveGalleryImage(
   return activeIndex
 }
 
+function extractStandaloneImageUploadLinks(
+  block: Element,
+  serverUrl?: string,
+) : HTMLAnchorElement[] {
+  if (!(block instanceof HTMLElement)) return []
+  if (block.querySelector("img, picture, video, audio, iframe")) return []
+
+  const links = Array.from(block.querySelectorAll<HTMLAnchorElement>("a[href]"))
+  if (links.length === 0) return []
+  if (!links.every((link) => isMessageImageLink(link, serverUrl))) return []
+
+  for (const child of Array.from(block.childNodes)) {
+    if (child.nodeType === Node.TEXT_NODE && !(child.textContent || "").trim()) continue
+    if (child instanceof HTMLElement && child.tagName === "BR") continue
+    if (child instanceof HTMLAnchorElement && links.includes(child)) continue
+    return []
+  }
+
+  return links
+}
+
+function collectRedundantGalleryUploadBlocks(
+  children: HTMLElement[],
+  rangeStart: number,
+  sources: GalleryImageSource[],
+  serverUrl?: string,
+): HTMLElement[] {
+  const hrefCounts = new Map<string, number>()
+  for (const source of sources) {
+    hrefCounts.set(source.externalHref, (hrefCounts.get(source.externalHref) || 0) + 1)
+  }
+
+  const matches: HTMLElement[] = []
+  for (let index = rangeStart - 1; index >= 0; index -= 1) {
+    const candidate = children[index]
+    const links = extractStandaloneImageUploadLinks(candidate, serverUrl)
+    if (links.length === 0) break
+
+    const resolvedHrefs = links.map((link) => resolveMessageUrl(link.getAttribute("href") || "", serverUrl))
+    if (resolvedHrefs.some((href) => !hrefCounts.get(href))) break
+
+    matches.push(candidate)
+    for (const resolvedHref of resolvedHrefs) {
+      const remainingCount = hrefCounts.get(resolvedHref)
+      if (!remainingCount) continue
+
+      if (remainingCount === 1) {
+        hrefCounts.delete(resolvedHref)
+      } else {
+        hrefCounts.set(resolvedHref, remainingCount - 1)
+      }
+    }
+
+    if (hrefCounts.size === 0) break
+  }
+
+  return matches
+}
+
 export function hydrateMessageImageCarousels(
   container: HTMLElement,
   options?: MessageImageCarouselOptions,
 ): () => void {
   const cleanups: Array<() => void> = []
-  const children = Array.from(container.children)
+  const children = Array.from(container.children) as HTMLElement[]
   const ranges = findImageCarouselRanges(children.map((child) => isImageOnlyBlock(child)))
 
   for (const range of ranges) {
     const group = children.slice(range.start, range.end) as HTMLElement[]
     if (group.length > 1) {
       const sources = group
-        .map((block, index) => extractGalleryImageSource(block, index))
+        .map((block, index) => extractGalleryImageSource(block, index, options?.serverUrl))
         .filter((source): source is GalleryImageSource => Boolean(source))
       if (sources.length < 2) continue
 
@@ -358,6 +613,25 @@ export function hydrateMessageImageCarousels(
       wrapper.className = "foundry-image-gallery"
       wrapper.dataset.foundryImageCarousel = "true"
       group[0].before(wrapper)
+
+      const header = document.createElement("div")
+      header.className = "foundry-image-gallery-header"
+
+      const title = document.createElement("span")
+      title.className = "foundry-image-gallery-title"
+      title.textContent = `${sources.length} images`
+
+      const headerActions = document.createElement("div")
+      headerActions.className = "foundry-image-gallery-actions"
+
+      const downloadAllButton = document.createElement("button")
+      downloadAllButton.type = "button"
+      downloadAllButton.className = "foundry-image-gallery-download-all"
+      downloadAllButton.setAttribute("aria-label", `Download all ${sources.length} images`)
+      downloadAllButton.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download all"))
+
+      headerActions.appendChild(downloadAllButton)
+      header.append(title, headerActions)
 
       const grid = document.createElement("div")
       grid.className = "foundry-image-gallery-grid"
@@ -388,6 +662,12 @@ export function hydrateMessageImageCarousels(
       const actions = document.createElement("div")
       actions.className = "foundry-image-lightbox-actions"
 
+      const downloadLink = document.createElement("a")
+      downloadLink.className = "foundry-image-lightbox-download"
+      downloadLink.setAttribute("target", "_blank")
+      downloadLink.setAttribute("rel", "noopener noreferrer")
+      downloadLink.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
+
       const externalLink = document.createElement("a")
       externalLink.className = "foundry-image-lightbox-link"
       externalLink.setAttribute("target", "_blank")
@@ -400,7 +680,7 @@ export function hydrateMessageImageCarousels(
       closeButton.setAttribute("aria-label", "Close image viewer")
       closeButton.appendChild(createIcon(CLOSE_ICON_PATH))
 
-      actions.append(externalLink, closeButton)
+      actions.append(downloadLink, externalLink, closeButton)
       toolbar.append(counter, actions)
 
       const stage = document.createElement("div")
@@ -453,6 +733,14 @@ export function hydrateMessageImageCarousels(
         const tileActions = document.createElement("div")
         tileActions.className = "foundry-image-gallery-item-actions"
 
+        const tileDownloadLink = document.createElement("a")
+        tileDownloadLink.className = "foundry-image-gallery-download"
+        tileDownloadLink.setAttribute("href", source.downloadHref)
+        tileDownloadLink.setAttribute("target", "_blank")
+        tileDownloadLink.setAttribute("rel", "noopener noreferrer")
+        tileDownloadLink.setAttribute("aria-label", `Download image ${index + 1}`)
+        tileDownloadLink.appendChild(createIcon(DOWNLOAD_ICON_PATH))
+
         const tileExternalLink = document.createElement("a")
         tileExternalLink.className = "foundry-image-gallery-open"
         tileExternalLink.setAttribute("href", source.externalHref)
@@ -461,7 +749,7 @@ export function hydrateMessageImageCarousels(
         tileExternalLink.setAttribute("aria-label", `Open image ${index + 1} in browser`)
         tileExternalLink.appendChild(createIcon(EXTERNAL_LINK_PATH))
 
-        tileActions.appendChild(tileExternalLink)
+        tileActions.append(tileDownloadLink, tileExternalLink)
         tile.append(thumbnailButton, tileActions)
         grid.appendChild(tile)
 
@@ -472,14 +760,24 @@ export function hydrateMessageImageCarousels(
         }
       })
 
+      const redundantBlocks = collectRedundantGalleryUploadBlocks(children, range.start, sources, options?.serverUrl)
       group.forEach((block) => block.remove())
-      wrapper.append(grid, lightbox)
+      redundantBlocks.forEach((block) => block.remove())
+      wrapper.append(header, grid, lightbox)
 
       let activeIndex = 0
       let lastTrigger: HTMLButtonElement | null = null
 
       const render = (nextIndex: number) => {
-        activeIndex = renderActiveGalleryImage(items, viewerImage, counter, externalLink, nextIndex, options)
+        activeIndex = renderActiveGalleryImage(
+          items,
+          viewerImage,
+          counter,
+          downloadLink,
+          externalLink,
+          nextIndex,
+          options,
+        )
       }
 
       const openViewer = (nextIndex: number, trigger?: HTMLButtonElement) => {
@@ -499,6 +797,19 @@ export function hydrateMessageImageCarousels(
 
       const handlePrev = () => render(activeIndex - 1)
       const handleNext = () => render(activeIndex + 1)
+      const handleDownloadAll = (event: Event) => {
+        event.preventDefault()
+        event.stopPropagation()
+
+        for (const item of items) {
+          if (!item.downloadHref) continue
+          if (options?.openLink) {
+            options.openLink(item.downloadHref)
+            continue
+          }
+          window.open(item.downloadHref, "_blank", "noopener,noreferrer")
+        }
+      }
       const handleBackdropClick = () => closeViewer()
       const handleClose = () => closeViewer()
       const handleDialogKeyDown = (event: KeyboardEvent) => {
@@ -518,6 +829,7 @@ export function hydrateMessageImageCarousels(
 
       prevButton.addEventListener("click", handlePrev)
       nextButton.addEventListener("click", handleNext)
+      downloadAllButton.addEventListener("click", handleDownloadAll)
       lightboxBackdrop.addEventListener("click", handleBackdropClick)
       closeButton.addEventListener("click", handleClose)
       dialog.addEventListener("keydown", handleDialogKeyDown)
@@ -531,6 +843,7 @@ export function hydrateMessageImageCarousels(
       cleanups.push(() => {
         prevButton.removeEventListener("click", handlePrev)
         nextButton.removeEventListener("click", handleNext)
+        downloadAllButton.removeEventListener("click", handleDownloadAll)
         lightboxBackdrop.removeEventListener("click", handleBackdropClick)
         closeButton.removeEventListener("click", handleClose)
         dialog.removeEventListener("keydown", handleDialogKeyDown)

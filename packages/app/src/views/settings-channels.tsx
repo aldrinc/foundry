@@ -1,10 +1,13 @@
-import { createSignal, createMemo, For, Show } from "solid-js"
+import { createEffect, createSignal, createMemo, For, Show } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { commands } from "@foundry/desktop/bindings"
 import { SettingRow } from "./settings-general"
 
-export function SettingsChannels() {
+export function SettingsChannels(props: {
+  focusStreamId?: number
+  focusStreamName?: string
+}) {
   const sync = useZulipSync()
   const org = useOrg()
   const [search, setSearch] = createSignal("")
@@ -13,6 +16,7 @@ export function SettingsChannels() {
   const [newChannelName, setNewChannelName] = createSignal("")
   const [creating, setCreating] = createSignal(false)
   const [error, setError] = createSignal("")
+  const rowRefs = new Map<number, HTMLDivElement>()
 
   const filteredChannels = createMemo(() => {
     const q = search().toLowerCase()
@@ -86,10 +90,27 @@ export function SettingsChannels() {
     }
   }
 
+  createEffect(() => {
+    const focusStreamId = props.focusStreamId
+    if (!focusStreamId) return
+
+    setSearch("")
+    setEditingId(focusStreamId)
+
+    requestAnimationFrame(() => {
+      rowRefs.get(focusStreamId)?.scrollIntoView({ block: "center", behavior: "smooth" })
+    })
+  })
+
   return (
     <div class="space-y-6">
       <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-[var(--text-primary)]">Channels</h3>
+        <div>
+          <h3 class="text-sm font-semibold text-[var(--text-primary)]">Channels</h3>
+          <Show when={props.focusStreamName}>
+            <p class="text-[11px] text-[var(--text-tertiary)]">Editing #{props.focusStreamName}</p>
+          </Show>
+        </div>
         <button
           class="px-2.5 py-1 text-[11px] rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] text-white hover:opacity-90 transition-opacity"
           onClick={() => setShowCreate(s => !s)}
@@ -148,7 +169,13 @@ export function SettingsChannels() {
         >
           <For each={filteredChannels()}>
             {(channel) => (
-              <div class="border-b border-[var(--border-default)] last:border-b-0">
+              <div
+                ref={(element) => rowRefs.set(channel.stream_id, element)}
+                class="border-b border-[var(--border-default)] last:border-b-0"
+                classList={{
+                  "bg-[var(--interactive-primary)]/5": props.focusStreamId === channel.stream_id,
+                }}
+              >
                 <div class="flex items-center justify-between px-3 py-2">
                   <div class="flex items-center gap-2 min-w-0">
                     <span

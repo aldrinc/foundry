@@ -10,10 +10,10 @@ import { OrgSwitcher } from "./org-switcher"
 import type { SavedServerStatus } from "@foundry/desktop/bindings"
 import { getUnreadTotalCount } from "../context/unread-state"
 import { buildTopicSidebarSections, isResolvedTopicName, resolveTopicName, unresolveTopicName } from "./topic-sidebar-state"
-import type { SettingsSection } from "../views/settings"
+import type { SettingsRoute, SettingsSection } from "../views/settings"
 
 export function StreamSidebar(props: {
-  onOpenSettings?: (section?: SettingsSection) => void
+  onOpenSettings?: (route?: SettingsSection | SettingsRoute) => void
   onLogout?: () => void | Promise<void>
   onSwitchOrg?: (server: SavedServerStatus) => void
 }) {
@@ -235,7 +235,7 @@ function StreamItem(props: {
   unreadCount: number
   onClick: () => void
   muted?: boolean
-  onOpenSettings?: () => void
+  onOpenSettings?: (route?: SettingsSection | SettingsRoute) => void
 }) {
   const org = useOrg()
   const nav = useNavigation()
@@ -414,6 +414,20 @@ function StreamItem(props: {
     setMoveDialog({ topicName })
   }
 
+  const handleStreamRowClick = async () => {
+    if (props.active && expanded()) {
+      setExpanded(false)
+      return
+    }
+
+    props.onClick()
+
+    if (!expanded()) {
+      setExpanded(true)
+      await ensureTopicsLoaded()
+    }
+  }
+
   return (
     <div>
       {/* Channel row with hover ellipsis */}
@@ -423,13 +437,7 @@ function StreamItem(props: {
           "bg-[var(--background-surface)]": props.active,
           "opacity-50": props.muted,
         }}
-        onClick={() => {
-          props.onClick()
-          if (!expanded()) {
-            setExpanded(true)
-            void ensureTopicsLoaded()
-          }
-        }}
+        onClick={() => { void handleStreamRowClick() }}
         onContextMenu={(e) => openContextMenu(e, "stream")}
         data-component="stream-item"
       >
@@ -620,7 +628,17 @@ function StreamItem(props: {
                 onClick={handleTogglePin}
               />
               <div class="my-1 border-t border-[var(--border-default)]" />
-              <ContextMenuItem label="Channel settings" onClick={() => { setContextMenu(null); props.onOpenSettings?.() }} />
+              <ContextMenuItem
+                label="Channel settings"
+                onClick={() => {
+                  setContextMenu(null)
+                  props.onOpenSettings?.({
+                    section: "channels",
+                    streamId: props.stream.stream_id,
+                    streamName: props.stream.name,
+                  })
+                }}
+              />
               <ContextMenuItem label="Copy link" onClick={handleCopyStreamLink} />
               <div class="my-1 border-t border-[var(--border-default)]" />
               <ContextMenuItem label="Unsubscribe" onClick={handleUnsubscribe} danger />

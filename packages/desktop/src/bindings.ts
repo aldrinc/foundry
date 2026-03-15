@@ -206,6 +206,14 @@ async saveTempFile(fileName: string, data: number[]) : Promise<Result<string, st
     else return { status: "error", error: e  as any };
 }
 },
+async getFileSizeBytes(filePath: string) : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_file_size_bytes", { filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Upload a file
  */
@@ -223,6 +231,61 @@ async uploadFile(orgId: string, filePath: string) : Promise<Result<UploadResult,
 async fetchAuthenticatedMediaDataUrl(orgId: string, mediaUrl: string) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("fetch_authenticated_media_data_url", { orgId, mediaUrl }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetch the current user's saved snippets.
+ */
+async getSavedSnippets(orgId: string) : Promise<Result<SavedSnippet[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_saved_snippets", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a saved snippet.
+ */
+async createSavedSnippet(orgId: string, title: string, content: string) : Promise<Result<CreateSavedSnippetResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_saved_snippet", { orgId, title, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Update a saved snippet.
+ */
+async updateSavedSnippet(orgId: string, savedSnippetId: number, title: string, content: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_saved_snippet", { orgId, savedSnippetId, title, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete a saved snippet.
+ */
+async deleteSavedSnippet(orgId: string, savedSnippetId: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_saved_snippet", { orgId, savedSnippetId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Create a call link using the organization's configured call provider.
+ */
+async createCallLink(orgId: string, request: CreateCallLinkRequest) : Promise<Result<CreateCallLinkResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_call_link", { orgId, request }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1007,6 +1070,9 @@ export type BotApiKeyResponse = { api_key: string }
  * Response from POST /api/v1/bots.
  */
 export type CreateBotResponse = { user_id: number; api_key: string; avatar_url?: string | null; default_sending_stream?: string | null; default_events_register_stream?: string | null; default_all_public_streams?: boolean | null }
+export type CreateCallLinkRequest = { provider_id: number; base_jitsi_url: string | null; label: string; is_audio_call: boolean }
+export type CreateCallLinkResult = { url: string }
+export type CreateSavedSnippetResult = { saved_snippet_id: number }
 /**
  * Response from POST /api/v1/user_groups/create.
  */
@@ -1128,7 +1194,7 @@ export type LinkifierCreateResponse = { id: number }
 /**
  * Result of login flow
  */
-export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; realm_url: string; queue_id: string; 
+export type LoginResult = { org_id: string; realm_name: string; realm_icon: string; realm_url: string; zulip_feature_level: number; max_file_upload_size_mib?: number | null; realm_video_chat_provider?: number | null; realm_jitsi_server_url?: string | null; server_jitsi_server_url?: string | null; giphy_api_key?: string; tenor_api_key?: string; realm_gif_rating_policy?: number | null; queue_id: string; 
 /**
  * The logged-in user's ID (from Zulip register response)
  */
@@ -1202,6 +1268,7 @@ export type SavedServer = { id: string; url: string; email: string; api_key: str
  * Saved server plus current connection state.
  */
 export type SavedServerStatus = { id: string; url: string; email: string; realm_name: string; realm_icon: string; connected: boolean; org_id: string | null }
+export type SavedSnippet = { id: number; title: string; content: string; date_created: number }
 /**
  * Minimal typed response for POST /api/v1/invites.
  */

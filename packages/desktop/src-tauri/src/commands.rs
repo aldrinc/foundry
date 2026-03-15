@@ -74,11 +74,7 @@ pub(crate) fn close_auth_windows(app: &tauri::AppHandle) {
 }
 
 pub(crate) fn focus_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
+    crate::show_main_window(app);
 }
 
 fn handle_sso_callback(app: tauri::AppHandle, callback_url: String) {
@@ -209,6 +205,14 @@ async fn connect_with_api_key(
         } else {
             settings.realm_url
         },
+        zulip_feature_level: reg.zulip_feature_level,
+        max_file_upload_size_mib: reg.max_file_upload_size_mib,
+        realm_video_chat_provider: reg.realm_video_chat_provider,
+        realm_jitsi_server_url: reg.realm_jitsi_server_url,
+        server_jitsi_server_url: reg.server_jitsi_server_url,
+        giphy_api_key: reg.giphy_api_key,
+        tenor_api_key: reg.tenor_api_key,
+        realm_gif_rating_policy: reg.realm_gif_rating_policy,
         queue_id: reg.queue_id,
         user_id: reg.user_id,
         subscriptions: reg.subscriptions,
@@ -1097,6 +1101,15 @@ pub async fn save_temp_file(file_name: String, data: Vec<u8>) -> Result<String, 
         .ok_or_else(|| "Invalid temp path".to_string())
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn get_file_size_bytes(file_path: String) -> Result<u64, String> {
+    tokio::fs::metadata(&file_path)
+        .await
+        .map(|metadata| metadata.len())
+        .map_err(|e| format!("Failed to read file metadata: {}", e))
+}
+
 /// Upload a file
 #[tauri::command]
 #[specta::specta]
@@ -1123,6 +1136,85 @@ pub async fn fetch_authenticated_media_data_url(
 ) -> Result<String, String> {
     with_org_client(&app, state.inner(), &org_id, move |client| async move {
         client.fetch_authenticated_media_data_url(&media_url).await
+    })
+    .await
+}
+
+/// Fetch the current user's saved snippets.
+#[tauri::command]
+#[specta::specta]
+pub async fn get_saved_snippets(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+) -> Result<Vec<SavedSnippet>, String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.get_saved_snippets().await
+    })
+    .await
+}
+
+/// Create a saved snippet.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_saved_snippet(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    title: String,
+    content: String,
+) -> Result<CreateSavedSnippetResult, String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.create_saved_snippet(&title, &content).await
+    })
+    .await
+}
+
+/// Update a saved snippet.
+#[tauri::command]
+#[specta::specta]
+pub async fn update_saved_snippet(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    saved_snippet_id: u64,
+    title: String,
+    content: String,
+) -> Result<(), String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client
+            .update_saved_snippet(saved_snippet_id, &title, &content)
+            .await
+    })
+    .await
+}
+
+/// Delete a saved snippet.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_saved_snippet(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    saved_snippet_id: u64,
+) -> Result<(), String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.delete_saved_snippet(saved_snippet_id).await
+    })
+    .await
+}
+
+/// Create a call link using the organization's configured call provider.
+#[tauri::command]
+#[specta::specta]
+pub async fn create_call_link(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    request: CreateCallLinkRequest,
+) -> Result<CreateCallLinkResult, String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.create_call_link(&request).await
     })
     .await
 }

@@ -9,6 +9,8 @@ import {
   getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
   hydrateAuthenticatedMessageImages,
+  isMessageImageLink,
+  openMessageImageViewerFromLink,
   resolveMessageUrl,
   resolveRealmUrlFromSavedServers,
   sanitizeMessageHtml,
@@ -42,6 +44,7 @@ export function MessageItem(props: {
   const [saving, setSaving] = createSignal(false)
   const [resolvedServerUrl, setResolvedServerUrl] = createSignal(props.serverUrl || org.realmUrl || (window as any).__FOUNDRY_REALM_URL || "")
   const [linkPreviewCollapsed, setLinkPreviewCollapsed] = createSignal(false)
+  let refreshAuthenticatedImages = () => {}
   let contentEl!: HTMLDivElement
 
   const currentUserId = () => sync.store.currentUserId
@@ -119,11 +122,22 @@ export function MessageItem(props: {
     const href = link.getAttribute("href")
     if (!href) return
 
+    if (isMessageImageLink(link, serverUrl())) {
+      event.preventDefault()
+      event.stopPropagation()
+      openMessageImageViewerFromLink(contentEl, link, {
+        openLink: (url) => platform.openLink(url),
+        onViewerImageChange: () => refreshAuthenticatedImages(),
+        serverUrl: serverUrl(),
+      })
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
 
     const resolvedHref = resolveMessageUrl(href, serverUrl())
-    const downloadHref = shouldOpenUserUploadAsDownload(link)
+    const downloadHref = shouldOpenUserUploadAsDownload(link, serverUrl())
       ? getUserUploadDownloadUrl(href, serverUrl())
       : undefined
 
@@ -155,7 +169,9 @@ export function MessageItem(props: {
       cleanupImages()
       cleanupImages = hydrateAuthenticatedMessageImages(contentEl, org.orgId, serverUrl())
     }
+    refreshAuthenticatedImages = rehydrateImages
     const cleanupCarousel = hydrateMessageImageCarousels(contentEl, {
+      openLink: (url) => platform.openLink(url),
       onViewerImageChange: rehydrateImages,
       serverUrl: serverUrl(),
     })
@@ -163,6 +179,7 @@ export function MessageItem(props: {
     const cleanupFileCards = hydrateFileAttachmentCards(contentEl, serverUrl())
     rehydrateImages()
     onCleanup(() => {
+      refreshAuthenticatedImages = () => {}
       cleanupImages()
       cleanupCarousel()
       cleanupCodeBlocks()
@@ -332,10 +349,15 @@ export function MessageItem(props: {
   )
 }
 
-function shouldOpenUserUploadAsDownload(link: HTMLAnchorElement): boolean {
-  if (link.classList.contains("foundry-image-gallery-open")) return false
-  if (link.classList.contains("foundry-image-lightbox-link")) return false
-  return !link.querySelector("img, video, audio")
+function shouldOpenUserUploadAsDownload(link: HTMLAnchorElement, serverUrl?: string): boolean {
+  if (
+    link.classList.contains("foundry-image-gallery-open")
+    || link.classList.contains("foundry-image-lightbox-link")
+  ) {
+    return false
+  }
+  if (isMessageImageLink(link, serverUrl)) return false
+  return !link.querySelector("video, audio")
 }
 
 /** Group identical reactions and count them, tracking user IDs */

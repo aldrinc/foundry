@@ -1,4 +1,4 @@
-import { createSignal, Show, For, type JSX } from "solid-js"
+import { createEffect, createSignal, Show, For, type JSX } from "solid-js"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsNotifications } from "./settings-notifications"
 import { SettingsAccount } from "./settings-account"
@@ -24,6 +24,20 @@ export type SettingsSection =
   | "org-profile" | "org-permissions" | "emoji" | "linkifiers" | "users" | "agents" | "bots"
   | "app" | "network" | "servers"
   | "about"
+
+export type SettingsRoute = {
+  section: SettingsSection
+  streamId?: number
+  streamName?: string
+}
+
+export function normalizeSettingsRoute(route?: SettingsSection | SettingsRoute): SettingsRoute {
+  if (!route) {
+    return { section: "general" }
+  }
+
+  return typeof route === "string" ? { section: route } : route
+}
 
 interface NavCategory {
   label: string
@@ -77,12 +91,19 @@ const NAV: NavCategory[] = [
 ]
 
 export function SettingsView(props: {
-  initialSection?: SettingsSection
+  initialRoute?: SettingsSection | SettingsRoute
   onClose: () => void
   onLogout: () => void | Promise<void>
   onSwitchOrg?: (server: SavedServerStatus) => void
 }) {
-  const [activeSection, setActiveSection] = createSignal<SettingsSection>(props.initialSection ?? "general")
+  const [route, setRoute] = createSignal<SettingsRoute>(normalizeSettingsRoute(props.initialRoute))
+
+  createEffect(() => {
+    setRoute(normalizeSettingsRoute(props.initialRoute))
+  })
+
+  const activeSection = () => route().section
+  const channelContextName = () => activeSection() === "channels" ? route().streamName : undefined
 
   const renderContent = () => {
     switch (activeSection()) {
@@ -91,7 +112,7 @@ export function SettingsView(props: {
       case "account": return <SettingsAccount onLogout={props.onLogout} />
       case "muted-users": return <SettingsMutedUsers />
       case "alert-words": return <SettingsAlertWords />
-      case "channels": return <SettingsChannels />
+      case "channels": return <SettingsChannels focusStreamId={route().streamId} focusStreamName={route().streamName} />
       case "groups": return <SettingsGroups />
       case "org-profile": return <SettingsOrgProfile />
       case "org-permissions": return <SettingsOrgPermissions />
@@ -116,7 +137,14 @@ export function SettingsView(props: {
       >
         {/* Header */}
         <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-default)] shrink-0">
-          <h2 class="text-sm font-semibold text-[var(--text-primary)]">Settings</h2>
+          <div>
+            <h2 class="text-sm font-semibold text-[var(--text-primary)]">
+              {activeSection() === "channels" && channelContextName() ? "Channel settings" : "Settings"}
+            </h2>
+            <Show when={channelContextName()}>
+              <p class="text-[11px] text-[var(--text-tertiary)]">#{channelContextName()}</p>
+            </Show>
+          </div>
           <button
             onClick={props.onClose}
             class="p-1 rounded-[var(--radius-sm)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
@@ -147,7 +175,7 @@ export function SettingsView(props: {
                             ? "bg-[var(--interactive-primary)]/10 text-[var(--interactive-primary)] font-medium"
                             : "text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] hover:text-[var(--text-primary)]"
                         }`}
-                        onClick={() => setActiveSection(item.id)}
+                        onClick={() => setRoute({ section: item.id })}
                       >
                         <span class="w-[14px] h-[14px] flex items-center justify-center shrink-0">
                           {item.icon()}

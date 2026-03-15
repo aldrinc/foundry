@@ -1,5 +1,5 @@
-import { Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
-import { commands } from "@foundry/desktop/bindings"
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, type JSX } from "solid-js"
+import { commands, type SavedSnippet } from "@foundry/desktop/bindings"
 import { useNavigation } from "../context/navigation"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
@@ -9,6 +9,40 @@ import { TopicPicker } from "./topic-picker"
 import { FormatToolbar } from "./format-toolbar"
 import { EmojiPicker } from "./emoji-picker"
 import { MentionAutocomplete } from "./mention-autocomplete"
+import {
+  CALL_PROVIDER,
+  buildBlockInsert,
+  buildCallMessage,
+  buildGlobalTimeMessage,
+  buildInlineInsert,
+  buildPollMessage,
+  buildTodoMessage,
+  chooseGifProvider,
+  createCurrentHourDate,
+  formatDateTimeLocalValue,
+  getGifDisabledReason,
+  getSavedSnippetDisabledReason,
+  getVideoCallDisabledReason,
+  getVideoCallProviderName,
+  getVoiceCallDisabledReason,
+  searchGifs,
+  type GifSearchResult,
+  type TodoTaskDraft,
+} from "./compose-actions"
+import {
+  appendUploadMarkdown,
+  buildUploadTooLargeMessage,
+  bytesFromMebibytes,
+  captureTextareaSelection,
+  restoreTextareaSelection,
+} from "./upload-utils"
+
+type ComposeDialog =
+  | "poll"
+  | "todo"
+  | "time"
+  | "save-snippet"
+  | "edit-snippet"
 
 export function ComposeBox(props: { narrow: string }) {
   const sync = useZulipSync()
@@ -28,8 +62,35 @@ export function ComposeBox(props: { narrow: string }) {
   const [showFormatBar, setShowFormatBar] = createSignal(false)
   const [showEmojiPicker, setShowEmojiPicker] = createSignal(false)
   const [showOptionsMenu, setShowOptionsMenu] = createSignal(false)
+  const [showGifPicker, setShowGifPicker] = createSignal(false)
+  const [showSavedSnippets, setShowSavedSnippets] = createSignal(false)
+  const [activeDialog, setActiveDialog] = createSignal<ComposeDialog | null>(null)
   const [mentionQuery, setMentionQuery] = createSignal<string | null>(null)
   const [mentionType, setMentionType] = createSignal<"user" | "stream">("user")
+  const [dialogError, setDialogError] = createSignal("")
+  const [creatingCall, setCreatingCall] = createSignal<"video" | "voice" | null>(null)
+  const [savedSnippets, setSavedSnippets] = createSignal<SavedSnippet[]>([])
+  const [savedSnippetsLoading, setSavedSnippetsLoading] = createSignal(false)
+  const [savedSnippetError, setSavedSnippetError] = createSignal("")
+  const [savedSnippetQuery, setSavedSnippetQuery] = createSignal("")
+  const [snippetTitle, setSnippetTitle] = createSignal("")
+  const [snippetContent, setSnippetContent] = createSignal("")
+  const [snippetMutationError, setSnippetMutationError] = createSignal("")
+  const [snippetSaving, setSnippetSaving] = createSignal(false)
+  const [editingSnippetId, setEditingSnippetId] = createSignal<number | null>(null)
+  const [gifQuery, setGifQuery] = createSignal("")
+  const [gifResults, setGifResults] = createSignal<GifSearchResult[]>([])
+  const [gifLoading, setGifLoading] = createSignal(false)
+  const [gifError, setGifError] = createSignal("")
+  const [globalTimeValue, setGlobalTimeValue] = createSignal(formatDateTimeLocalValue(createCurrentHourDate()))
+  const [pollQuestion, setPollQuestion] = createSignal("")
+  const [pollOptions, setPollOptions] = createSignal<string[]>(["", "", ""])
+  const [todoTitle, setTodoTitle] = createSignal("Task list")
+  const [todoTasks, setTodoTasks] = createSignal<TodoTaskDraft[]>([
+    { name: "", description: "" },
+    { name: "", description: "" },
+    { name: "", description: "" },
+  ])
   let mentionTriggerIndex = -1
 
   let textareaRef!: HTMLTextAreaElement
@@ -37,12 +98,14 @@ export function ComposeBox(props: { narrow: string }) {
   let typingTimer: ReturnType<typeof setTimeout> | undefined
   let lastTypingSent = 0
   let nativeDropRegistered = false
+  let latestGifRequest = 0
 
   const modKey = () => platform.os === "macos" ? "⌘" : "Ctrl"
 
   const caps = () => capabilities()
   const canUpload = () => caps()?.uploads !== false
   const canType = () => caps()?.typing_notifications !== false && settings.sendTyping
+  const uploadLimitBytes = () => bytesFromMebibytes(org.maxFileUploadSizeMib)
 
   // Load draft
   createEffect(() => {
@@ -83,9 +146,11 @@ export function ComposeBox(props: { narrow: string }) {
   const handleDocClick = () => {
     setShowEmojiPicker(false)
     setShowOptionsMenu(false)
+    setShowGifPicker(false)
+    setShowSavedSnippets(false)
   }
   createEffect(() => {
-    if (showEmojiPicker() || showOptionsMenu()) {
+    if (showEmojiPicker() || showOptionsMenu() || showGifPicker() || showSavedSnippets()) {
       document.addEventListener("click", handleDocClick)
     } else {
       document.removeEventListener("click", handleDocClick)
@@ -144,6 +209,112 @@ export function ComposeBox(props: { narrow: string }) {
     }
 
     return "Type a message..."
+  }
+
+  const jitsiServerUrl = () => org.realmJitsiServerUrl || org.serverJitsiServerUrl
+
+  const videoCallDisabledReason = createMemo(() =>
+    getVideoCallDisabledReason(org.videoChatProvider, jitsiServerUrl())
+  )
+
+  const voiceCallDisabledReason = createMemo(() =>
+    getVoiceCallDisabledReason(org.videoChatProvider, jitsiServerUrl())
+  )
+
+  const savedSnippetDisabledReason = createMemo(() =>
+    getSavedSnippetDisabledReason(org.zulipFeatureLevel)
+  )
+
+  const gifSearchConfig = () => ({
+    giphyApiKey: org.giphyApiKey,
+    tenorApiKey: org.tenorApiKey,
+    gifRatingPolicy: org.gifRatingPolicy,
+    locale: navigator.language || "en",
+  })
+
+  const gifDisabledReason = createMemo(() =>
+    getGifDisabledReason(gifSearchConfig())
+  )
+
+  const filteredSavedSnippets = createMemo(() => {
+    const query = savedSnippetQuery().trim().toLowerCase()
+    if (!query) {
+      return savedSnippets()
+    }
+
+    return savedSnippets().filter((snippet) =>
+      snippet.title.toLowerCase().includes(query)
+      || snippet.content.toLowerCase().includes(query)
+    )
+  })
+
+  const currentConversationLabel = () => {
+    const current = parsed()
+    if (!current) {
+      return "Conversation"
+    }
+
+    if (current.type === "topic" || current.type === "stream") {
+      const stream = sync.store.subscriptions.find((subscription) => subscription.stream_id === current.streamId)
+      const streamLabel = `#${stream?.name || current.streamId}`
+      const topicLabel = current.type === "topic"
+        ? current.topic
+        : topic().trim()
+      return topicLabel ? `${streamLabel} > ${topicLabel}` : streamLabel
+    }
+
+    if (current.type === "dm") {
+      const names = (current.userIds || [])
+        .map((userId) => sync.store.users.find((user) => user.user_id === userId)?.full_name)
+        .filter((value): value is string => Boolean(value))
+      return names.length > 0 ? names.join(", ") : "Direct message"
+    }
+
+    return "Conversation"
+  }
+
+  const closeDialog = () => {
+    setActiveDialog(null)
+    setDialogError("")
+    setSnippetMutationError("")
+  }
+
+  const persistDraft = (nextValue: string) => {
+    setContent(nextValue)
+    if (nextValue.trim()) {
+      sync.saveDraft(props.narrow, nextValue)
+      return
+    }
+
+    sync.clearDraft(props.narrow)
+  }
+
+  const applyInsertion = (
+    nextValue: string,
+    selectionStart: number,
+    selectionEnd: number,
+  ) => {
+    persistDraft(nextValue)
+    requestAnimationFrame(() => {
+      textareaRef?.focus()
+      textareaRef?.setSelectionRange(selectionStart, selectionEnd)
+    })
+  }
+
+  const insertInlineContent = (insertion: string) => {
+    const current = content()
+    const selectionStart = textareaRef?.selectionStart ?? current.length
+    const selectionEnd = textareaRef?.selectionEnd ?? current.length
+    const next = buildInlineInsert(current, selectionStart, selectionEnd, insertion)
+    applyInsertion(next.value, next.selectionStart, next.selectionEnd)
+  }
+
+  const insertBlockContent = (insertion: string) => {
+    const current = content()
+    const selectionStart = textareaRef?.selectionStart ?? current.length
+    const selectionEnd = textareaRef?.selectionEnd ?? current.length
+    const next = buildBlockInsert(current, selectionStart, selectionEnd, insertion)
+    applyInsertion(next.value, next.selectionStart, next.selectionEnd)
   }
 
   // ── Typing indicators ──
@@ -219,6 +390,9 @@ export function ComposeBox(props: { narrow: string }) {
 
   const uploadSingleFile = async (filePath: string) => {
     const fileName = filePath.split("/").pop() || "file"
+    if (!(await validateUploadSize(filePath))) {
+      return
+    }
     setUploading(true)
     setUploadLabel(fileName)
     setUploadError("")
@@ -227,8 +401,11 @@ export function ComposeBox(props: { narrow: string }) {
       if (result.status === "ok") {
         const markdown = `[${fileName}](${result.data.url})`
         const current = content()
-        setContent(current ? `${current}\n${markdown}` : markdown)
-        sync.saveDraft(props.narrow, content())
+        const preservedSelection = captureTextareaSelection(textareaRef)
+        const nextContent = appendUploadMarkdown(current, markdown)
+        setContent(nextContent)
+        sync.saveDraft(props.narrow, nextContent)
+        requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
       } else {
         setUploadError(result.error || "Upload failed")
       }
@@ -329,6 +506,9 @@ export function ComposeBox(props: { narrow: string }) {
   // Upload a File/Blob by saving to temp then uploading
   const uploadBlobFile = async (file: File) => {
     const fileName = file.name || "pasted-file"
+    if (!validateUploadSizeBytes(file.size)) {
+      return
+    }
     setUploading(true)
     setUploadLabel(fileName)
     setUploadError("")
@@ -348,6 +528,304 @@ export function ComposeBox(props: { narrow: string }) {
       setUploading(false)
       setUploadLabel("")
     }
+  }
+
+  const validateUploadSizeBytes = (sizeBytes: number): boolean => {
+    const limitBytes = uploadLimitBytes()
+    if (!limitBytes || sizeBytes <= limitBytes) {
+      return true
+    }
+
+    setUploadError(buildUploadTooLargeMessage(limitBytes))
+    return false
+  }
+
+  const validateUploadSize = async (filePath: string): Promise<boolean> => {
+    const limitBytes = uploadLimitBytes()
+    if (!limitBytes) {
+      return true
+    }
+
+    try {
+      const result = await commands.getFileSizeBytes(filePath)
+      if (result.status === "error") {
+        return true
+      }
+
+      return validateUploadSizeBytes(result.data)
+    } catch {
+      return true
+    }
+  }
+
+  const loadSavedSnippets = async () => {
+    if (savedSnippetDisabledReason()) {
+      return
+    }
+
+    setSavedSnippetsLoading(true)
+    setSavedSnippetError("")
+    try {
+      const result = await commands.getSavedSnippets(org.orgId)
+      if (result.status === "error") {
+        setSavedSnippetError(result.error || "Failed to load saved snippets")
+        return
+      }
+
+      const ordered = [...result.data].sort((left, right) => right.date_created - left.date_created)
+      setSavedSnippets(ordered)
+    } catch (error: any) {
+      setSavedSnippetError(error?.message || error?.toString() || "Failed to load saved snippets")
+    } finally {
+      setSavedSnippetsLoading(false)
+    }
+  }
+
+  const openSavedSnippetDialog = (mode: "save-snippet" | "edit-snippet", snippet?: SavedSnippet) => {
+    setSnippetMutationError("")
+    setDialogError("")
+    setEditingSnippetId(snippet?.id ?? null)
+    setSnippetTitle(snippet?.title ?? "")
+    setSnippetContent(snippet?.content ?? content())
+    setActiveDialog(mode)
+    setShowSavedSnippets(false)
+  }
+
+  const submitSavedSnippet = async () => {
+    const title = snippetTitle().trim()
+    const body = snippetContent().trim()
+    if (!title || !body) {
+      setSnippetMutationError("Saved snippets need both a title and content.")
+      return
+    }
+
+    setSnippetSaving(true)
+    setSnippetMutationError("")
+    try {
+      if (editingSnippetId() != null) {
+        const result = await commands.updateSavedSnippet(
+          org.orgId,
+          editingSnippetId()!,
+          title,
+          body,
+        )
+        if (result.status === "error") {
+          setSnippetMutationError(result.error || "Failed to update saved snippet")
+          return
+        }
+      } else {
+        const result = await commands.createSavedSnippet(org.orgId, title, body)
+        if (result.status === "error") {
+          setSnippetMutationError(result.error || "Failed to create saved snippet")
+          return
+        }
+      }
+
+      closeDialog()
+      await loadSavedSnippets()
+    } catch (error: any) {
+      setSnippetMutationError(error?.message || error?.toString() || "Failed to save snippet")
+    } finally {
+      setSnippetSaving(false)
+    }
+  }
+
+  const handleDeleteSavedSnippet = async (snippet: SavedSnippet) => {
+    if (!window.confirm(`Delete "${snippet.title}"?`)) {
+      return
+    }
+
+    setSavedSnippetError("")
+    try {
+      const result = await commands.deleteSavedSnippet(org.orgId, snippet.id)
+      if (result.status === "error") {
+        setSavedSnippetError(result.error || "Failed to delete saved snippet")
+        return
+      }
+      await loadSavedSnippets()
+    } catch (error: any) {
+      setSavedSnippetError(error?.message || error?.toString() || "Failed to delete saved snippet")
+    }
+  }
+
+  const loadGifResults = async (query: string) => {
+    if (gifDisabledReason()) {
+      setGifResults([])
+      return
+    }
+
+    const requestId = ++latestGifRequest
+    setGifLoading(true)
+    setGifError("")
+    try {
+      const results = await searchGifs(gifSearchConfig(), query)
+      if (requestId !== latestGifRequest) {
+        return
+      }
+      setGifResults(results)
+    } catch (error: any) {
+      if (requestId !== latestGifRequest) {
+        return
+      }
+      setGifError(error?.message || error?.toString() || "Failed to load GIFs")
+      setGifResults([])
+    } finally {
+      if (requestId === latestGifRequest) {
+        setGifLoading(false)
+      }
+    }
+  }
+
+  createEffect(on(
+    () => [showGifPicker(), gifQuery()] as const,
+    ([open, query]) => {
+      if (!open) {
+        return
+      }
+
+      const timeout = setTimeout(() => {
+        void loadGifResults(query)
+      }, 250)
+
+      onCleanup(() => clearTimeout(timeout))
+    },
+  ))
+
+  const handleCreateCall = async (isAudioCall: boolean) => {
+    const disabledReason = isAudioCall ? voiceCallDisabledReason() : videoCallDisabledReason()
+    if (disabledReason) {
+      setError(disabledReason)
+      return
+    }
+
+    setCreatingCall(isAudioCall ? "voice" : "video")
+    setError("")
+    try {
+      const result = await commands.createCallLink(org.orgId, {
+        provider_id: org.videoChatProvider ?? CALL_PROVIDER.DISABLED,
+        base_jitsi_url: jitsiServerUrl() || null,
+        label: currentConversationLabel(),
+        is_audio_call: isAudioCall,
+      })
+
+      if (result.status === "error") {
+        const providerName = getVideoCallProviderName(org.videoChatProvider)
+        const extraHint = providerName === "Zoom" && /zoom/i.test(result.error || "")
+          ? " Finish the Zoom setup in your browser if prompted, then try again."
+          : ""
+        setError((result.error || "Failed to create call link") + extraHint)
+        return
+      }
+
+      insertBlockContent(buildCallMessage(result.data.url, isAudioCall))
+    } catch (error: any) {
+      setError(error?.message || error?.toString() || "Failed to create call link")
+    } finally {
+      setCreatingCall(null)
+    }
+  }
+
+  const openPollDialog = () => {
+    setDialogError("")
+    setPollQuestion("")
+    setPollOptions(["", "", ""])
+    setActiveDialog("poll")
+  }
+
+  const updatePollOption = (index: number, value: string) => {
+    setPollOptions((current) => current.map((option, optionIndex) => optionIndex === index ? value : option))
+  }
+
+  const addPollOption = () => {
+    setPollOptions((current) => [...current, ""])
+  }
+
+  const removePollOption = (index: number) => {
+    setPollOptions((current) => current.filter((_, optionIndex) => optionIndex !== index))
+  }
+
+  const submitPollDialog = () => {
+    const question = pollQuestion().trim()
+    const options = pollOptions().map((option) => option.trim()).filter(Boolean)
+    if (!question) {
+      setDialogError("Please enter a poll question.")
+      return
+    }
+    if (options.length < 2) {
+      setDialogError("Please add at least two poll options.")
+      return
+    }
+
+    insertBlockContent(buildPollMessage(question, options))
+    closeDialog()
+  }
+
+  const openTodoDialog = () => {
+    setDialogError("")
+    setTodoTitle("Task list")
+    setTodoTasks([
+      { name: "", description: "" },
+      { name: "", description: "" },
+      { name: "", description: "" },
+    ])
+    setActiveDialog("todo")
+  }
+
+  const updateTodoTask = (index: number, field: keyof TodoTaskDraft, value: string) => {
+    setTodoTasks((current) =>
+      current.map((task, taskIndex) =>
+        taskIndex === index ? { ...task, [field]: value } : task
+      )
+    )
+  }
+
+  const addTodoTask = () => {
+    setTodoTasks((current) => [...current, { name: "", description: "" }])
+  }
+
+  const removeTodoTask = (index: number) => {
+    setTodoTasks((current) => current.filter((_, taskIndex) => taskIndex !== index))
+  }
+
+  const submitTodoDialog = () => {
+    const normalizedTasks = todoTasks()
+      .map(({ name, description }) => ({ name: name.trim(), description: description.trim() }))
+      .filter(({ name, description }) => name || description)
+
+    if (normalizedTasks.some(({ name, description }) => !name && description)) {
+      setDialogError("Please enter a task title before adding a description.")
+      return
+    }
+
+    if (normalizedTasks.filter(({ name }) => name).length === 0) {
+      setDialogError("Please add at least one task.")
+      return
+    }
+
+    insertBlockContent(buildTodoMessage(todoTitle(), normalizedTasks))
+    closeDialog()
+  }
+
+  const openTimeDialog = () => {
+    setDialogError("")
+    setGlobalTimeValue(formatDateTimeLocalValue(createCurrentHourDate()))
+    setActiveDialog("time")
+  }
+
+  const submitTimeDialog = () => {
+    if (!globalTimeValue()) {
+      setDialogError("Please choose a date and time.")
+      return
+    }
+
+    const selected = new Date(globalTimeValue())
+    if (Number.isNaN(selected.valueOf())) {
+      setDialogError("Please choose a valid date and time.")
+      return
+    }
+
+    insertInlineContent(buildGlobalTimeMessage(selected.toISOString()))
+    closeDialog()
   }
 
   // ── Mention autocomplete ──
@@ -501,29 +979,12 @@ export function ComposeBox(props: { narrow: string }) {
 
   // ── Format toolbar insert handler ──
   const handleFormatInsert = (newText: string, _cursorOffset?: number) => {
-    setContent(newText)
-    sync.saveDraft(props.narrow, newText)
+    persistDraft(newText)
   }
 
   // ── Emoji insert handler ──
   const handleEmojiSelect = (emojiName: string, _emojiCode: string) => {
-    const current = content()
-    const insertion = `:${emojiName}: `
-    if (textareaRef) {
-      const start = textareaRef.selectionStart
-      const end = textareaRef.selectionEnd
-      const newText = current.slice(0, start) + insertion + current.slice(end)
-      setContent(newText)
-      sync.saveDraft(props.narrow, newText)
-      requestAnimationFrame(() => {
-        const pos = start + insertion.length
-        textareaRef.focus()
-        textareaRef.setSelectionRange(pos, pos)
-      })
-    } else {
-      setContent(current + insertion)
-      sync.saveDraft(props.narrow, current + insertion)
-    }
+    insertInlineContent(`:${emojiName}: `)
     setShowEmojiPicker(false)
   }
 
@@ -682,42 +1143,50 @@ export function ComposeBox(props: { narrow: string }) {
         {/* Action bar */}
         <div class="flex items-center justify-between px-2 py-1.5 border-t border-[var(--border-default)]">
           {/* Left side actions */}
-          <div class="flex items-center gap-0.5">
-            {/* Attach button */}
+          <div class="flex items-center gap-0.5 flex-wrap">
             <Show when={canUpload()}>
-              <button
-                class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-50"
+              <ComposeActionButton
+                title={uploading() ? `Uploading ${uploadLabel()}...` : "Attach file"}
                 onClick={handleFileUpload}
                 disabled={uploading()}
-                title="Attach file"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                 </svg>
-              </button>
+              </ComposeActionButton>
             </Show>
 
-            {/* Format toggle (Aa) */}
-            <button
-              class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-              classList={{ "text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10": showFormatBar() }}
-              onClick={() => setShowFormatBar(v => !v)}
-              title="Formatting"
+            <ComposeActionButton
+              title={videoCallDisabledReason() || "Add video call"}
+              onClick={() => void handleCreateCall(false)}
+              disabled={Boolean(videoCallDisabledReason()) || creatingCall() !== null}
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <text x="1" y="12" font-size="11" fill="currentColor" font-family="system-ui, sans-serif" font-weight="600">Aa</text>
+                <rect x="2.5" y="4" width="7.5" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2" />
+                <path d="M10.5 6.25l3-1.75v7l-3-1.75v-3.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
               </svg>
-            </button>
+            </ComposeActionButton>
 
-            {/* Emoji button */}
+            <ComposeActionButton
+              title={voiceCallDisabledReason() || "Add voice call"}
+              onClick={() => void handleCreateCall(true)}
+              disabled={Boolean(voiceCallDisabledReason()) || creatingCall() !== null}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M8 3a1.5 1.5 0 0 0-1.5 1.5v3A1.5 1.5 0 0 0 8 9a1.5 1.5 0 0 0 1.5-1.5v-3A1.5 1.5 0 0 0 8 3Z" stroke="currentColor" stroke-width="1.2" />
+                <path d="M5 7.5a3 3 0 0 0 6 0M8 10.5v2M6 12.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+              </svg>
+            </ComposeActionButton>
+
             <div class="relative">
-              <button
-                class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowEmojiPicker(v => !v)
-                }}
+              <ComposeActionButton
                 title="Emoji"
+                onClick={() => {
+                  setShowGifPicker(false)
+                  setShowSavedSnippets(false)
+                  setShowOptionsMenu(false)
+                  setShowEmojiPicker((value) => !value)
+                }}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" />
@@ -725,12 +1194,9 @@ export function ComposeBox(props: { narrow: string }) {
                   <circle cx="10" cy="7" r="0.8" fill="currentColor" />
                   <path d="M5.5 10a3 3 0 005 0" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
                 </svg>
-              </button>
+              </ComposeActionButton>
               <Show when={showEmojiPicker()}>
-                <div
-                  class="absolute bottom-full left-0 mb-2 z-50"
-                  onClick={(e) => e.stopPropagation()}
-                >
+                <div class="absolute bottom-full left-0 mb-2 z-50" onClick={(event) => event.stopPropagation()}>
                   <EmojiPicker
                     onSelect={handleEmojiSelect}
                     onClose={() => setShowEmojiPicker(false)}
@@ -738,6 +1204,194 @@ export function ComposeBox(props: { narrow: string }) {
                 </div>
               </Show>
             </div>
+
+            <div class="relative">
+              <ComposeActionButton
+                title={gifDisabledReason() || "Add GIF"}
+                onClick={() => {
+                  setShowEmojiPicker(false)
+                  setShowSavedSnippets(false)
+                  setShowOptionsMenu(false)
+                  setShowGifPicker((value) => !value)
+                  if (!showGifPicker()) {
+                    setGifQuery("")
+                    setGifError("")
+                  }
+                }}
+                disabled={Boolean(gifDisabledReason())}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="2.5" y="3.5" width="11" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2" />
+                  <path d="M5 6h1.2v1.2H5V6Zm0 2.1h2.2v1.2H5V8.1Zm3.4-2.1h2.6v1.2h-1.4v2.1h-1.2V6Zm4.1 0h-1.2v3.3h1.2V6Z" fill="currentColor" />
+                </svg>
+              </ComposeActionButton>
+              <Show when={showGifPicker()}>
+                <div
+                  class="absolute bottom-full left-0 mb-2 z-50 w-[360px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-surface)] p-3 shadow-xl"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div class="flex items-center justify-between gap-3">
+                    <input
+                      class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                      placeholder={chooseGifProvider(gifSearchConfig()) === "tenor" ? "Search Tenor" : "Search Giphy"}
+                      value={gifQuery()}
+                      onInput={(event) => setGifQuery(event.currentTarget.value)}
+                    />
+                    <span class="text-[10px] uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
+                      {chooseGifProvider(gifSearchConfig()) === "tenor" ? "Tenor" : "Giphy"}
+                    </span>
+                  </div>
+                  <Show when={gifError()}>
+                    <p class="mt-2 text-xs text-[var(--status-error)]">{gifError()}</p>
+                  </Show>
+                  <Show when={gifLoading()}>
+                    <p class="mt-2 text-xs text-[var(--text-tertiary)]">Loading GIFs...</p>
+                  </Show>
+                  <div class="mt-3 grid max-h-[260px] grid-cols-2 gap-2 overflow-y-auto">
+                    <For each={gifResults()}>
+                      {(result) => (
+                        <button
+                          type="button"
+                          class="overflow-hidden rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-elevated)]"
+                          onClick={() => {
+                            insertBlockContent(`[](${result.insertUrl})`)
+                            setShowGifPicker(false)
+                          }}
+                          title="Insert GIF"
+                        >
+                          <img class="h-[120px] w-full object-cover" src={result.previewUrl} alt="GIF preview" />
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                  <Show when={!gifLoading() && gifResults().length === 0 && !gifError()}>
+                    <p class="mt-3 text-xs text-[var(--text-tertiary)]">No GIFs matched that search.</p>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+
+            <div class="relative">
+              <ComposeActionButton
+                title={savedSnippetDisabledReason() || "Add saved snippet"}
+                onClick={() => {
+                  setShowEmojiPicker(false)
+                  setShowGifPicker(false)
+                  setShowOptionsMenu(false)
+                  setShowSavedSnippets((value) => !value)
+                  if (!showSavedSnippets() && savedSnippets().length === 0) {
+                    void loadSavedSnippets()
+                  }
+                }}
+                disabled={Boolean(savedSnippetDisabledReason())}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <rect x="3" y="2.5" width="10" height="11" rx="1.5" stroke="currentColor" stroke-width="1.2" />
+                  <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3.2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                </svg>
+              </ComposeActionButton>
+              <Show when={showSavedSnippets()}>
+                <div
+                  class="absolute bottom-full left-0 mb-2 z-50 w-[340px] rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--background-surface)] p-3 shadow-xl"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <div class="flex items-center gap-2">
+                    <input
+                      class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                      placeholder="Filter saved snippets"
+                      value={savedSnippetQuery()}
+                      onInput={(event) => setSavedSnippetQuery(event.currentTarget.value)}
+                    />
+                    <button
+                      type="button"
+                      class="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-2.5 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+                      onClick={() => openSavedSnippetDialog("save-snippet")}
+                    >
+                      New
+                    </button>
+                  </div>
+                  <Show when={savedSnippetError()}>
+                    <p class="mt-2 text-xs text-[var(--status-error)]">{savedSnippetError()}</p>
+                  </Show>
+                  <Show when={savedSnippetsLoading()}>
+                    <p class="mt-2 text-xs text-[var(--text-tertiary)]">Loading saved snippets...</p>
+                  </Show>
+                  <div class="mt-3 flex max-h-[280px] flex-col gap-2 overflow-y-auto">
+                    <For each={filteredSavedSnippets()}>
+                      {(snippet) => (
+                        <div class="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-elevated)] p-2">
+                          <button
+                            type="button"
+                            class="w-full text-left"
+                            onClick={() => {
+                              insertBlockContent(snippet.content)
+                              setShowSavedSnippets(false)
+                            }}
+                          >
+                            <div class="text-sm font-medium text-[var(--text-primary)]">{snippet.title}</div>
+                            <p class="mt-1 max-h-[2.8rem] overflow-hidden text-xs text-[var(--text-secondary)]">{snippet.content}</p>
+                          </button>
+                          <div class="mt-2 flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              class="text-[11px] font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                openSavedSnippetDialog("edit-snippet", snippet)
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              class="text-[11px] font-medium text-[var(--status-error)]"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void handleDeleteSavedSnippet(snippet)
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                  <Show when={!savedSnippetsLoading() && filteredSavedSnippets().length === 0 && !savedSnippetError()}>
+                    <p class="mt-3 text-xs text-[var(--text-tertiary)]">No saved snippets yet.</p>
+                  </Show>
+                </div>
+              </Show>
+            </div>
+
+            <ComposeActionButton title="Add global time" onClick={openTimeDialog}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="5.75" stroke="currentColor" stroke-width="1.2" />
+                <path d="M8 5v3l2 1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </ComposeActionButton>
+
+            <ComposeActionButton title="Add poll" onClick={openPollDialog}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3.5 12V8.5M8 12V5M12.5 12V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </ComposeActionButton>
+
+            <ComposeActionButton title="Add to-do list" onClick={openTodoDialog}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 4.5h1.4l.8.9L6.6 4M7.5 4.8H13M3 8h1.4l.8.9L6.6 7.5M7.5 8.3H13M3 11.5h1.4l.8.9 1.4-1.4M7.5 11.8H13" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </ComposeActionButton>
+
+            <ComposeActionButton
+              title="Formatting"
+              onClick={() => setShowFormatBar((value) => !value)}
+              active={showFormatBar()}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <text x="1" y="12" font-size="11" fill="currentColor" font-family="system-ui, sans-serif" font-weight="600">Aa</text>
+              </svg>
+            </ComposeActionButton>
           </div>
 
           {/* Right side — send hint + options menu + send button */}
@@ -849,6 +1503,321 @@ export function ComposeBox(props: { narrow: string }) {
               </svg>
             </button>
           </div>
+        </div>
+      </div>
+
+      <Show when={activeDialog() === "time"}>
+        <ComposeDialogFrame
+          title="Add global time"
+          onClose={closeDialog}
+          footer={
+            <>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] px-3 py-2 text-sm font-medium text-[var(--interactive-primary-text)]"
+                onClick={submitTimeDialog}
+              >
+                Insert time
+              </button>
+            </>
+          }
+        >
+          <div class="space-y-3">
+            <p class="text-sm text-[var(--text-secondary)]">
+              Insert a timezone-aware timestamp that Foundry will localize for each reader.
+            </p>
+            <input
+              type="datetime-local"
+              class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+              value={globalTimeValue()}
+              onInput={(event) => setGlobalTimeValue(event.currentTarget.value)}
+            />
+            <Show when={dialogError()}>
+              <p class="text-xs text-[var(--status-error)]">{dialogError()}</p>
+            </Show>
+          </div>
+        </ComposeDialogFrame>
+      </Show>
+
+      <Show when={activeDialog() === "poll"}>
+        <ComposeDialogFrame
+          title="Create a poll"
+          onClose={closeDialog}
+          footer={
+            <>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] px-3 py-2 text-sm font-medium text-[var(--interactive-primary-text)]"
+                onClick={submitPollDialog}
+              >
+                Add poll
+              </button>
+            </>
+          }
+        >
+          <div class="space-y-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                Question
+              </label>
+              <input
+                class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                placeholder="Your question"
+                value={pollQuestion()}
+                onInput={(event) => setPollQuestion(event.currentTarget.value)}
+              />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                  Options
+                </label>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-[var(--interactive-primary)]"
+                  onClick={addPollOption}
+                >
+                  Add option
+                </button>
+              </div>
+              <For each={pollOptions()}>
+                {(option, index) => (
+                  <div class="flex items-center gap-2">
+                    <input
+                      class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                      placeholder={`Option ${index() + 1}`}
+                      value={option}
+                      onInput={(event) => updatePollOption(index(), event.currentTarget.value)}
+                    />
+                    <Show when={pollOptions().length > 2}>
+                      <button
+                        type="button"
+                        class="text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                        onClick={() => removePollOption(index())}
+                      >
+                        Remove
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={dialogError()}>
+              <p class="text-xs text-[var(--status-error)]">{dialogError()}</p>
+            </Show>
+          </div>
+        </ComposeDialogFrame>
+      </Show>
+
+      <Show when={activeDialog() === "todo"}>
+        <ComposeDialogFrame
+          title="Create a collaborative to-do list"
+          onClose={closeDialog}
+          footer={
+            <>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] px-3 py-2 text-sm font-medium text-[var(--interactive-primary-text)]"
+                onClick={submitTodoDialog}
+              >
+                Create to-do list
+              </button>
+            </>
+          }
+        >
+          <div class="space-y-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                Title
+              </label>
+              <input
+                class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                placeholder="Task list"
+                value={todoTitle()}
+                onInput={(event) => setTodoTitle(event.currentTarget.value)}
+              />
+            </div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                  Tasks
+                </label>
+                <button
+                  type="button"
+                  class="text-xs font-medium text-[var(--interactive-primary)]"
+                  onClick={addTodoTask}
+                >
+                  Add task
+                </button>
+              </div>
+              <For each={todoTasks()}>
+                {(task, index) => (
+                  <div class="rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-elevated)] p-3">
+                    <div class="flex items-center justify-between gap-2">
+                      <input
+                        class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                        placeholder={`Task ${index() + 1}`}
+                        value={task.name}
+                        onInput={(event) => updateTodoTask(index(), "name", event.currentTarget.value)}
+                      />
+                      <Show when={todoTasks().length > 2}>
+                        <button
+                          type="button"
+                          class="text-xs font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)]"
+                          onClick={() => removeTodoTask(index())}
+                        >
+                          Remove
+                        </button>
+                      </Show>
+                    </div>
+                    <input
+                      class="mt-2 w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                      placeholder="Task description (optional)"
+                      value={task.description}
+                      onInput={(event) => updateTodoTask(index(), "description", event.currentTarget.value)}
+                    />
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={dialogError()}>
+              <p class="text-xs text-[var(--status-error)]">{dialogError()}</p>
+            </Show>
+          </div>
+        </ComposeDialogFrame>
+      </Show>
+
+      <Show when={activeDialog() === "save-snippet" || activeDialog() === "edit-snippet"}>
+        <ComposeDialogFrame
+          title={activeDialog() === "edit-snippet" ? "Edit saved snippet" : "Create a new saved snippet"}
+          onClose={closeDialog}
+          footer={
+            <>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] border border-[var(--border-default)] px-3 py-2 text-sm text-[var(--text-primary)] hover:bg-[var(--background-elevated)]"
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="rounded-[var(--radius-sm)] bg-[var(--interactive-primary)] px-3 py-2 text-sm font-medium text-[var(--interactive-primary-text)] disabled:opacity-50"
+                onClick={() => void submitSavedSnippet()}
+                disabled={snippetSaving()}
+              >
+                {activeDialog() === "edit-snippet" ? "Save" : "Create snippet"}
+              </button>
+            </>
+          }
+        >
+          <div class="space-y-3">
+            <div>
+              <label class="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                Title
+              </label>
+              <input
+                class="w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                placeholder="Snippet title"
+                value={snippetTitle()}
+                onInput={(event) => setSnippetTitle(event.currentTarget.value)}
+              />
+            </div>
+            <div>
+              <label class="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
+                Content
+              </label>
+              <textarea
+                class="min-h-[180px] w-full rounded-[var(--radius-sm)] border border-[var(--border-default)] bg-[var(--surface-input)] px-3 py-2 text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--interactive-primary)]"
+                value={snippetContent()}
+                onInput={(event) => setSnippetContent(event.currentTarget.value)}
+              />
+            </div>
+            <Show when={snippetMutationError()}>
+              <p class="text-xs text-[var(--status-error)]">{snippetMutationError()}</p>
+            </Show>
+          </div>
+        </ComposeDialogFrame>
+      </Show>
+    </div>
+  )
+}
+
+function ComposeActionButton(props: {
+  title: string
+  onClick?: () => void
+  disabled?: boolean
+  active?: boolean
+  children: JSX.Element
+}) {
+  return (
+    <button
+      type="button"
+      class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      classList={{
+        "text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10": props.active,
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        props.onClick?.()
+      }}
+      disabled={props.disabled}
+      title={props.title}
+    >
+      {props.children}
+    </button>
+  )
+}
+
+function ComposeDialogFrame(props: {
+  title: string
+  onClose: () => void
+  children: JSX.Element
+  footer: JSX.Element
+}) {
+  return (
+    <div class="fixed inset-0 z-[80] flex items-center justify-center bg-black/45 px-4" onClick={props.onClose}>
+      <div
+        class="w-full max-w-lg rounded-[var(--radius-xl)] border border-[var(--border-default)] bg-[var(--background-surface)] shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div class="flex items-center justify-between border-b border-[var(--border-default)] px-5 py-4">
+          <h3 class="text-sm font-semibold text-[var(--text-primary)]">{props.title}</h3>
+          <button
+            type="button"
+            class="rounded-[var(--radius-sm)] p-1 text-[var(--text-tertiary)] hover:bg-[var(--background-elevated)] hover:text-[var(--text-primary)]"
+            onClick={props.onClose}
+            title="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <div class="px-5 py-4">{props.children}</div>
+        <div class="flex items-center justify-end gap-2 border-t border-[var(--border-default)] px-5 py-4">
+          {props.footer}
         </div>
       </div>
     </div>

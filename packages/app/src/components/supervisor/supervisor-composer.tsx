@@ -6,6 +6,13 @@ import { useSettings } from "../../context/settings"
 import { usePlatform } from "../../context/platform"
 import { FormatToolbar } from "../format-toolbar"
 import { EmojiPicker } from "../emoji-picker"
+import {
+  appendUploadMarkdown,
+  buildUploadTooLargeMessage,
+  bytesFromMebibytes,
+  captureTextareaSelection,
+  restoreTextareaSelection,
+} from "../upload-utils"
 
 export function SupervisorComposer() {
   const supervisor = useSupervisor()
@@ -30,6 +37,7 @@ export function SupervisorComposer() {
 
   const caps = () => capabilities()
   const canUpload = () => caps()?.uploads !== false
+  const uploadLimitBytes = () => bytesFromMebibytes(org.maxFileUploadSizeMib)
 
   const handleSend = async () => {
     const msg = text().trim()
@@ -97,6 +105,9 @@ export function SupervisorComposer() {
 
   const uploadSingleFile = async (filePath: string) => {
     const fileName = filePath.split("/").pop() || "file"
+    if (!(await validateUploadSize(filePath))) {
+      return
+    }
     setUploading(true)
     setUploadLabel(fileName)
     setUploadError("")
@@ -105,7 +116,10 @@ export function SupervisorComposer() {
       if (result.status === "ok") {
         const markdown = `[${fileName}](${result.data.url})`
         const current = text()
-        setText(current ? `${current}\n${markdown}` : markdown)
+        const preservedSelection = captureTextareaSelection(textareaRef)
+        const nextText = appendUploadMarkdown(current, markdown)
+        setText(nextText)
+        requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
       } else {
         setUploadError(result.error || "Upload failed")
       }
@@ -206,6 +220,9 @@ export function SupervisorComposer() {
   // Upload a File/Blob by saving to temp then uploading
   const uploadBlobFile = async (file: File) => {
     const fileName = file.name || "pasted-file"
+    if (!validateUploadSizeBytes(file.size)) {
+      return
+    }
     setUploading(true)
     setUploadLabel(fileName)
     setUploadError("")
@@ -224,6 +241,34 @@ export function SupervisorComposer() {
       setUploadError("Upload failed")
       setUploading(false)
       setUploadLabel("")
+    }
+  }
+
+  const validateUploadSizeBytes = (sizeBytes: number): boolean => {
+    const limitBytes = uploadLimitBytes()
+    if (!limitBytes || sizeBytes <= limitBytes) {
+      return true
+    }
+
+    setUploadError(buildUploadTooLargeMessage(limitBytes))
+    return false
+  }
+
+  const validateUploadSize = async (filePath: string): Promise<boolean> => {
+    const limitBytes = uploadLimitBytes()
+    if (!limitBytes) {
+      return true
+    }
+
+    try {
+      const result = await commands.getFileSizeBytes(filePath)
+      if (result.status === "error") {
+        return true
+      }
+
+      return validateUploadSizeBytes(result.data)
+    } catch {
+      return true
     }
   }
 

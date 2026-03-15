@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use tauri::menu::MenuBuilder;
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -51,11 +52,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // Focus the main window when a second instance is launched
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            }
+            show_main_window(app);
         }))
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_window_state::Builder::new().build())
@@ -166,8 +163,14 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::update_presence,
         commands::send_typing,
         commands::save_temp_file,
+        commands::get_file_size_bytes,
         commands::upload_file,
         commands::fetch_authenticated_media_data_url,
+        commands::get_saved_snippets,
+        commands::create_saved_snippet,
+        commands::update_saved_snippet,
+        commands::delete_saved_snippet,
+        commands::create_call_link,
         commands::update_message_flags,
         commands::mark_stream_as_read,
         commands::mark_topic_as_read,
@@ -316,11 +319,27 @@ fn setup_tray(app: &tauri::AppHandle) -> Result<(), tauri::Error> {
     Ok(())
 }
 
-fn show_main_window(app: &tauri::AppHandle) {
+pub(crate) fn show_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
         let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_always_on_top(true);
+        #[cfg(target_os = "macos")]
+        let _ = window.set_visible_on_all_workspaces(true);
         let _ = window.set_focus();
+        let _ = window.request_user_attention(Some(tauri::UserAttentionType::Critical));
+
+        let focus_window = window.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let _ = focus_window.show();
+            let _ = focus_window.unminimize();
+            let _ = focus_window.set_focus();
+            let _ = focus_window.set_always_on_top(false);
+            #[cfg(target_os = "macos")]
+            let _ = focus_window.set_visible_on_all_workspaces(false);
+            let _ = focus_window.request_user_attention(None);
+        });
     }
 }
 

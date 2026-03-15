@@ -11,8 +11,8 @@ import { getUnreadTotalCount } from "./context/unread-state"
 import { usePlatform } from "./context/platform"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
-import { SettingsView } from "./views/settings"
-import type { SettingsSection } from "./views/settings"
+import { SettingsView, normalizeSettingsRoute } from "./views/settings"
+import type { SettingsRoute, SettingsSection } from "./views/settings"
 import { RecentTopicsView } from "./views/recent-topics"
 import { StarredView } from "./views/starred"
 import { AllMessagesView } from "./views/all-messages"
@@ -71,6 +71,14 @@ function createDemoLoginResult(): LoginResult {
     realm_name: "Foundry Demo",
     realm_icon: "",
     realm_url: "https://demo.foundry.invalid",
+    zulip_feature_level: 500,
+    max_file_upload_size_mib: 25,
+    realm_video_chat_provider: 1,
+    realm_jitsi_server_url: "https://meet.jit.si",
+    server_jitsi_server_url: "https://meet.jit.si",
+    giphy_api_key: "",
+    tenor_api_key: "",
+    realm_gif_rating_policy: 2,
     queue_id: "demo-queue",
     user_id: 100,
     user_topics: [],
@@ -282,6 +290,14 @@ export function App(props: {
               realmName: result.realm_name,
               realmIcon: result.realm_icon,
               realmUrl: result.realm_url,
+              zulipFeatureLevel: result.zulip_feature_level,
+              maxFileUploadSizeMib: result.max_file_upload_size_mib ?? null,
+              videoChatProvider: result.realm_video_chat_provider ?? null,
+              realmJitsiServerUrl: result.realm_jitsi_server_url ?? null,
+              serverJitsiServerUrl: result.server_jitsi_server_url ?? null,
+              giphyApiKey: result.giphy_api_key ?? "",
+              tenorApiKey: result.tenor_api_key ?? "",
+              gifRatingPolicy: result.realm_gif_rating_policy ?? null,
             }}>
               <SettingsProvider orgId={result.org_id}>
                 <PresenceProvider orgId={result.org_id}>
@@ -334,7 +350,7 @@ function AppShell(props: {
   const nav = useNavigation()
   const { store: settingsStore, capabilities, loaded: settingsLoaded } = useSettings()
   const platform = usePlatform()
-  const [settingsSection, setSettingsSection] = createSignal<SettingsSection>("general")
+  const [settingsRoute, setSettingsRoute] = createSignal<SettingsRoute>({ section: "general" })
   const [showSettings, setShowSettings] = createSignal(false)
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
@@ -352,8 +368,8 @@ function AppShell(props: {
     props.onLogout()
   }
 
-  const openSettings = (section: SettingsSection = "general") => {
-    setSettingsSection(section)
+  const openSettings = (route: SettingsSection | SettingsRoute = "general") => {
+    setSettingsRoute(normalizeSettingsRoute(route))
     setShowSettings(true)
   }
 
@@ -704,7 +720,7 @@ function AppShell(props: {
       {/* Settings modal overlay */}
       <Show when={showSettings()}>
         <SettingsView
-          initialSection={settingsSection()}
+          initialRoute={settingsRoute()}
           onClose={() => setShowSettings(false)}
           onLogout={async () => {
             setShowSettings(false)

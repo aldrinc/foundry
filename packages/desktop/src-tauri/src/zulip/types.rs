@@ -96,6 +96,20 @@ pub struct RegisterResponse {
     pub unread_msgs: UnreadMessages,
     #[serde(default)]
     pub recent_private_conversations: Vec<RecentPrivateConversation>,
+    #[serde(default)]
+    pub max_file_upload_size_mib: Option<u64>,
+    #[serde(default)]
+    pub realm_video_chat_provider: Option<u64>,
+    #[serde(default)]
+    pub realm_jitsi_server_url: Option<String>,
+    #[serde(default)]
+    pub server_jitsi_server_url: Option<String>,
+    #[serde(default)]
+    pub giphy_api_key: String,
+    #[serde(default)]
+    pub tenor_api_key: String,
+    #[serde(default)]
+    pub realm_gif_rating_policy: Option<u64>,
     pub max_message_length: Option<u32>,
 }
 
@@ -106,6 +120,21 @@ pub struct LoginResult {
     pub realm_name: String,
     pub realm_icon: String,
     pub realm_url: String,
+    pub zulip_feature_level: u32,
+    #[serde(default)]
+    pub max_file_upload_size_mib: Option<u64>,
+    #[serde(default)]
+    pub realm_video_chat_provider: Option<u64>,
+    #[serde(default)]
+    pub realm_jitsi_server_url: Option<String>,
+    #[serde(default)]
+    pub server_jitsi_server_url: Option<String>,
+    #[serde(default)]
+    pub giphy_api_key: String,
+    #[serde(default)]
+    pub tenor_api_key: String,
+    #[serde(default)]
+    pub realm_gif_rating_policy: Option<u64>,
     pub queue_id: String,
     /// The logged-in user's ID (from Zulip register response)
     pub user_id: Option<u64>,
@@ -114,6 +143,32 @@ pub struct LoginResult {
     pub user_topics: Vec<UserTopic>,
     pub unread_msgs: UnreadMessages,
     pub recent_private_conversations: Vec<RecentPrivateConversation>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct SavedSnippet {
+    pub id: u64,
+    pub title: String,
+    pub content: String,
+    pub date_created: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct CreateSavedSnippetResult {
+    pub saved_snippet_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct CreateCallLinkRequest {
+    pub provider_id: u64,
+    pub base_jitsi_url: Option<String>,
+    pub label: String,
+    pub is_audio_call: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+pub struct CreateCallLinkResult {
+    pub url: String,
 }
 
 /// Recent DM/group-DM metadata returned by Zulip register.
