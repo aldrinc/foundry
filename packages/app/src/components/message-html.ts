@@ -224,6 +224,28 @@ const DOWNLOAD_ICON_PATH = "M12 3.75V14.25 M8.25 10.5 12 14.25 15.75 10.5 M5.25 
 const EXTERNAL_LINK_PATH = "M13.5 4.5H19.5V10.5 M10.5 13.5L19.5 4.5 M16.5 13.5V18C16.5 18.8284 15.8284 19.5 15 19.5H6C5.17157 19.5 4.5 18.8284 4.5 18V9C4.5 8.17157 5.17157 7.5 6 7.5H10.5"
 const CLOSE_ICON_PATH = "M6 6L18 18 M18 6L6 18"
 
+function extractFilenameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname
+    // Remove /user_uploads/download/ or /user_uploads/ prefix path segments
+    const segments = pathname.split("/").filter(Boolean)
+    const lastSegment = segments[segments.length - 1] || ""
+    return decodeURIComponent(lastSegment)
+  } catch {
+    const lastSlash = url.lastIndexOf("/")
+    if (lastSlash >= 0) return decodeURIComponent(url.slice(lastSlash + 1))
+    return url
+  }
+}
+
+function getImageFilename(source: GalleryImageSource): string {
+  // Try title first, then extract from download/external URL
+  if (source.title) return source.title
+  const url = source.downloadHref || source.externalHref || source.viewerSrc
+  if (!url) return ""
+  return extractFilenameFromUrl(url)
+}
+
 type MessageImageCarouselOptions = {
   openLink?: (url: string) => void
   onViewerImageChange?: () => void
@@ -404,8 +426,12 @@ export function openMessageImageViewerFromLink(
   closeButton.setAttribute("aria-label", "Close image viewer")
   closeButton.appendChild(createIcon(CLOSE_ICON_PATH))
 
+  const filenameEl = document.createElement("span")
+  filenameEl.className = "foundry-image-lightbox-filename"
+  filenameEl.textContent = getImageFilename(source)
+
   actions.append(downloadLink, externalLink, closeButton)
-  toolbar.append(counter, actions)
+  toolbar.append(counter, filenameEl, actions)
 
   const stage = document.createElement("div")
   stage.className = "foundry-image-lightbox-stage"
@@ -483,6 +509,13 @@ function setViewerImageSource(
   const requiresAuthenticatedFetch = shouldFetchAuthenticatedMedia(item.viewerSrc, serverUrl)
   const thumbnailSrc = item.thumbnailImage?.getAttribute("src") || item.thumbSrc
 
+  // Reset loaded state so the image fades in when ready
+  viewerImage.classList.remove("is-loaded")
+
+  // Use a one-shot listener; safe to call repeatedly since prior one-shot
+  // listeners either already fired or are superseded by the new src change.
+  viewerImage.addEventListener("load", () => viewerImage.classList.add("is-loaded"), { once: true })
+
   viewerImage.alt = item.alt
   if (item.title) {
     viewerImage.setAttribute("title", item.title)
@@ -507,6 +540,7 @@ function renderActiveGalleryImage(
   items: GalleryImageItem[],
   viewerImage: HTMLImageElement,
   counter: HTMLElement,
+  filenameEl: HTMLElement,
   downloadLink: HTMLAnchorElement,
   externalLink: HTMLAnchorElement,
   nextIndex: number,
@@ -523,6 +557,8 @@ function renderActiveGalleryImage(
 
   setViewerImageSource(viewerImage, activeItem, options?.serverUrl)
   counter.textContent = `${activeIndex + 1} / ${items.length}`
+  filenameEl.textContent = getImageFilename(activeItem)
+  filenameEl.title = getImageFilename(activeItem)
   downloadLink.hidden = !activeItem.downloadHref
   downloadLink.setAttribute("href", activeItem.downloadHref || "#")
   downloadLink.setAttribute("aria-label", `Download image ${activeIndex + 1}`)
@@ -680,8 +716,11 @@ export function hydrateMessageImageCarousels(
       closeButton.setAttribute("aria-label", "Close image viewer")
       closeButton.appendChild(createIcon(CLOSE_ICON_PATH))
 
+      const filenameEl = document.createElement("span")
+      filenameEl.className = "foundry-image-lightbox-filename"
+
       actions.append(downloadLink, externalLink, closeButton)
-      toolbar.append(counter, actions)
+      toolbar.append(counter, filenameEl, actions)
 
       const stage = document.createElement("div")
       stage.className = "foundry-image-lightbox-stage"
@@ -773,6 +812,7 @@ export function hydrateMessageImageCarousels(
           items,
           viewerImage,
           counter,
+          filenameEl,
           downloadLink,
           externalLink,
           nextIndex,
@@ -792,6 +832,11 @@ export function hydrateMessageImageCarousels(
         lightbox.hidden = true
         wrapper.dataset.viewerOpen = "false"
         viewerImage.removeAttribute("data-foundry-auth-prefer-original")
+        // Reset all thumbnail active states so none stays highlighted
+        for (const item of items) {
+          item.thumbnailButton.dataset.active = "false"
+          item.thumbnailButton.setAttribute("aria-current", "false")
+        }
         lastTrigger?.focus()
       }
 

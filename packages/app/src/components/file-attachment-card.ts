@@ -111,8 +111,33 @@ function createDownloadIcon(): SVGSVGElement {
  *
  * Returns a cleanup function.
  */
+function normalizeUploadPath(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname.replace("/user_uploads/download/", "/user_uploads/")
+  } catch {
+    return url.replace("/user_uploads/download/", "/user_uploads/")
+  }
+}
+
 export function hydrateFileAttachmentCards(container: HTMLElement, serverUrl?: string): () => void {
   const cleanups: Array<() => void> = []
+
+  // Collect upload paths already displayed in image galleries or as inline
+  // image previews — suppress duplicate file cards for these images
+  const galleryUploadPaths = new Set<string>()
+  for (const gallery of container.querySelectorAll<HTMLElement>(".foundry-image-gallery")) {
+    for (const link of gallery.querySelectorAll<HTMLAnchorElement>(".foundry-image-gallery-open, .foundry-image-gallery-download")) {
+      const href = link.getAttribute("href")
+      if (href) galleryUploadPaths.add(normalizeUploadPath(href))
+    }
+  }
+  // Also collect from single inline image previews (.message_inline_image)
+  for (const inlineImage of container.querySelectorAll<HTMLElement>(".message_inline_image")) {
+    const link = inlineImage.querySelector<HTMLAnchorElement>("a[href], a[data-original-href]")
+    const href = link?.getAttribute("href") || link?.dataset.originalHref
+    if (href) galleryUploadPaths.add(normalizeUploadPath(href))
+  }
 
   for (const anchor of container.querySelectorAll<HTMLAnchorElement>("a[href]")) {
     const href = anchor.getAttribute("href") || ""
@@ -128,6 +153,23 @@ export function hydrateFileAttachmentCards(container: HTMLElement, serverUrl?: s
 
     // Skip links inside image galleries
     if (anchor.closest(".foundry-image-gallery")) continue
+
+    // Hide links whose upload is already shown in a gallery,
+    // plus adjacent <br> and whitespace nodes that would leave a gap
+    if (galleryUploadPaths.has(normalizeUploadPath(href))) {
+      anchor.style.display = "none"
+      anchor.dataset.fileCardEnhanced = "true"
+      // Remove surrounding <br> and whitespace-only text nodes
+      for (const sibling of [anchor.previousSibling, anchor.nextSibling]) {
+        if (!sibling) continue
+        if (sibling instanceof HTMLBRElement) {
+          sibling.remove()
+        } else if (sibling.nodeType === Node.TEXT_NODE && !(sibling.textContent || "").trim()) {
+          sibling.remove()
+        }
+      }
+      continue
+    }
 
     // Get the filename from link text or URL
     const linkText = anchor.textContent?.trim() || ""
