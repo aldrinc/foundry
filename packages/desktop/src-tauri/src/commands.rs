@@ -1408,6 +1408,37 @@ pub async fn get_zulip_settings(
     .await
 }
 
+// ── User profile ─────────────────────────────────────────────────────
+
+/// Upload a new avatar for the current user
+#[tauri::command]
+#[specta::specta]
+pub async fn upload_avatar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    file_path: String,
+) -> Result<String, String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.upload_avatar(&file_path).await
+    })
+    .await
+}
+
+/// Delete the current user's avatar (revert to default)
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_avatar(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+) -> Result<(), String> {
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        client.delete_avatar().await
+    })
+    .await
+}
+
 // ── Link preview ─────────────────────────────────────────────────────
 
 /// OpenGraph link preview data returned to the frontend.

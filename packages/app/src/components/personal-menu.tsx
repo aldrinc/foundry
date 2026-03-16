@@ -1,5 +1,6 @@
 import { Show, onCleanup } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
+import { useOrg } from "../context/org"
 
 export function PersonalMenu(props: {
   onClose: () => void
@@ -7,12 +8,20 @@ export function PersonalMenu(props: {
   onLogout: () => void | Promise<void>
 }) {
   const sync = useZulipSync()
+  const org = useOrg()
   let menuRef!: HTMLDivElement
 
   const currentUser = () => {
     const userId = sync.store.currentUserId
     if (!userId) return null
     return sync.store.users.find(u => u.user_id === userId) ?? null
+  }
+
+  const avatarUrl = () => {
+    const url = currentUser()?.avatar_url
+    if (!url) return null
+    if (url.startsWith("/")) return `${org.realmUrl}${url}`
+    return url
   }
 
   const handleClickOutside = (e: MouseEvent) => {
@@ -38,9 +47,16 @@ export function PersonalMenu(props: {
       {/* User info */}
       <div class="px-3 py-2 border-b border-[var(--border-default)]">
         <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-full bg-[var(--interactive-primary)] flex items-center justify-center text-xs font-medium text-white shrink-0">
-            {currentUser()?.full_name?.charAt(0).toUpperCase() || "?"}
-          </div>
+          <Show
+            when={avatarUrl()}
+            fallback={
+              <div class="w-8 h-8 rounded-full bg-[var(--interactive-primary)] flex items-center justify-center text-xs font-medium text-white shrink-0">
+                {currentUser()?.full_name?.charAt(0).toUpperCase() || "?"}
+              </div>
+            }
+          >
+            <img src={avatarUrl()!} alt="" class="w-8 h-8 rounded-full object-cover shrink-0" />
+          </Show>
           <div class="min-w-0">
             <div class="text-sm font-medium text-[var(--text-primary)] truncate">
               {currentUser()?.full_name || "User"}

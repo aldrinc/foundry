@@ -1872,6 +1872,54 @@ impl ZulipClient {
             .await
             .map_err(|e| format!("Failed to parse bot API key response: {}", e))
     }
+
+    /// POST /api/v1/users/me/avatar — Upload user avatar
+    pub async fn upload_avatar(&self, file_path: &str) -> Result<String, String> {
+        let part = reqwest::multipart::Part::file(file_path)
+            .await
+            .map_err(|e| format!("Failed to open avatar file: {}", e))?;
+        let form = reqwest::multipart::Form::new().part("file", part);
+
+        let resp = self
+            .post("/api/v1/users/me/avatar")
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| format!("Upload avatar failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Upload avatar failed: {}", body));
+        }
+
+        #[derive(Deserialize)]
+        struct AvatarResponse {
+            avatar_url: String,
+        }
+
+        let parsed: AvatarResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse avatar response: {}", e))?;
+
+        Ok(parsed.avatar_url)
+    }
+
+    /// DELETE /api/v1/users/me/avatar — Delete user avatar (revert to default)
+    pub async fn delete_avatar(&self) -> Result<(), String> {
+        let resp = self
+            .delete("/api/v1/users/me/avatar")
+            .send()
+            .await
+            .map_err(|e| format!("Delete avatar failed: {}", e))?;
+
+        if !resp.status().is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Delete avatar failed: {}", body));
+        }
+
+        Ok(())
+    }
 }
 
 fn subscription_property_name(property: SubscriptionProperty) -> &'static str {

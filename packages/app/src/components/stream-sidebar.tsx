@@ -24,10 +24,19 @@ export function StreamSidebar(props: {
   const [showPersonalMenu, setShowPersonalMenu] = createSignal(false)
   const [showCreateChannel, setShowCreateChannel] = createSignal(false)
 
-  const currentUserName = () => {
+  const currentUser = () => {
     const userId = sync.store.currentUserId
     if (!userId) return null
-    return sync.store.users.find(u => u.user_id === userId)?.full_name ?? null
+    return sync.store.users.find(u => u.user_id === userId) ?? null
+  }
+
+  const currentUserName = () => currentUser()?.full_name ?? null
+
+  const currentUserAvatarUrl = () => {
+    const url = currentUser()?.avatar_url
+    if (!url) return null
+    if (url.startsWith("/")) return `${org.realmUrl}${url}`
+    return url
   }
 
   const pinnedStreams = createMemo(() =>
@@ -56,7 +65,7 @@ export function StreamSidebar(props: {
 
   return (
     <aside
-      class="w-[260px] border-r border-[var(--border-default)] bg-[var(--surface-sidebar)] flex flex-col shrink-0"
+      class="w-[300px] border-r border-[var(--border-default)] bg-[var(--surface-sidebar)] flex flex-col shrink-0"
       data-component="stream-sidebar"
     >
       {/* Org switcher */}
@@ -75,9 +84,16 @@ export function StreamSidebar(props: {
           class="flex items-center gap-2 min-w-0 w-full rounded-[var(--radius-sm)] hover:bg-[var(--background-surface)] transition-colors px-1 py-1 -mx-1"
           onClick={() => setShowPersonalMenu(s => !s)}
         >
-          <div class="w-6 h-6 rounded-full bg-[var(--interactive-primary)] flex items-center justify-center text-[10px] font-medium text-white shrink-0">
-            {currentUserName()?.charAt(0).toUpperCase() || "?"}
-          </div>
+          <Show
+            when={currentUserAvatarUrl()}
+            fallback={
+              <div class="w-6 h-6 rounded-full bg-[var(--interactive-primary)] flex items-center justify-center text-[10px] font-medium text-white shrink-0">
+                {currentUserName()?.charAt(0).toUpperCase() || "?"}
+              </div>
+            }
+          >
+            <img src={currentUserAvatarUrl()!} alt="" class="w-6 h-6 rounded-full object-cover shrink-0" />
+          </Show>
           <span class="text-sm font-medium text-[var(--text-primary)] truncate flex-1 text-left">
             {currentUserName() || "User"}
           </span>

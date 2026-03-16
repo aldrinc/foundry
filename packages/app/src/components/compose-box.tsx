@@ -91,6 +91,7 @@ export function ComposeBox(props: { narrow: string }) {
     { name: "", description: "" },
     { name: "", description: "" },
   ])
+  const [uploadedImages, setUploadedImages] = createSignal<{ name: string; url: string; markdown: string }[]>([])
   let mentionTriggerIndex = -1
 
   let textareaRef!: HTMLTextAreaElement
@@ -113,6 +114,7 @@ export function ComposeBox(props: { narrow: string }) {
     setContent(draft || "")
     setError("")
     setUploadError("")
+    setUploadedImages([])
   })
 
   createEffect(on(
@@ -388,6 +390,27 @@ export function ComposeBox(props: { narrow: string }) {
     }
   }
 
+  const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"])
+
+  const isImageFile = (name: string) => {
+    const ext = name.split(".").pop()?.toLowerCase() || ""
+    return IMAGE_EXTENSIONS.has(ext)
+  }
+
+  const resolveUploadUrl = (relativePath: string) => {
+    const realmUrl = org.realmUrl?.replace(/\/$/, "")
+    if (!realmUrl || relativePath.startsWith("http")) return relativePath
+    return `${realmUrl}${relativePath}`
+  }
+
+  const removeUploadedImage = (markdown: string) => {
+    setUploadedImages((prev) => prev.filter((img) => img.markdown !== markdown))
+    const current = content()
+    const nextContent = current.replace(markdown, "").replace(/\n{2,}/g, "\n").trim()
+    setContent(nextContent)
+    sync.saveDraft(props.narrow, nextContent)
+  }
+
   const uploadSingleFile = async (filePath: string) => {
     const fileName = filePath.split("/").pop() || "file"
     if (!(await validateUploadSize(filePath))) {
@@ -406,6 +429,14 @@ export function ComposeBox(props: { narrow: string }) {
         setContent(nextContent)
         sync.saveDraft(props.narrow, nextContent)
         requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
+
+        if (isImageFile(fileName)) {
+          setUploadedImages((prev) => [...prev, {
+            name: fileName,
+            url: resolveUploadUrl(result.data.url),
+            markdown,
+          }])
+        }
       } else {
         setUploadError(result.error || "Upload failed")
       }
@@ -938,6 +969,7 @@ export function ComposeBox(props: { narrow: string }) {
       }
 
       setContent("")
+      setUploadedImages([])
       sync.clearDraft(props.narrow)
     } catch (e: any) {
       setError(e?.toString() || "Failed to send message")
@@ -1116,6 +1148,35 @@ export function ComposeBox(props: { narrow: string }) {
           disabled={sending()}
           rows={1}
         />
+
+        {/* Uploaded image previews */}
+        <Show when={uploadedImages().length > 0}>
+          <div class="flex flex-wrap gap-2 px-3 py-2 border-t border-[var(--border-default)]">
+            <For each={uploadedImages()}>
+              {(img) => (
+                <div class="relative group/img">
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    class="h-16 w-16 object-cover rounded-[var(--radius-md)] border border-[var(--border-default)]"
+                  />
+                  <button
+                    class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--background-elevated)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--status-error)] hover:border-[var(--status-error)] transition-colors opacity-0 group-hover/img:opacity-100"
+                    onClick={() => removeUploadedImage(img.markdown)}
+                    title="Remove image"
+                  >
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                      <path d="M1 1l6 6M7 1l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                  </button>
+                  <div class="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[9px] px-1 py-0.5 rounded-b-[var(--radius-md)] truncate opacity-0 group-hover/img:opacity-100 transition-opacity">
+                    {img.name}
+                  </div>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
 
         {/* Format toolbar — toggled */}
         <Show when={showFormatBar()}>

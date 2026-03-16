@@ -183,6 +183,8 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::set_topic_resolved,
         commands::update_zulip_settings,
         commands::get_zulip_settings,
+        commands::upload_avatar,
+        commands::delete_avatar,
         commands::fetch_link_preview,
         admin_commands::get_users,
         admin_commands::reactivate_user,

@@ -425,6 +425,28 @@ async getZulipSettings(orgId: string) : Promise<Result<string, string>> {
 }
 },
 /**
+ * Upload a new avatar for the current user
+ */
+async uploadAvatar(orgId: string, filePath: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upload_avatar", { orgId, filePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Delete the current user's avatar (revert to default)
+ */
+async deleteAvatar(orgId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_avatar", { orgId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Fetch OpenGraph link preview metadata for a URL.
  * 
  * Downloads the first 256 KB of the page, parses OG meta tags, and returns

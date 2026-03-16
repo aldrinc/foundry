@@ -143,6 +143,19 @@ export function LinkPreviewCard(props: {
   }
 
   return (
+    <>
+    <Show when={loading()}>
+      <div
+        class="mt-1.5 max-w-[400px] rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)] overflow-hidden"
+        style={{ "min-height": "68px" }}
+      >
+        <div class="px-3 py-2 flex flex-col gap-1">
+          <div class="w-16 h-2.5 rounded bg-[var(--background-elevated)] animate-pulse" />
+          <div class="w-48 h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" />
+          <div class="w-32 h-3 rounded bg-[var(--background-elevated)] animate-pulse" />
+        </div>
+      </div>
+    </Show>
     <Show when={!loading() && preview()}>
       {(data) => (
         <Show when={!collapsed()}>
@@ -209,5 +222,6 @@ export function LinkPreviewCard(props: {
         </Show>
       )}
     </Show>
+    </>
   )
 }
