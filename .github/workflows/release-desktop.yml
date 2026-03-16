@@ -32,12 +32,16 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
+            publish_updater_json: false
           - platform: macos-latest
             args: --target x86_64-apple-darwin
+            publish_updater_json: false
           - platform: ubuntu-24.04
             args: ""
+            publish_updater_json: false
           - platform: windows-latest
             args: ""
+            publish_updater_json: true
 
     runs-on: ${{ matrix.platform }}
 
@@ -186,7 +190,7 @@ jobs:
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           args: ${{ matrix.args }}
           # Retrying after partial asset publication can fail on duplicate uploads.
-          uploadUpdaterJson: true
+          uploadUpdaterJson: ${{ matrix.publish_updater_json }}
           uploadUpdaterSignatures: true
           uploadWorkflowArtifacts: true
           updaterJsonPreferNsis: true
