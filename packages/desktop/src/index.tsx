@@ -309,17 +309,9 @@ const createPlatform = (): Platform => {
           return
         }
 
-        const win = getCurrentWindow()
-        const focused = await win.isFocused().catch(() => document.hasFocus())
-        const showSystemNotification = options?.showWhenFocused === true || !focused
-
         const osType = ostype()
         if (!options?.silent && osType === "macos") {
           await playNativeNotificationSound()
-        }
-
-        if (!showSystemNotification) {
-          return
         }
 
         const sound = options?.silent || osType === "macos"
