@@ -185,7 +185,7 @@ jobs:
           releaseDraft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           args: ${{ matrix.args }}
-          retryAttempts: 2
+          # Retrying after partial asset publication can fail on duplicate uploads.
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           uploadWorkflowArtifacts: true
