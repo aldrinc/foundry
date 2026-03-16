@@ -123,6 +123,17 @@ export function MessageItem(props: {
     if (!href) return
 
     if (isMessageImageLink(link, serverUrl())) {
+      // If the image is inside a gallery, let the gallery handle it
+      if (link.closest(".foundry-image-gallery")) return
+
+      // Single inline images — don't open a standalone lightbox, just
+      // suppress navigation. The file attachment card provides download.
+      if (link.closest(".message_inline_image")) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+
       event.preventDefault()
       event.stopPropagation()
       openMessageImageViewerFromLink(contentEl, link, {
@@ -164,6 +175,7 @@ export function MessageItem(props: {
   createEffect(() => {
     if (!contentEl) return
     contentEl.innerHTML = sanitizeMessageHtml(props.message.content, serverUrl())
+
     let cleanupImages = () => {}
     const rehydrateImages = () => {
       cleanupImages()
@@ -177,6 +189,34 @@ export function MessageItem(props: {
     })
     const cleanupCodeBlocks = hydrateCodeBlocks(contentEl)
     const cleanupFileCards = hydrateFileAttachmentCards(contentEl, serverUrl())
+
+    // Strip href from remaining inline image links (those not consumed by
+    // gallery carousels) so Tauri's native navigation doesn't open them
+    // in the system browser on click. Must run AFTER carousel and file card
+    // hydration since both need the original hrefs.
+    const inlineImageCleanups: (() => void)[] = []
+    for (const link of contentEl.querySelectorAll<HTMLAnchorElement>(".message_inline_image a[href]")) {
+      const href = link.getAttribute("href")!
+      link.dataset.originalHref = href
+      link.removeAttribute("href")
+      link.style.cursor = "pointer"
+      const onClick = (e: MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+        // Temporarily restore href so the viewer can extract image source
+        link.setAttribute("href", link.dataset.originalHref || "")
+        openMessageImageViewerFromLink(contentEl, link, {
+          openLink: (url) => platform.openLink(url),
+          onViewerImageChange: () => refreshAuthenticatedImages(),
+          serverUrl: serverUrl(),
+        })
+        // Strip it again after viewer is created
+        link.removeAttribute("href")
+      }
+      link.addEventListener("click", onClick)
+      inlineImageCleanups.push(() => link.removeEventListener("click", onClick))
+    }
+
     rehydrateImages()
     onCleanup(() => {
       refreshAuthenticatedImages = () => {}
@@ -184,22 +224,23 @@ export function MessageItem(props: {
       cleanupCarousel()
       cleanupCodeBlocks()
       cleanupFileCards()
+      inlineImageCleanups.forEach((fn) => fn())
     })
   })
 
   return (
     <div
-      class="group relative flex gap-3 px-4 py-1 hover:bg-[var(--background-surface)]/50"
-      classList={{ "pt-4": props.showSender, "pt-1": !props.showSender }}
+      class="group relative flex gap-3 px-5 py-1 hover:bg-[var(--background-surface)]/50"
+      classList={{ "pt-5": props.showSender, "pt-1": !props.showSender }}
       data-component="message-item"
       data-message-id={props.message.id}
     >
       {/* Avatar column */}
-      <div class="w-8 shrink-0">
+      <div class="w-9 shrink-0">
         <Show
           when={props.showSender}
           fallback={
-            <span class="block w-8 text-center text-xs leading-[1.25rem] text-[var(--text-tertiary)] opacity-0 group-hover:opacity-100 transition-opacity select-none whitespace-nowrap overflow-hidden">
+            <span class="block w-9 text-center text-xs leading-[1.25rem] text-[var(--text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity select-none whitespace-nowrap overflow-hidden">
               {new Date(props.message.timestamp * 1000).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: false })}
             </span>
           }
@@ -207,7 +248,7 @@ export function MessageItem(props: {
           <Show
             when={avatarUrl()}
             fallback={
-              <div class="w-8 h-8 rounded-full bg-[var(--background-surface)] flex items-center justify-center text-xs font-medium text-[var(--text-secondary)]">
+              <div class="w-9 h-9 rounded-full bg-[var(--background-surface)] flex items-center justify-center text-sm font-medium text-[var(--text-secondary)]">
                 {props.message.sender_full_name.charAt(0).toUpperCase()}
               </div>
             }
@@ -216,7 +257,7 @@ export function MessageItem(props: {
               <img
                 src={url()}
                 alt=""
-                class="w-8 h-8 rounded-full object-cover"
+                class="w-9 h-9 rounded-full object-cover"
                 loading="lazy"
               />
             )}
@@ -231,7 +272,7 @@ export function MessageItem(props: {
             <span class="text-[15px] font-bold text-[var(--text-primary)] leading-snug">
               {props.message.sender_full_name}
             </span>
-            <span class="text-xs text-[var(--text-tertiary)] ml-0.5">
+            <span class="text-xs text-[var(--text-secondary)] ml-0.5">
               {timestamp()}
             </span>
           </div>

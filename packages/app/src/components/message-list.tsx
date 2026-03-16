@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show, on } from "solid-js"
+import { createEffect, createSignal, For, Show, on, onCleanup } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
@@ -31,6 +31,26 @@ function isDifferentDay(ts1: number, ts2: number): boolean {
   return new Date(ts1 * 1000).toDateString() !== new Date(ts2 * 1000).toDateString()
 }
 
+function MessageSkeleton(props: { short?: boolean }) {
+  return (
+    <div class="flex gap-3 px-5 py-1 pt-4">
+      <div class="w-9 h-9 rounded-full bg-[var(--background-elevated)] animate-pulse shrink-0" />
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <div class="w-24 h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" />
+          <div class="w-10 h-3 rounded bg-[var(--background-elevated)] animate-pulse" />
+        </div>
+        <div class="space-y-1.5">
+          <div class="h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" style={{ width: props.short ? "40%" : "85%" }} />
+          <Show when={!props.short}>
+            <div class="h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" style={{ width: "60%" }} />
+          </Show>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function MessageList(props: { narrow: string; onToggleUserPanel?: () => void }) {
   const sync = useZulipSync()
   const org = useOrg()
@@ -45,10 +65,30 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
   const messages = () => sync.store.messages[props.narrow] || []
   const loadState = () => sync.store.messageLoadState[props.narrow] || "idle"
 
+  let scrollPollTimer: ReturnType<typeof setInterval> | undefined
+
   const scrollToBottom = () => {
     if (!scrollContainer) return
     scrollContainer.scrollTop = scrollContainer.scrollHeight
     isAtBottom = true
+  }
+
+  // Poll scrollHeight for a few seconds after narrow change to catch
+  // late-loading content (images, link previews) that increases height
+  const startScrollPolling = () => {
+    if (scrollPollTimer) clearInterval(scrollPollTimer)
+    let lastHeight = 0
+    const until = Date.now() + 3000
+    scrollPollTimer = setInterval(() => {
+      if (Date.now() > until || !scrollContainer) {
+        clearInterval(scrollPollTimer)
+        return
+      }
+      if (scrollContainer.scrollHeight !== lastHeight) {
+        lastHeight = scrollContainer.scrollHeight
+        scrollToBottom()
+      }
+    }, 100)
   }
 
   const markMessagesRead = async (messageIds: number[]) => {
@@ -164,11 +204,21 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
     }
   })
 
-  // Fetch on mount / narrow change
+  // Clean up polling on component dispose
+  onCleanup(() => { if (scrollPollTimer) clearInterval(scrollPollTimer) })
+
+  // Fetch on mount / narrow change, then scroll to bottom
   createEffect(on(
     () => props.narrow,
     () => {
-      void fetchMessages()
+      isAtBottom = true
+      void fetchMessages().then(() => {
+        requestAnimationFrame(() => {
+          scrollToBottom()
+          // Poll for 3s to catch async content (images, link previews)
+          startScrollPolling()
+        })
+      })
     },
   ))
 
@@ -323,8 +373,12 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
         <Show
           when={!loading() || messages().length > 0}
           fallback={
-            <div class="flex-1 flex items-center justify-center py-12">
-              <span class="text-sm text-[var(--text-tertiary)]">Loading messages...</span>
+            <div class="py-4">
+              <MessageSkeleton />
+              <MessageSkeleton />
+              <MessageSkeleton />
+              <MessageSkeleton short />
+              <MessageSkeleton />
             </div>
           }
         >
@@ -348,9 +402,9 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
               return (
                 <>
                   <Show when={showDateSeparator()}>
-                    <div class="flex items-center gap-4 px-4 pt-4 pb-1 select-none" data-component="date-separator">
+                    <div class="flex items-center px-5 pt-6 pb-2 select-none" data-component="date-separator">
                       <div class="flex-1 h-px bg-[var(--border-default)]" />
-                      <span class="text-xs font-medium text-[var(--text-tertiary)] whitespace-nowrap">
+                      <span class="text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap px-3 py-0.5 rounded-full border border-[var(--border-default)] bg-[var(--background-base)]">
                         {formatDateSeparator(message.timestamp)}
                       </span>
                       <div class="flex-1 h-px bg-[var(--border-default)]" />

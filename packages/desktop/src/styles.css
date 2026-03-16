@@ -3,6 +3,47 @@
 @source "../../app/src";
 @source "../../ui/src";
 
+/* Graphik font family */
+@font-face {
+  font-family: "Graphik";
+  src: url("./fonts/Graphik-300.woff") format("woff");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Graphik";
+  src: url("./fonts/Graphik-400.woff") format("woff");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Graphik";
+  src: url("./fonts/Graphik-500.woff") format("woff");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Graphik";
+  src: url("./fonts/Graphik-500.woff") format("woff");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Graphik";
+  src: url("./fonts/Graphik-500.woff") format("woff");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* CSS layers (matching Open Code pattern) */
 @layer theme, base, components, utilities;
 
@@ -41,7 +82,7 @@
     --radius-lg: 12px;
     --radius-full: 9999px;
 
-    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --font-sans: "Graphik", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     --font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
 
     /* Layout shell — left bar, top bar, outer frame */
@@ -288,7 +329,10 @@
   [data-component="message-content"] img {
     display: block;
     max-width: min(100%, 560px);
+    max-height: min(70vh, 28rem);
+    width: auto;
     height: auto;
+    object-fit: contain;
     margin-top: 0.5rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--border-default);
@@ -309,7 +353,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
-    padding: 0.625rem 0.75rem 0;
+    padding: 0.5rem 0.75rem 0;
   }
 
   [data-component="message-content"] .foundry-image-gallery-title {
@@ -329,21 +373,20 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.375rem 0.625rem;
+    padding: 0.25rem 0.5rem;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-full);
     background: var(--background-base);
     color: var(--text-primary);
-    font-size: 0.75rem;
+    font-size: 0.6875rem;
     font-weight: 600;
     cursor: pointer;
-    transition: border-color 140ms ease, color 140ms ease, background 140ms ease, transform 140ms ease;
+    transition: border-color 140ms ease, color 140ms ease, background 140ms ease;
   }
 
   [data-component="message-content"] .foundry-image-gallery-download-all:hover {
     border-color: var(--interactive-primary);
     color: var(--interactive-primary);
-    transform: translateY(-1px);
   }
 
   [data-component="message-content"] .foundry-image-gallery-grid {
@@ -367,14 +410,13 @@
     background: color-mix(in srgb, var(--background-surface) 88%, black 12%);
     cursor: pointer;
     padding: 0;
-    transition: border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
   }
 
   [data-component="message-content"] .foundry-image-gallery-thumb:hover,
   [data-component="message-content"] .foundry-image-gallery-thumb[data-active="true"] {
     border-color: var(--interactive-primary);
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--interactive-primary) 50%, transparent 50%);
-    transform: translateY(-1px);
   }
 
   [data-component="message-content"] .foundry-image-gallery-thumb img {
@@ -421,7 +463,6 @@
 
   [data-component="message-content"] .foundry-image-gallery-download:hover,
   [data-component="message-content"] .foundry-image-gallery-open:hover {
-    transform: translateY(-1px);
     border-color: color-mix(in srgb, white 40%, transparent 60%);
     color: white;
   }
@@ -456,7 +497,7 @@
     position: absolute;
     inset: 0;
     border: none;
-    background: rgba(10, 15, 24, 0.76);
+    background: color-mix(in srgb, var(--surface-left-bar) 84%, transparent 16%);
     cursor: pointer;
     padding: 0;
   }
@@ -472,8 +513,8 @@
     padding: 1rem;
     border: 1px solid color-mix(in srgb, var(--border-default) 88%, white 12%);
     border-radius: calc(var(--radius-lg) + 0.125rem);
-    background: color-mix(in srgb, var(--background-base) 82%, black 18%);
-    box-shadow: 0 1.5rem 4rem rgba(15, 23, 42, 0.34);
+    background: var(--background-base);
+    box-shadow: 0 1.5rem 4rem color-mix(in srgb, var(--surface-left-bar) 34%, transparent 66%);
     outline: none;
   }
 
@@ -488,6 +529,19 @@
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-filename {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-actions {
@@ -503,27 +557,27 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--background-surface) 88%, black 12%);
-    color: var(--text-primary);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+    transition: background 140ms ease, color 140ms ease;
     text-decoration: none;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-download,
   [data-component="message-content"] .foundry-image-lightbox-link {
     gap: 0.45rem;
-    padding: 0.4rem 0.75rem;
-    font-size: 0.75rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.6875rem;
     font-weight: 600;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-close,
   [data-component="message-content"] .foundry-image-lightbox-nav {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2rem;
+    height: 2rem;
     padding: 0;
   }
 
@@ -531,9 +585,8 @@
   [data-component="message-content"] .foundry-image-lightbox-link:hover,
   [data-component="message-content"] .foundry-image-lightbox-close:hover,
   [data-component="message-content"] .foundry-image-lightbox-nav:hover {
-    border-color: var(--interactive-primary);
-    color: var(--interactive-primary);
-    transform: translateY(-1px);
+    background: var(--background-surface);
+    color: var(--text-primary);
   }
 
   [data-component="message-content"] .foundry-image-lightbox-stage {
@@ -548,7 +601,7 @@
     min-height: inherit;
     border: 1px solid color-mix(in srgb, var(--border-default) 86%, white 14%);
     border-radius: var(--radius-lg);
-    background: color-mix(in srgb, black 18%, var(--background-surface) 82%);
+    background: var(--background-surface);
     overflow: hidden;
     padding: 1rem 4rem;
   }
