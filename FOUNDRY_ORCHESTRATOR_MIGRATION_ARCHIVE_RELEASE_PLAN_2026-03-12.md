@@ -1,8 +1,8 @@
 # Foundry Orchestrator Migration, Archive, And Release Plan
 
-Status: Draft for review  
-Date: 2026-03-12  
-Primary repo: `foundry`  
+Status: Draft for review
+Date: 2026-03-12
+Primary repo: `foundry`
 Current branch: `codex/foundry-pr1-integration`
 
 ## 1. Objective
