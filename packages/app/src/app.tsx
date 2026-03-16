@@ -48,6 +48,7 @@ import {
   startInstallingUpdate,
   type UpdatePromptState,
 } from "./update-prompt-state"
+import { startAutoUpdateScheduler } from "./auto-update-scheduler"
 import { buildAuthInvalidMessage, isAuthInvalidDisconnectPayload } from "./auth-session"
 import { sanitizeEventId } from "./tauri-event-utils"
 import { homeViewToNarrow } from "./home-view"
@@ -355,8 +356,23 @@ function AppShell(props: {
   const [showRightSidebar, setShowRightSidebar] = createSignal(false)
   const [showShortcuts, setShowShortcuts] = createSignal(false)
   const [updatePrompt, setUpdatePrompt] = createSignal<UpdatePromptState>(hideUpdatePrompt())
-  let autoUpdateCheckStarted = false
   let initialHomeApplied = false
+  let dismissedUpdateVersionKey: string | undefined
+
+  const updateVersionKey = (version?: string) => version?.trim() || "__unknown__"
+
+  const showAvailableUpdate = (version?: string) => {
+    const current = updatePrompt()
+    if (
+      (current.phase === "available" || current.phase === "error" || current.phase === "installing")
+      && current.version === version
+    ) {
+      return
+    }
+
+    dismissedUpdateVersionKey = undefined
+    setUpdatePrompt(availableUpdatePrompt(version))
+  }
 
   const handleLogout = async () => {
     try {
@@ -457,27 +473,42 @@ function AppShell(props: {
 
   createEffect(() => {
     const caps = capabilities()
-    if (autoUpdateCheckStarted || !caps?.updater || !settingsStore.autoUpdate) {
+    if (!caps?.updater || !settingsStore.autoUpdate) {
       return
     }
     if (!platform.checkUpdate || !platform.update) {
       return
     }
 
-    autoUpdateCheckStarted = true
-    window.setTimeout(() => {
-      void (async () => {
+    const stopScheduler = startAutoUpdateScheduler({
+      runCheck: async () => {
         try {
           const result = await platform.checkUpdate!()
           if (!result.updateAvailable) {
             return
           }
-          setUpdatePrompt(availableUpdatePrompt(result.version))
+
+          if (dismissedUpdateVersionKey === updateVersionKey(result.version)) {
+            return
+          }
+
+          showAvailableUpdate(result.version)
         } catch (error) {
           console.warn("[Updater] automatic update check failed", error)
         }
-      })()
-    }, 3000)
+      },
+      subscribeToFocus: (listener) => {
+        window.addEventListener("focus", listener)
+        return () => window.removeEventListener("focus", listener)
+      },
+      subscribeToVisibility: (listener) => {
+        document.addEventListener("visibilitychange", listener)
+        return () => document.removeEventListener("visibilitychange", listener)
+      },
+      isVisible: () => document.visibilityState === "visible",
+    })
+
+    onCleanup(stopScheduler)
   })
 
   createEffect(() => {
@@ -487,9 +518,15 @@ function AppShell(props: {
   })
 
   const dismissUpdatePrompt = () => {
-    if (updatePrompt().phase === "installing") {
+    const current = updatePrompt()
+    if (current.phase === "installing") {
       return
     }
+
+    if (current.phase === "available" || current.phase === "error") {
+      dismissedUpdateVersionKey = updateVersionKey(current.version)
+    }
+
     setUpdatePrompt(hideUpdatePrompt())
   }
 
@@ -503,6 +540,7 @@ function AppShell(props: {
       return
     }
 
+    dismissedUpdateVersionKey = undefined
     setUpdatePrompt(startInstallingUpdate(current))
 
     try {

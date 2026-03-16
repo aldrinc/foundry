@@ -2,6 +2,7 @@ import { createEffect, createSignal, Show, For, type JSX } from "solid-js"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsNotifications } from "./settings-notifications"
 import { SettingsAccount } from "./settings-account"
+import { SettingsProfile } from "./settings-profile"
 import { SettingsMutedUsers } from "./settings-muted-users"
 import { SettingsAlertWords } from "./settings-alert-words"
 import { SettingsChannels } from "./settings-channels"
@@ -19,7 +20,7 @@ import { SettingsServers } from "./settings-servers"
 import type { SavedServerStatus } from "@foundry/desktop/bindings"
 
 export type SettingsSection =
-  | "general" | "notifications" | "account" | "muted-users" | "alert-words"
+  | "general" | "notifications" | "profile" | "account" | "muted-users" | "alert-words"
   | "channels" | "groups"
   | "org-profile" | "org-permissions" | "emoji" | "linkifiers" | "users" | "agents" | "bots"
   | "app" | "network" | "servers"
@@ -49,6 +50,7 @@ const NAV: NavCategory[] = [
     label: "Personal",
     items: [
       { id: "general", label: "General", icon: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg> },
+      { id: "profile", label: "Profile", icon: () => <SvgIcon><circle cx="7" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2" /><path d="M2 12.5c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></SvgIcon> },
       { id: "notifications", label: "Notifications", icon: () => <SvgIcon><path d="M3.5 6a3.5 3.5 0 017 0v3l1.5 1.5H2L3.5 9V6z" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" /><path d="M5.5 11a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1.2" /></SvgIcon> },
       { id: "account", label: "Account & Privacy", icon: () => <SvgIcon><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.2" /><path d="M2 13c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></SvgIcon> },
       { id: "muted-users", label: "Muted Users", icon: () => <SvgIcon><circle cx="7" cy="4.5" r="2.5" stroke="currentColor" stroke-width="1.2" /><path d="M2 13c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /><path d="M3 3l8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" /></SvgIcon> },
@@ -108,6 +110,7 @@ export function SettingsView(props: {
   const renderContent = () => {
     switch (activeSection()) {
       case "general": return <SettingsGeneral />
+      case "profile": return <SettingsProfile />
       case "notifications": return <SettingsNotifications />
       case "account": return <SettingsAccount onLogout={props.onLogout} />
       case "muted-users": return <SettingsMutedUsers />
