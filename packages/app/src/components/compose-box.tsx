@@ -1838,8 +1838,9 @@ function ComposeActionButton(props: {
   return (
     <button
       type="button"
-      class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      class="p-1.5 rounded-[var(--radius-sm)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       classList={{
+        "text-[var(--text-tertiary)]": !props.active,
         "text-[var(--compose-accent)] bg-[var(--compose-accent)]/10": props.active,
       }}
       onClick={(event) => {

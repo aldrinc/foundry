@@ -421,8 +421,11 @@ export function SupervisorComposer() {
 
             {/* Format toggle (Aa) */}
             <button
-              class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-              classList={{ "text-[var(--compose-accent)] bg-[var(--compose-accent)]/10": showFormatBar() }}
+              class="p-1.5 rounded-[var(--radius-sm)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+              classList={{
+                "text-[var(--text-tertiary)]": !showFormatBar(),
+                "text-[var(--compose-accent)] bg-[var(--compose-accent)]/10": showFormatBar(),
+              }}
               onClick={() => setShowFormatBar(v => !v)}
               title="Formatting"
             >
