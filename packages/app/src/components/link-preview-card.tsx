@@ -160,7 +160,7 @@ export function LinkPreviewCard(props: {
       {(data) => (
         <Show when={!collapsed()}>
           <div
-            class="mt-1.5 relative max-w-[400px] cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)] overflow-hidden transition-colors hover:border-[var(--border-strong)]"
+            class="mt-1.5 relative max-w-[400px] cursor-pointer rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)] overflow-hidden transition-colors hover:border-[var(--border-strong)] link-preview-enter"
             onClick={handleClick}
             role="link"
             aria-label={`Link preview: ${data().title || data().url}`}
@@ -180,13 +180,12 @@ export function LinkPreviewCard(props: {
             {/* Banner image */}
             <Show when={data().image_url}>
               {(imgUrl) => (
-                <div class="w-full max-h-[160px] overflow-hidden bg-[var(--background-elevated)]">
+                <div class="w-full overflow-hidden bg-[var(--background-elevated)]" style={{ height: "160px" }}>
                   <img
                     src={imgUrl()}
                     alt=""
-                    class="w-full object-cover"
-                    style={{ border: "none", "border-radius": "0", margin: "0", "max-height": "160px" }}
-                    loading="lazy"
+                    class="w-full h-full object-cover"
+                    style={{ border: "none", "border-radius": "0", margin: "0" }}
                     onError={(e) => {
                       (e.target as HTMLImageElement).parentElement!.style.display = "none"
                     }}

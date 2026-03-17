@@ -987,6 +987,21 @@
     background: var(--border-strong);
   }
 
+  /* ===== MESSAGE LIST LOADING — layout shift prevention ===== */
+
+  /* Isolate each message item's layout so async content (images, link
+     previews) loading in one message doesn't reflow all siblings below it. */
+  [data-component="message-item"] {
+    contain: content;
+  }
+
+  /* Reserve vertical space for inline images while they load.
+     Excludes gallery thumbs (fixed aspect-ratio containers) and
+     lightbox images (positioned absolutely). */
+  [data-component="message-content"] img:not(.foundry-image-gallery-thumb img):not(.foundry-image-lightbox-image) {
+    min-height: 100px;
+  }
+
   /* Respect reduced-motion preference (WCAG SC 2.3.3) */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -1024,6 +1039,32 @@
   @keyframes supervisor-spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  /* Message list fade-in — masks the skeleton→messages swap */
+  @keyframes message-list-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .message-list-enter {
+    animation: message-list-fade-in 180ms ease-out both;
+  }
+
+  /* Link preview card fade-in */
+  @keyframes link-preview-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .link-preview-enter {
+    animation: link-preview-fade-in 150ms ease-out both;
   }
 
   /* Supervisor content: rendered markdown styles */

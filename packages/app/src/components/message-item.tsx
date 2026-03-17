@@ -292,7 +292,6 @@ export function MessageItem(props: {
                 src={url()}
                 alt=""
                 class="w-9 h-9 rounded-full object-cover"
-                loading="lazy"
               />
             )}
           </Show>

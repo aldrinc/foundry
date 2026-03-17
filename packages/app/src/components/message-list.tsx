@@ -86,7 +86,7 @@ export function MessageList(props: {
   const startScrollPolling = () => {
     if (scrollPollTimer) clearInterval(scrollPollTimer)
     let lastHeight = 0
-    const until = Date.now() + 3000
+    const until = Date.now() + 1000
     scrollPollTimer = setInterval(() => {
       if (Date.now() > until || !scrollContainer) {
         clearInterval(scrollPollTimer)
@@ -369,7 +369,7 @@ export function MessageList(props: {
             })()}
           </Show>
 
-          <Show when={props.onToggleUserPanel}>
+          <Show when={props.onToggleUserPanel && nav.parseNarrow(props.narrow)?.type !== "dm"}>
             <button
               class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
               onClick={() => props.onToggleUserPanel?.()}
@@ -420,43 +420,45 @@ export function MessageList(props: {
             </div>
           }
         >
-          <For each={messages()}>
-            {(message, idx) => {
-              const prev = () => idx() > 0 ? messages()[idx() - 1] : null
-              const showDateSeparator = () => {
-                const p = prev()
-                if (!p) return true
-                return isDifferentDay(p.timestamp, message.timestamp)
-              }
-              const showSender = () => {
-                if (showDateSeparator()) return true
-                const p = prev()
-                if (!p) return true
-                if (p.sender_id !== message.sender_id) return true
-                if (message.timestamp - p.timestamp > 300) return true
-                return false
-              }
+          <div class="message-list-enter">
+            <For each={messages()}>
+              {(message, idx) => {
+                const prev = () => idx() > 0 ? messages()[idx() - 1] : null
+                const showDateSeparator = () => {
+                  const p = prev()
+                  if (!p) return true
+                  return isDifferentDay(p.timestamp, message.timestamp)
+                }
+                const showSender = () => {
+                  if (showDateSeparator()) return true
+                  const p = prev()
+                  if (!p) return true
+                  if (p.sender_id !== message.sender_id) return true
+                  if (message.timestamp - p.timestamp > 300) return true
+                  return false
+                }
 
-              return (
-                <>
-                  <Show when={showDateSeparator()}>
-                    <div class="flex items-center px-5 pt-6 pb-2 select-none" data-component="date-separator">
-                      <div class="flex-1 h-px bg-[var(--border-default)]" />
-                      <span class="text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap px-3 py-0.5 rounded-full border border-[var(--border-default)] bg-[var(--background-base)]">
-                        {formatDateSeparator(message.timestamp)}
-                      </span>
-                      <div class="flex-1 h-px bg-[var(--border-default)]" />
-                    </div>
-                  </Show>
-                  <MessageItem
-                    message={message}
-                    onReply={props.onReply}
-                    showSender={showSender()}
-                  />
-                </>
-              )
-            }}
-          </For>
+                return (
+                  <>
+                    <Show when={showDateSeparator()}>
+                      <div class="flex items-center px-5 pt-6 pb-2 select-none" data-component="date-separator">
+                        <div class="flex-1 h-px bg-[var(--border-default)]" />
+                        <span class="text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap px-3 py-0.5 rounded-full border border-[var(--border-default)] bg-[var(--background-base)]">
+                          {formatDateSeparator(message.timestamp)}
+                        </span>
+                        <div class="flex-1 h-px bg-[var(--border-default)]" />
+                      </div>
+                    </Show>
+                    <MessageItem
+                      message={message}
+                      onReply={props.onReply}
+                      showSender={showSender()}
+                    />
+                  </>
+                )
+              }}
+            </For>
+          </div>
         </Show>
 
         {/* Error state */}
