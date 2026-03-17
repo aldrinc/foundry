@@ -21,9 +21,13 @@ import {
 import {
   addUnreadDirectMessage,
   addUnreadStreamMessage,
+  applyLocalReadState,
   buildUnreadIndex,
   buildUnreadUiState,
+  getUnreadMessageIdsForStream,
+  getUnreadMessageIdsForTopic,
   removeUnreadMessages,
+  shouldAddMessageToUnread,
   updateUnreadStreamMessage,
   type UnreadItem,
   type UnreadMessagesSnapshot,
@@ -212,6 +216,9 @@ export interface ZulipSync {
   setTypingUsers(narrow: string, userIds: number[]): void
   saveDraft(narrow: string, text: string): void
   clearDraft(narrow: string): void
+  markMessagesRead(messageIds: number[]): Promise<void>
+  markStreamAsRead(streamId: number): Promise<void>
+  markTopicAsRead(streamId: number, topic: string): Promise<void>
 
   // Event handlers
   handleMessageEvent(data: any): void
@@ -235,6 +242,20 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
   const unreadIndex = new Map<number, { kind: "stream"; streamId: number; topic: string } | { kind: "dm"; userIds: number[] }>()
   const platform = usePlatform()
   const { store: settings } = useSettings()
+
+  const applyReadLocally = (messageIds: number[]) => {
+    if (applyLocalReadState(unreadIndex, store.messages, messageIds)) {
+      syncUnreadUi()
+    }
+  }
+
+  const reconcileFetchedReadMessages = (messages: Message[]) => {
+    const readIds = messages
+      .filter((message) => (message.flags || []).includes("read"))
+      .map((message) => message.id)
+
+    applyReadLocally(readIds)
+  }
 
   const syncUnreadUi = (
     subscriptions = store.subscriptions,
@@ -509,6 +530,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
           }
 
           sync.addMessages(narrow, result.data.messages)
+          reconcileFetchedReadMessages(result.data.messages)
           sync.markNarrowHydrated(narrow, true)
           sync.setMessageLoadState(narrow, result.data.found_oldest ? "loaded-all" : "idle")
 
@@ -517,7 +539,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
               .filter(message => !(message.flags || []).includes("read"))
               .map(message => message.id)
             if (unreadIds.length > 0) {
-              await commands.updateMessageFlags(props.orgId, unreadIds, "add", "read")
+              await sync.markMessagesRead(unreadIds)
             }
           }
 
@@ -556,6 +578,39 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       }))
     },
 
+    async markMessagesRead(messageIds) {
+      if (messageIds.length === 0) {
+        return
+      }
+
+      const result = await commands.updateMessageFlags(props.orgId, messageIds, "add", "read")
+      if (result.status === "error") {
+        throw new Error(result.error || "Failed to mark messages as read")
+      }
+
+      applyReadLocally(messageIds)
+    },
+
+    async markStreamAsRead(streamId) {
+      const unreadMessageIds = getUnreadMessageIdsForStream(unreadIndex, streamId)
+      const result = await commands.markStreamAsRead(props.orgId, streamId)
+      if (result.status === "error") {
+        throw new Error(result.error || "Failed to mark stream as read")
+      }
+
+      applyReadLocally(unreadMessageIds)
+    },
+
+    async markTopicAsRead(streamId, topic) {
+      const unreadMessageIds = getUnreadMessageIdsForTopic(unreadIndex, streamId, topic)
+      const result = await commands.markTopicAsRead(props.orgId, streamId, topic)
+      if (result.status === "error") {
+        throw new Error(result.error || "Failed to mark topic as read")
+      }
+
+      applyReadLocally(unreadMessageIds)
+    },
+
     // Event: new message
     handleMessageEvent(data: any) {
       if (!data?.message) return
@@ -585,16 +640,24 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         activeNarrow === messageNarrow
         || (activeNarrow.startsWith("stream:") && !activeNarrow.includes("/topic:") && messageNarrow.startsWith(`${activeNarrow}/topic:`))
       )
+      const shouldTrackUnread = shouldAddMessageToUnread(
+        msg,
+        store.currentUserId,
+        isViewingConversation,
+      )
 
-      // Update unread counts — skip if user is already viewing this conversation
-      if (isViewingConversation) {
-        // Mark as read immediately — user is already looking at this conversation
-        commands.updateMessageFlags(props.orgId, [msg.id], "add", "read").catch(() => {})
-      } else if (msg.stream_id && !(msg.flags || []).includes("read")) {
+      // Read-path actions should update local state as soon as the server accepts them.
+      if (!shouldTrackUnread) {
+        if (!(msg.flags || []).includes("read")) {
+          sync.markMessagesRead([msg.id]).catch(() => {})
+        } else {
+          applyReadLocally([msg.id])
+        }
+      } else if (msg.stream_id) {
         if (addUnreadStreamMessage(unreadIndex, msg.id, msg.stream_id, msg.subject)) {
           syncUnreadUi()
         }
-      } else if (Array.isArray(msg.display_recipient) && !(msg.flags || []).includes("read")) {
+      } else if (Array.isArray(msg.display_recipient)) {
         if (addUnreadDirectMessage(
           unreadIndex,
           msg.id,
@@ -803,48 +866,50 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       if (!data) return
       const op = data.operation || data.op
       const flag = data.flag as string
-      const messageIds = data.messages as number[]
+      const messageIds = Array.isArray(data.messages) ? data.messages as number[] : []
 
-      if (!messageIds?.length || !flag) return
+      if (!flag) return
 
       const idSet = new Set(messageIds)
 
-      setStore(produce(s => {
-        for (const narrow of Object.keys(s.messages)) {
-          for (const msg of s.messages[narrow]) {
-            if (idSet.has(msg.id)) {
-              const flags = msg.flags || []
-              if (op === "add" && !flags.includes(flag)) {
-                msg.flags = [...flags, flag]
-              } else if (op === "remove") {
-                msg.flags = flags.filter(f => f !== flag)
-              }
-            }
-          }
-        }
-
-        if (flag === "starred") {
-          if (op === "remove") {
-            s.messages[STARRED_NARROW] = (s.messages[STARRED_NARROW] || []).filter(
-              msg => !idSet.has(msg.id),
-            )
-          } else if (op === "add") {
-            const starredMessages: Message[] = []
-            for (const narrow of Object.keys(s.messages)) {
-              if (narrow === STARRED_NARROW) continue
-              for (const msg of s.messages[narrow]) {
-                if (idSet.has(msg.id) && hasStarredFlag(msg)) {
-                  starredMessages.push(msg)
+      if (messageIds.length > 0) {
+        setStore(produce(s => {
+          for (const narrow of Object.keys(s.messages)) {
+            for (const msg of s.messages[narrow]) {
+              if (idSet.has(msg.id)) {
+                const flags = msg.flags || []
+                if (op === "add" && !flags.includes(flag)) {
+                  msg.flags = [...flags, flag]
+                } else if (op === "remove") {
+                  msg.flags = flags.filter(f => f !== flag)
                 }
               }
             }
-            s.messages[STARRED_NARROW] = mergeMessagesById(
-              s.messages[STARRED_NARROW] || [],
-              starredMessages,
-            )
           }
-        }
-      }))
+
+          if (flag === "starred") {
+            if (op === "remove") {
+              s.messages[STARRED_NARROW] = (s.messages[STARRED_NARROW] || []).filter(
+                msg => !idSet.has(msg.id),
+              )
+            } else if (op === "add") {
+              const starredMessages: Message[] = []
+              for (const narrow of Object.keys(s.messages)) {
+                if (narrow === STARRED_NARROW) continue
+                for (const msg of s.messages[narrow]) {
+                  if (idSet.has(msg.id) && hasStarredFlag(msg)) {
+                    starredMessages.push(msg)
+                  }
+                }
+              }
+              s.messages[STARRED_NARROW] = mergeMessagesById(
+                s.messages[STARRED_NARROW] || [],
+                starredMessages,
+              )
+            }
+          }
+        }))
+      }
 
       if (flag === "read") {
         let unreadChanged = false

@@ -3,6 +3,7 @@ import { useZulipSync, type UnreadItem } from "../context/zulip-sync"
 import { useNavigation } from "../context/navigation"
 import type { User } from "../context/zulip-sync"
 import { narrowForRecentDirectMessage } from "../context/recent-dms"
+import { usePresence, type PresenceStatus } from "../context/presence"
 
 /**
  * DirectMessageList — shows recent DM conversations in the sidebar.
@@ -13,6 +14,7 @@ import { narrowForRecentDirectMessage } from "../context/recent-dms"
 export function DirectMessageList() {
   const sync = useZulipSync()
   const nav = useNavigation()
+  const presence = usePresence()
   const [collapsed, setCollapsed] = createSignal(false)
   const [showUserPicker, setShowUserPicker] = createSignal(false)
   const [userFilter, setUserFilter] = createSignal("")
@@ -132,6 +134,14 @@ export function DirectMessageList() {
     return other?.full_name?.charAt(0).toUpperCase() ?? "?"
   }
 
+  // Get presence status for a 1:1 DM (returns null for group DMs)
+  const dmPresence = (participants: User[]): PresenceStatus | null => {
+    const currentId = sync.store.currentUserId
+    const others = participants.filter(u => u.user_id !== currentId)
+    if (others.length !== 1) return null
+    return presence.getPresence(others[0].email)
+  }
+
   return (
     <div class="border-t border-[var(--border-default)] flex flex-col" data-component="dm-list">
       {/* DM header */}
@@ -186,8 +196,23 @@ export function DirectMessageList() {
                   class="w-full flex items-center gap-2 px-2 py-1.5 text-left text-xs hover:bg-[var(--background-elevated)] transition-colors"
                   onClick={() => startDm(user)}
                 >
-                  <div class="w-5 h-5 rounded-full bg-[var(--background-elevated)] flex items-center justify-center text-[9px] font-medium text-[var(--text-secondary)] shrink-0">
-                    {user.full_name.charAt(0).toUpperCase()}
+                  <div class="relative shrink-0">
+                    <div class="w-5 h-5 rounded-full bg-[var(--background-elevated)] flex items-center justify-center text-[9px] font-medium text-[var(--text-secondary)]">
+                      {user.full_name.charAt(0).toUpperCase()}
+                    </div>
+                    {(() => {
+                      const status = presence.getPresence(user.email)
+                      if (status === "offline") return null
+                      return (
+                        <span
+                          class="absolute bottom-0 right-0 w-1.5 h-1.5 rounded-full border border-[var(--background-surface)]"
+                          classList={{
+                            "bg-green-400": status === "active",
+                            "bg-yellow-400": status === "idle",
+                          }}
+                        />
+                      )
+                    })()}
                   </div>
                   <div class="flex-1 min-w-0">
                     <div class="text-[var(--text-primary)] truncate">{user.full_name}</div>
@@ -215,9 +240,24 @@ export function DirectMessageList() {
                 }}
                 onClick={() => nav.setActiveNarrow(convo.narrow)}
               >
-                {/* Avatar */}
-                <div class="w-6 h-6 rounded-full bg-[var(--background-elevated)] flex items-center justify-center text-[10px] font-medium text-[var(--text-secondary)] shrink-0">
-                  {initials(convo.participants)}
+                {/* Avatar with presence indicator (1:1 DMs only) */}
+                <div class="relative shrink-0">
+                  <div class="w-6 h-6 rounded-full bg-[var(--background-elevated)] flex items-center justify-center text-[10px] font-medium text-[var(--text-secondary)]">
+                    {initials(convo.participants)}
+                  </div>
+                  {(() => {
+                    const status = dmPresence(convo.participants)
+                    if (!status || status === "offline") return null
+                    return (
+                      <span
+                        class="absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[var(--surface-sidebar)]"
+                        classList={{
+                          "bg-green-400": status === "active",
+                          "bg-yellow-400": status === "idle",
+                        }}
+                      />
+                    )
+                  })()}
                 </div>
 
                 {/* Name + preview */}

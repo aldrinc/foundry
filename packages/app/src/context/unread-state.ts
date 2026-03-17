@@ -61,9 +61,16 @@ export interface UnreadDirectMessageIndexEntry {
   userIds: number[]
 }
 
+export type UnreadIndexEntry = UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry
+
 export interface UnreadUiState {
   unreadCounts: Record<number, number>
   unreadItems: UnreadItem[]
+}
+
+export interface CachedMessageLike {
+  id: number
+  flags?: string[]
 }
 
 function topicKey(streamId: number, topic: string): string {
@@ -84,11 +91,17 @@ function sameUserIds(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((userId, index) => userId === right[index])
 }
 
+function normalizeMessageIds(messageIds: number[]): number[] {
+  return Array.from(
+    new Set(messageIds.filter((messageId): messageId is number => Number.isFinite(messageId))),
+  )
+}
+
 export function buildUnreadIndex(
   unreadMessages?: UnreadMessagesSnapshot | null,
   currentUserId?: number | null,
-): Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry> {
-  const index = new Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>()
+): Map<number, UnreadIndexEntry> {
+  const index = new Map<number, UnreadIndexEntry>()
 
   for (const stream of unreadMessages?.streams || []) {
     for (const messageId of stream.unread_message_ids || []) {
@@ -141,7 +154,7 @@ export function buildUnreadIndex(
 }
 
 export function addUnreadStreamMessage(
-  index: Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>,
+  index: Map<number, UnreadIndexEntry>,
   messageId: number,
   streamId: number,
   topic: string,
@@ -156,7 +169,7 @@ export function addUnreadStreamMessage(
 }
 
 export function addUnreadDirectMessage(
-  index: Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>,
+  index: Map<number, UnreadIndexEntry>,
   messageId: number,
   userIds: number[],
 ): boolean {
@@ -176,7 +189,7 @@ export function addUnreadDirectMessage(
 }
 
 export function removeUnreadMessages(
-  index: Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>,
+  index: Map<number, UnreadIndexEntry>,
   messageIds: number[],
 ): boolean {
   let changed = false
@@ -189,7 +202,7 @@ export function removeUnreadMessages(
 }
 
 export function updateUnreadStreamMessage(
-  index: Map<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>,
+  index: Map<number, UnreadIndexEntry>,
   messageId: number,
   updates: Partial<UnreadStreamIndexEntry>,
 ): boolean {
@@ -211,7 +224,7 @@ export function updateUnreadStreamMessage(
 }
 
 export function buildUnreadUiState(
-  index: ReadonlyMap<number, UnreadStreamIndexEntry | UnreadDirectMessageIndexEntry>,
+  index: ReadonlyMap<number, UnreadIndexEntry>,
   subscriptions: SubscriptionLookup[],
   users: UserLookup[],
   currentUserId?: number | null,
@@ -284,4 +297,88 @@ export function buildUnreadUiState(
 
 export function getUnreadTotalCount(unreadItems: UnreadItem[]): number {
   return unreadItems.reduce((sum, item) => sum + item.count, 0)
+}
+
+export function applyLocalReadState(
+  index: Map<number, UnreadIndexEntry>,
+  cachedMessages: Record<string, CachedMessageLike[]>,
+  messageIds: number[],
+): boolean {
+  const normalizedMessageIds = normalizeMessageIds(messageIds)
+  if (normalizedMessageIds.length === 0) {
+    return false
+  }
+
+  const idSet = new Set(normalizedMessageIds)
+
+  for (const narrow of Object.keys(cachedMessages)) {
+    for (const message of cachedMessages[narrow] || []) {
+      if (!idSet.has(message.id)) {
+        continue
+      }
+
+      const flags = message.flags || []
+      if (!flags.includes("read")) {
+        message.flags = [...flags, "read"]
+      }
+    }
+  }
+
+  return removeUnreadMessages(index, normalizedMessageIds)
+}
+
+export function getUnreadMessageIdsForStream(
+  index: ReadonlyMap<number, UnreadIndexEntry>,
+  streamId: number,
+): number[] {
+  const messageIds: number[] = []
+
+  for (const [messageId, entry] of index.entries()) {
+    if (entry.kind === "stream" && entry.streamId === streamId) {
+      messageIds.push(messageId)
+    }
+  }
+
+  return messageIds
+}
+
+export function getUnreadMessageIdsForTopic(
+  index: ReadonlyMap<number, UnreadIndexEntry>,
+  streamId: number,
+  topic: string,
+): number[] {
+  const messageIds: number[] = []
+
+  for (const [messageId, entry] of index.entries()) {
+    if (entry.kind === "stream" && entry.streamId === streamId && entry.topic === topic) {
+      messageIds.push(messageId)
+    }
+  }
+
+  return messageIds
+}
+
+export function shouldAddMessageToUnread(
+  message: {
+    sender_id: number
+    flags?: string[]
+    stream_id: number | null
+    display_recipient: string | { id: number }[]
+  },
+  currentUserId: number | null,
+  isViewingConversation: boolean,
+): boolean {
+  if ((message.flags || []).includes("read")) {
+    return false
+  }
+
+  if (isViewingConversation) {
+    return false
+  }
+
+  if (message.sender_id === currentUserId) {
+    return false
+  }
+
+  return typeof message.stream_id === "number" || Array.isArray(message.display_recipient)
 }

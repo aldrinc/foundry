@@ -246,10 +246,10 @@ export function InboxView() {
           directUnreadItems={directUnreadItems()}
           onTopicClick={(streamId, topic) => nav.setActiveNarrow(`stream:${streamId}/topic:${topic}`)}
           onStreamClick={(streamId) => nav.setActiveNarrow(`stream:${streamId}`)}
-          onMarkStreamRead={(streamId) => { commands.markStreamAsRead(org.orgId, streamId).catch(() => {}) }}
-          onMarkTopicRead={(streamId, topic) => { commands.markTopicAsRead(org.orgId, streamId, topic).catch(() => {}) }}
+          onMarkStreamRead={(streamId) => { sync.markStreamAsRead(streamId).catch(() => {}) }}
+          onMarkTopicRead={(streamId, topic) => { sync.markTopicAsRead(streamId, topic).catch(() => {}) }}
           onDmClick={(narrow) => nav.setActiveNarrow(narrow)}
-          onMarkDmRead={(messageIds) => { commands.updateMessageFlags(org.orgId, messageIds, "add", "read").catch(() => {}) }}
+          onMarkDmRead={(messageIds) => { sync.markMessagesRead(messageIds).catch(() => {}) }}
         />
       </div>
     </div>

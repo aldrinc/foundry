@@ -33,8 +33,8 @@ function isDifferentDay(ts1: number, ts2: number): boolean {
  */
 export function AllMessagesView() {
   const sync = useZulipSync()
-  const org = useOrg()
   const nav = useNavigation()
+  const org = useOrg()
 
   const [loading, setLoading] = createSignal(false)
   const [error, setError] = createSignal("")
@@ -47,7 +47,7 @@ export function AllMessagesView() {
 
   const markMessagesRead = async (messageIds: number[]) => {
     if (messageIds.length === 0) return
-    await commands.updateMessageFlags(org.orgId, messageIds, "add", "read")
+    await sync.markMessagesRead(messageIds)
   }
 
   // Fetch all messages on mount

@@ -61,7 +61,11 @@ export function MessageActions(props: {
   const handleToggleRead = async () => {
     try {
       const op = isRead() ? "remove" : "add"
-      await commands.updateMessageFlags(org.orgId, [props.message.id], op, "read")
+      if (op === "add") {
+        await sync.markMessagesRead([props.message.id])
+      } else {
+        await commands.updateMessageFlags(org.orgId, [props.message.id], op, "read")
+      }
     } catch (e) {
       console.error("Failed to toggle read:", e)
     }

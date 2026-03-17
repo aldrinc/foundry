@@ -50,7 +50,7 @@ export function SettingsUsers() {
 
   const roleBadgeClass = (role: number | null) => {
     if (role === 100) return "bg-purple-100 text-purple-700"
-    if (role === 200) return "bg-blue-100 text-blue-700"
+    if (role === 200) return "bg-teal-100 text-teal-700"
     if (role === 300) return "bg-yellow-100 text-yellow-700"
     return "bg-[var(--background-base)] text-[var(--text-tertiary)]"
   }

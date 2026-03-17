@@ -35,7 +35,7 @@ const FILE_TYPE_ICONS: Record<string, { path: string; color: string }> = {
   },
   code: {
     path: "M7 2h7l5 5v14a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1zm6 1v5h5M10 12l-3 3 3 3M14 12l3 3-3 3",
-    color: "#3b82f6",
+    color: "#0d9488",
   },
   document: {
     path: "M7 2h7l5 5v14a1 1 0 01-1 1H6a1 1 0 01-1-1V3a1 1 0 011-1zm6 1v5h5M9 13h6M9 17h4",

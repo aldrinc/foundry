@@ -93,7 +93,7 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
 
   const markMessagesRead = async (messageIds: number[]) => {
     if (messageIds.length === 0) return
-    await commands.updateMessageFlags(org.orgId, messageIds, "add", "read")
+    await sync.markMessagesRead(messageIds)
   }
 
   // Build narrow filters for the API
@@ -274,9 +274,9 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
                 const p = nav.parseNarrow(props.narrow)
                 if (!p?.streamId) return
                 if (p.type === "topic" && p.topic) {
-                  await commands.markTopicAsRead(org.orgId, p.streamId, p.topic)
+                  await sync.markTopicAsRead(p.streamId, p.topic)
                 } else {
-                  await commands.markStreamAsRead(org.orgId, p.streamId)
+                  await sync.markStreamAsRead(p.streamId)
                 }
               }}
               title="Mark all as read"

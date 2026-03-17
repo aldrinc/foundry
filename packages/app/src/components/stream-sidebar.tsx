@@ -311,7 +311,7 @@ function StreamItem(props: {
 
   const handleMarkAsRead = async () => {
     setContextMenu(null)
-    await commands.markStreamAsRead(org.orgId, props.stream.stream_id)
+    await sync.markStreamAsRead(props.stream.stream_id)
   }
 
   const handleToggleMute = async () => {
@@ -373,7 +373,7 @@ function StreamItem(props: {
   const handleMarkTopicAsRead = async (topicName: string) => {
     setContextMenu(null)
     try {
-      await commands.markTopicAsRead(org.orgId, props.stream.stream_id, topicName)
+      await sync.markTopicAsRead(props.stream.stream_id, topicName)
     } catch (e) {
       console.error("Failed to mark topic as read:", e)
     }

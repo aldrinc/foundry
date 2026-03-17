@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test"
 import {
   addUnreadStreamMessage,
   addUnreadDirectMessage,
+  applyLocalReadState,
   buildUnreadIndex,
   buildUnreadUiState,
+  getUnreadMessageIdsForStream,
+  getUnreadMessageIdsForTopic,
   removeUnreadMessages,
+  shouldAddMessageToUnread,
   updateUnreadStreamMessage,
 } from "./unread-state"
 
@@ -145,5 +149,86 @@ describe("buildUnreadUiState", () => {
     expect(addUnreadDirectMessage(index, 3001, [7, 30])).toBe(false)
     expect(removeUnreadMessages(index, [3001])).toBe(true)
     expect(removeUnreadMessages(index, [3001])).toBe(false)
+  })
+
+  test("regression: bulk mark-read can enumerate every unread message in a stream and topic", () => {
+    const index = buildUnreadIndex({
+      streams: [
+        {
+          stream_id: 5,
+          topic: "deploys",
+          unread_message_ids: [1001, 1002],
+        },
+        {
+          stream_id: 5,
+          topic: "rollouts",
+          unread_message_ids: [1003],
+        },
+        {
+          stream_id: 7,
+          topic: "design",
+          unread_message_ids: [1004],
+        },
+      ],
+    }, 99)
+
+    expect(getUnreadMessageIdsForStream(index, 5)).toEqual([1001, 1002, 1003])
+    expect(getUnreadMessageIdsForTopic(index, 5, "deploys")).toEqual([1001, 1002])
+  })
+
+  test("regression: local read reconciliation clears unread state without waiting for an event", () => {
+    const index = buildUnreadIndex({
+      streams: [
+        {
+          stream_id: 5,
+          topic: "deploys",
+          unread_message_ids: [1001],
+        },
+      ],
+    }, 99)
+
+    const cachedMessages = {
+      "stream:5/topic:deploys": [
+        { id: 1001, flags: [] as string[] },
+      ],
+      "all-messages": [
+        { id: 1001, flags: [] as string[] },
+      ],
+    }
+
+    expect(applyLocalReadState(index, cachedMessages, [1001])).toBe(true)
+    expect(index.size).toBe(0)
+    expect(cachedMessages["stream:5/topic:deploys"][0]?.flags).toEqual(["read"])
+    expect(cachedMessages["all-messages"][0]?.flags).toEqual(["read"])
+  })
+
+  test("regression: viewed, read, and self-authored messages never create unread badges", () => {
+    expect(shouldAddMessageToUnread({
+      sender_id: 99,
+      flags: [],
+      stream_id: null,
+      display_recipient: [{ id: 42 }, { id: 99 }],
+    }, 99, false)).toBe(false)
+
+    expect(shouldAddMessageToUnread({
+      sender_id: 42,
+      flags: [],
+      stream_id: 5,
+      display_recipient: "general",
+    }, 99, true)).toBe(false)
+
+    expect(shouldAddMessageToUnread({
+      sender_id: 42,
+      flags: ["read"],
+      stream_id: 5,
+      display_recipient: "general",
+    }, 99, false)).toBe(false)
+
+    expect(shouldAddMessageToUnread({
+      sender_id: 42,
+      flags: [],
+      stream_id: 5,
+      display_recipient: "general",
+    }, 99, false)).toBe(true)
   })
 })

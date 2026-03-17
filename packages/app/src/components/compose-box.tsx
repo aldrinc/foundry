@@ -108,14 +108,17 @@ export function ComposeBox(props: { narrow: string }) {
   const canType = () => caps()?.typing_notifications !== false && settings.sendTyping
   const uploadLimitBytes = () => bytesFromMebibytes(org.maxFileUploadSizeMib)
 
-  // Load draft
-  createEffect(() => {
-    const draft = sync.store.drafts[props.narrow]
-    setContent(draft || "")
-    setError("")
-    setUploadError("")
-    setUploadedImages([])
-  })
+  // Load draft when narrow changes
+  createEffect(on(
+    () => props.narrow,
+    (narrow) => {
+      const draft = sync.store.drafts[narrow]
+      setContent(draft || "")
+      setError("")
+      setUploadError("")
+      setUploadedImages([])
+    },
+  ))
 
   createEffect(on(
     () => props.narrow,
