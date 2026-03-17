@@ -51,10 +51,13 @@ If you later rotate to a password-protected key, also set:
    ```bash
    bun run configure:desktop:apple-signing -- ...
    ```
-2. Push the release branch or merged commit to GitHub.
-3. Run the `Desktop Release` workflow from GitHub Actions, or push a `desktop-v*` tag.
-4. The workflow builds desktop bundles, uploads signed updater metadata, and publishes release assets to GitHub Releases.
-5. Installed apps with auto-update enabled will check the GitHub feed and prompt the user to install the new version.
+2. Update `CHANGELOG.md` with a dated entry for the release version.
+   The changelog entry is required before release, and the same notes should be published in the GitHub Release entry.
+3. Push the release branch or merged commit to GitHub.
+4. Run the `Desktop Release` workflow from GitHub Actions, or push a `desktop-v*` tag.
+5. The workflow builds desktop bundles, uploads signed updater metadata, and publishes release assets to GitHub Releases.
+6. Publish the GitHub Release with the matching changelog text so the release page and the repo changelog stay in sync.
+7. Installed apps with auto-update enabled will check the GitHub feed and prompt the user to install the new version.
 
 The release workflow now verifies that all desktop version files agree, and that a pushed `desktop-v*` tag matches the app version exactly.
 

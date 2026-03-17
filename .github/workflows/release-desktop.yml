@@ -164,6 +164,22 @@ jobs:
             echo "notarization_mode=$notarization_mode"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Extract changelog release notes
+        id: release-notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_version="$(bun -e 'console.log(require("./packages/desktop/package.json").version)')"
+          release_notes="$(bun scripts/release-notes-from-changelog.mjs "$release_version")"
+
+          {
+            echo "version=$release_version"
+            echo "body<<EOF"
+            printf '%s\n' "$release_notes"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish signed desktop release
         uses: tauri-apps/tauri-action@v0.6.0
         env:
@@ -184,8 +200,7 @@ jobs:
           tauriScript: bun tauri
           tagName: desktop-v__VERSION__
           releaseName: Foundry Desktop v__VERSION__
-          releaseBody: |
-            Signed desktop bundles and updater metadata for Foundry.
+          releaseBody: ${{ steps.release-notes.outputs.body }}
           releaseDraft: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           args: ${{ matrix.args }}

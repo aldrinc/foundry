@@ -34,6 +34,9 @@ bun run version:desktop -- <version>
 
 That keeps the desktop npm package, Tauri config, and Rust manifest metadata aligned.
 
+Then update `CHANGELOG.md` with the release version, date, and user-facing notes.
+Publishing the release is not complete until the same changelog text is included in the GitHub Release entry for that version.
+
 To configure Apple signing and notarization secrets/variables in GitHub Actions programmatically for the current repo:
 
 ```bash
@@ -92,6 +95,16 @@ Because updater artifacts are enabled, the bundle step now also needs a Tauri up
 - `~/.foundry/keys/foundry-updater.key`, if present on the local machine
 
 If none of those are available, the bundle command will exit with a clear error before building. For passwordless keys, the wrapper also sets an explicit empty `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` so non-interactive local builds do not hang or fail on a prompt.
+
+## Desktop Release Checklist
+
+Before publishing a desktop release:
+
+1. Bump the desktop version with `bun run version:desktop -- <version>`.
+2. Add the release entry to `CHANGELOG.md`.
+3. Run the desktop validation checks and test an installed build on the target platform.
+4. Build the release artifacts.
+5. Publish the GitHub Release with the same changelog notes that were committed to `CHANGELOG.md`.
 
 ## macOS Signing And Notarization
 
