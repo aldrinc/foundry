@@ -64,6 +64,9 @@
     --interactive-primary: #6493f9;
     --interactive-primary-hover: #4f7de8;
     --interactive-primary-text: #ffffff;
+    --compose-accent: #0d9488;
+    --compose-accent-hover: #0f766e;
+    --compose-accent-text: #ffffff;
 
     --status-success: #22c55e;
     --status-warning: #f59e0b;

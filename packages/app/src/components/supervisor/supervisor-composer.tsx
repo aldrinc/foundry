@@ -356,8 +356,8 @@ export function SupervisorComposer() {
         ref={composeRef!}
         class="rounded-[var(--radius-lg)] border border-[var(--border-default)] bg-[var(--surface-input)] transition-shadow"
         classList={{
-          "ring-2 ring-[var(--interactive-primary)]": dragOver(),
-          "focus-within:border-[var(--interactive-primary)]": true,
+          "ring-2 ring-[var(--compose-accent)]": dragOver(),
+          "focus-within:border-[var(--compose-accent)]": true,
         }}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}
@@ -390,7 +390,7 @@ export function SupervisorComposer() {
 
         <Show when={uploading()}>
           <div
-            class="flex items-center gap-2 px-3 py-2 border-t border-[var(--border-default)] bg-[var(--interactive-primary)]/5 text-[var(--interactive-primary)]"
+            class="flex items-center gap-2 px-3 py-2 border-t border-[var(--border-default)] bg-[var(--compose-accent)]/5 text-[var(--compose-accent)]"
             role="status"
             aria-live="polite"
           >
@@ -422,7 +422,7 @@ export function SupervisorComposer() {
             {/* Format toggle (Aa) */}
             <button
               class="p-1.5 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
-              classList={{ "text-[var(--interactive-primary)] bg-[var(--interactive-primary)]/10": showFormatBar() }}
+              classList={{ "text-[var(--compose-accent)] bg-[var(--compose-accent)]/10": showFormatBar() }}
               onClick={() => setShowFormatBar(v => !v)}
               title="Formatting"
             >
@@ -502,12 +502,12 @@ export function SupervisorComposer() {
                       <div
                         class="w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center"
                         classList={{
-                          "border-[var(--interactive-primary)]": settings.enterSends,
+                          "border-[var(--compose-accent)]": settings.enterSends,
                           "border-[var(--text-tertiary)]": !settings.enterSends,
                         }}
                       >
                         <Show when={settings.enterSends}>
-                          <div class="w-1.5 h-1.5 rounded-full bg-[var(--interactive-primary)]" />
+                          <div class="w-1.5 h-1.5 rounded-full bg-[var(--compose-accent)]" />
                         </Show>
                       </div>
                     </div>
@@ -534,12 +534,12 @@ export function SupervisorComposer() {
                       <div
                         class="w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center"
                         classList={{
-                          "border-[var(--interactive-primary)]": !settings.enterSends,
+                          "border-[var(--compose-accent)]": !settings.enterSends,
                           "border-[var(--text-tertiary)]": settings.enterSends,
                         }}
                       >
                         <Show when={!settings.enterSends}>
-                          <div class="w-1.5 h-1.5 rounded-full bg-[var(--interactive-primary)]" />
+                          <div class="w-1.5 h-1.5 rounded-full bg-[var(--compose-accent)]" />
                         </Show>
                       </div>
                     </div>
@@ -561,7 +561,7 @@ export function SupervisorComposer() {
             </div>
 
             <button
-              class="w-7 h-7 flex items-center justify-center rounded-full bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] hover:bg-[var(--interactive-primary-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              class="w-7 h-7 flex items-center justify-center rounded-full bg-[var(--compose-accent)] text-[var(--compose-accent-text)] hover:bg-[var(--compose-accent-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               onClick={handleSend}
               disabled={supervisor.store.sendingMessage || !text().trim()}
               title={settings.enterSends ? "Send (Enter)" : `Send (${modKey()}+Enter)`}
