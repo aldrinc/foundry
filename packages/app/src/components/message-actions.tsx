@@ -141,7 +141,7 @@ export function MessageActions(props: {
   }
 
   return (
-    <div class="absolute -top-3 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-sm px-1 py-0.5"
+    <div class="absolute top-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex items-center gap-0.5 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-sm px-1 py-0.5"
       data-component="message-actions"
     >
       {/* React button */}
