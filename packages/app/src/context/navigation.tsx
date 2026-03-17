@@ -22,6 +22,9 @@ export type Narrow = string | null
 export interface NavigationContext {
   activeNarrow: Accessor<Narrow>
   setActiveNarrow: Setter<Narrow>
+  messageAnchorId: Accessor<number | null>
+  navigateToMessage(narrow: string, messageId: number): void
+  clearMessageAnchor(messageId?: number): void
   /** Parse a narrow string into Zulip API narrow filters */
   narrowToFilters(narrow: string): { operator: string; operand: string | number[] }[]
   /** Get display info from a narrow string */
@@ -33,11 +36,33 @@ export interface NavigationContext {
 const NavContext = createContext<NavigationContext>()
 
 export function NavigationProvider(props: { children: JSX.Element }) {
-  const [activeNarrow, setActiveNarrow] = createSignal<Narrow>(null)
+  const [activeNarrow, rawSetActiveNarrow] = createSignal<Narrow>(null)
+  const [messageAnchorId, setMessageAnchorId] = createSignal<number | null>(null)
+
+  const setActiveNarrow: Setter<Narrow> = (value) => {
+    setMessageAnchorId(null)
+    return rawSetActiveNarrow(value as any)
+  }
+
+  const navigateToMessage = (narrow: string, messageId: number) => {
+    setMessageAnchorId(messageId)
+    rawSetActiveNarrow(narrow)
+  }
+
+  const clearMessageAnchor = (messageId?: number) => {
+    if (messageId !== undefined && messageAnchorId() !== messageId) {
+      return
+    }
+
+    setMessageAnchorId(null)
+  }
 
   const nav: NavigationContext = {
     activeNarrow,
     setActiveNarrow,
+    messageAnchorId,
+    navigateToMessage,
+    clearMessageAnchor,
 
     narrowToFilters,
     parseNarrow,

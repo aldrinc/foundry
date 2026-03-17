@@ -1,3 +1,6 @@
+import type { NarrowFilter } from "@foundry/desktop/bindings"
+import type { Subscription } from "./zulip-sync"
+
 export const SPECIAL_NARROWS = ["starred", "all-messages", "recent-topics"] as const
 export type SpecialNarrow = typeof SPECIAL_NARROWS[number]
 
@@ -34,6 +37,32 @@ export function narrowToFilters(narrow: string): { operator: string; operand: st
   }
 
   return filters
+}
+
+export function narrowToApiFilters(
+  narrow: string,
+  subscriptions: Pick<Subscription, "stream_id" | "name">[] = [],
+): NarrowFilter[] {
+  return (narrowToFilters(narrow) as NarrowFilter[]).map((filter) => {
+    if (filter.operator !== "stream" || typeof filter.operand !== "string") {
+      return filter
+    }
+
+    const streamId = Number.parseInt(filter.operand, 10)
+    if (!Number.isFinite(streamId)) {
+      return filter
+    }
+
+    const subscription = subscriptions.find((entry) => entry.stream_id === streamId)
+    if (!subscription) {
+      return filter
+    }
+
+    return {
+      ...filter,
+      operand: subscription.name,
+    }
+  })
 }
 
 export function parseNarrow(narrow: string): ParsedNarrow | null {

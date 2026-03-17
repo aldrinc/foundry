@@ -11,6 +11,7 @@ import type { SavedServerStatus } from "@foundry/desktop/bindings"
 import { getUnreadTotalCount } from "../context/unread-state"
 import { buildTopicSidebarSections, isResolvedTopicName, resolveTopicName, unresolveTopicName } from "./topic-sidebar-state"
 import type { SettingsRoute, SettingsSection } from "../views/settings"
+import { buildStreamLinkMarkdown, buildTopicLinkMarkdown } from "./zulip-link-utils"
 
 export function StreamSidebar(props: {
   onOpenSettings?: (route?: SettingsSection | SettingsRoute) => void
@@ -360,7 +361,7 @@ function StreamItem(props: {
 
   const handleCopyStreamLink = () => {
     setContextMenu(null)
-    const link = `#narrow/stream/${props.stream.stream_id}-${encodeURIComponent(props.stream.name)}`
+    const link = buildStreamLinkMarkdown(props.stream.stream_id, props.stream.name)
     navigator.clipboard.writeText(link).catch(() => {})
   }
 
@@ -381,7 +382,7 @@ function StreamItem(props: {
 
   const handleCopyTopicLink = (topicName: string) => {
     setContextMenu(null)
-    const link = `#narrow/stream/${props.stream.stream_id}-${encodeURIComponent(props.stream.name)}/topic/${encodeURIComponent(topicName)}`
+    const link = buildTopicLinkMarkdown(props.stream.stream_id, props.stream.name, topicName)
     navigator.clipboard.writeText(link).catch(() => {})
   }
 

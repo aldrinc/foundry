@@ -64,7 +64,27 @@ async function initializeDeepLinkHandling() {
 void initializeDeepLinkHandling()
 
 // Create the Platform abstraction (matching Open Code's pattern)
-const createPlatform = (): Platform => {
+async function loadAppVersions() {
+  if (!HAS_TAURI_BRIDGE) {
+    return { version: undefined, tauriVersion: undefined }
+  }
+
+  const { getVersion, getTauriVersion } = await import("@tauri-apps/api/app")
+  const [version, tauriVersion] = await Promise.all([
+    getVersion().catch((error) => {
+      console.warn("App version unavailable", error)
+      return undefined
+    }),
+    getTauriVersion().catch((error) => {
+      console.warn("Tauri version unavailable", error)
+      return undefined
+    }),
+  ])
+
+  return { version, tauriVersion }
+}
+
+const createPlatform = async (): Promise<Platform> => {
   const os = (() => {
     try {
       const type = ostype()
@@ -72,10 +92,13 @@ const createPlatform = (): Platform => {
     } catch {}
     return undefined
   })()
+  const { version, tauriVersion } = await loadAppVersions()
 
   return {
     platform: "desktop",
     os,
+    version,
+    tauriVersion,
 
     openLink(url: string) {
       void shellOpen(url).catch(() => undefined)
@@ -95,17 +118,16 @@ const createPlatform = (): Platform => {
     },
 
     async checkUpdate() {
+      const { check } = await import("@tauri-apps/plugin-updater")
+      const update = await check()
       try {
-        const { check } = await import("@tauri-apps/plugin-updater")
-        const update = await check()
         if (!update) return { updateAvailable: false }
         return {
           updateAvailable: true,
           version: update.version,
         }
-      } catch (error) {
-        console.warn("Updater check unavailable", error)
-        return { updateAvailable: false }
+      } finally {
+        await update?.close().catch(() => undefined)
       }
     },
 
@@ -115,7 +137,11 @@ const createPlatform = (): Platform => {
         const { relaunch } = await import("@tauri-apps/plugin-process")
         const update = await check()
         if (!update) return
-        await update.downloadAndInstall()
+        try {
+          await update.downloadAndInstall()
+        } finally {
+          await update.close().catch(() => undefined)
+        }
         await relaunch()
       } catch (error) {
         console.warn("Updater install unavailable", error)
@@ -340,11 +366,10 @@ createMenu((id: string) => {
   menuTrigger?.(id)
 })
 
-// Render the app
-render(() => {
-  const platform = createPlatform()
+async function mountApp() {
+  const platform = await createPlatform()
 
-  return (
+  render(() => (
     <PlatformProvider value={platform}>
       <App
         onCommandReady={(trigger: (id: string) => void) => {
@@ -352,5 +377,7 @@ render(() => {
         }}
       />
     </PlatformProvider>
-  )
-}, root!)
+  ), root!)
+}
+
+void mountApp()

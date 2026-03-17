@@ -61,7 +61,7 @@ export function SettingsServers(props: {
 
   onMount(() => {
     void loadServers()
-    void handleDeepLinks(consumePendingDeepLinks())
+    void handleDeepLinks(consumePendingDeepLinks((url) => parseSsoCallbackUrl(url) !== null))
 
     const unsubscribe = subscribeToDeepLinks((urls) => {
       void handleDeepLinks(urls)

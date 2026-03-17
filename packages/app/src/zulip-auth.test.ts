@@ -4,6 +4,7 @@ import {
   PENDING_SSO_STORAGE_KEY,
   buildExternalAuthUrl,
   completePendingSso,
+  consumePendingDeepLinks,
   decryptOtpEncryptedApiKey,
   normalizeServerUrl,
   parseSsoCallbackUrl,
@@ -95,5 +96,29 @@ describe("SSO callback handling", () => {
       otpEncryptedApiKey: "abcd",
       userId: 7,
     })
+  })
+
+  test("only consumes matching pending deep links", () => {
+    const originalWindow = (globalThis as any).window
+    const ssoUrl = "zulip://login?realm=https%3A%2F%2Fchat.example.invalid&email=alice%40example.com&otp_encrypted_api_key=abcd&user_id=7"
+    const messageUrl = "foundry://message?org_id=chat.example.invalid&narrow=stream%3A9%2Ftopic%3Aroadmap&message_id=214"
+
+    ;(globalThis as any).window = {
+      __FOUNDRY_PENDING_DEEP_LINKS__: [messageUrl, ssoUrl],
+    }
+
+    try {
+      expect(
+        consumePendingDeepLinks((url) => parseSsoCallbackUrl(url) !== null),
+      ).toEqual([ssoUrl])
+
+      expect((globalThis as any).window.__FOUNDRY_PENDING_DEEP_LINKS__).toEqual([messageUrl])
+    } finally {
+      if (originalWindow === undefined) {
+        delete (globalThis as any).window
+      } else {
+        ;(globalThis as any).window = originalWindow
+      }
+    }
   })
 })

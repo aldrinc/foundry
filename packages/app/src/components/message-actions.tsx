@@ -2,16 +2,19 @@ import { createSignal, Show, onCleanup, createEffect } from "solid-js"
 import { Portal } from "solid-js/web"
 import { useOrg } from "../context/org"
 import { useZulipSync } from "../context/zulip-sync"
+import { primaryNarrowForMessage } from "../context/message-cache"
+import { buildMessageDeepLinkUrl } from "../message-permalinks"
 import { commands } from "@foundry/desktop/bindings"
 import type { Message } from "../context/zulip-sync"
 import { DEFAULT_MESSAGE_QUICK_REACTIONS } from "./emoji-quick-reactions"
 import { EmojiPicker } from "./emoji-picker"
+import { buildReplyTarget, type ReplyTarget } from "./message-reply"
 
 export function MessageActions(props: {
   message: Message
   currentUserId?: number
   onStartEdit?: () => void
-  onQuote?: (text: string) => void
+  onReply?: (target: ReplyTarget) => void
 }) {
   const org = useOrg()
   const sync = useZulipSync()
@@ -109,29 +112,23 @@ export function MessageActions(props: {
     }
   }
 
-  const handleQuote = () => {
-    // Extract text from HTML content
-    const tmp = document.createElement("div")
-    tmp.innerHTML = props.message.content
-    const text = tmp.textContent || ""
-
-    const quoteText = `@_**${props.message.sender_full_name}** said:\n\`\`\`quote\n${text}\n\`\`\`\n`
-    props.onQuote?.(quoteText)
+  const handleReply = () => {
+    props.onReply?.(buildReplyTarget(props.message, sync.store.subscriptions))
   }
 
   const handleCopyLink = async () => {
-    // Build message permalink
-    const streamId = props.message.stream_id
-    const topic = props.message.subject
-    const msgId = props.message.id
-
-    let link = `#narrow`
-    if (streamId) {
-      const stream = sync.store.subscriptions.find(s => s.stream_id === streamId)
-      link += `/stream/${stream?.name || streamId}`
-      if (topic) link += `/topic/${topic}`
+    const narrow = primaryNarrowForMessage(props.message)
+    if (!narrow) {
+      console.error("Failed to derive a message narrow for permalink copy")
+      return
     }
-    link += `/near/${msgId}`
+
+    const link = buildMessageDeepLinkUrl({
+      orgId: org.orgId,
+      narrow,
+      messageId: props.message.id,
+      realmUrl: org.realmUrl || (window as any).__FOUNDRY_REALM_URL || undefined,
+    })
 
     try {
       await navigator.clipboard.writeText(link)
@@ -204,11 +201,12 @@ export function MessageActions(props: {
         </svg>
       </ActionButton>
 
-      {/* Quote */}
-      <Show when={props.onQuote}>
-        <ActionButton title="Quote message" onClick={handleQuote}>
+      {/* Reply */}
+      <Show when={props.onReply}>
+        <ActionButton title="Reply to message" onClick={handleReply}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M3 3v8M6 5h5M6 7h4M6 9h3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+            <path d="M6 3.5 2.5 7 6 10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M3 7h4.75c1.8 0 3.25 1.45 3.25 3.25V11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
           </svg>
         </ActionButton>
       </Show>

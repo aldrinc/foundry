@@ -212,11 +212,30 @@ export function publishDeepLinks(urls: string[]): void {
   )
 }
 
-export function consumePendingDeepLinks(): string[] {
+export function consumePendingDeepLinks(
+  matcher?: (url: string) => boolean,
+): string[] {
   if (typeof window === "undefined") return []
   const urls = window.__FOUNDRY_PENDING_DEEP_LINKS__ ?? []
-  window.__FOUNDRY_PENDING_DEEP_LINKS__ = []
-  return urls
+
+  if (!matcher) {
+    window.__FOUNDRY_PENDING_DEEP_LINKS__ = []
+    return urls
+  }
+
+  const matchingUrls: string[] = []
+  const remainingUrls: string[] = []
+
+  for (const url of urls) {
+    if (matcher(url)) {
+      matchingUrls.push(url)
+    } else {
+      remainingUrls.push(url)
+    }
+  }
+
+  window.__FOUNDRY_PENDING_DEEP_LINKS__ = remainingUrls
+  return matchingUrls
 }
 
 export function subscribeToDeepLinks(handler: (urls: string[]) => void): () => void {

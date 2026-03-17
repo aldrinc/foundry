@@ -3,8 +3,11 @@ import type { Message, Reaction } from "../context/zulip-sync"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { usePlatform } from "../context/platform"
+import { useNavigation } from "../context/navigation"
 import { commands } from "@foundry/desktop/bindings"
 import { MessageActions } from "./message-actions"
+import { parseMessageDeepLinkUrl } from "../message-permalinks"
+import { publishDeepLinks } from "../zulip-auth"
 import {
   getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
@@ -18,6 +21,8 @@ import {
 import { hydrateCodeBlocks } from "./code-block-enhancer"
 import { hydrateFileAttachmentCards } from "./file-attachment-card"
 import { LinkPreviewCard, extractFirstUrl } from "./link-preview-card"
+import { parseZulipConversationLink, type ParsedZulipConversationLink } from "./zulip-link-utils"
+import type { ReplyTarget } from "./message-reply"
 
 /** Convert an emoji hex code to its Unicode character(s) */
 export function emojiCodeToChar(code: string): string {
@@ -34,11 +39,12 @@ export function MessageItem(props: {
   message: Message
   showSender: boolean
   serverUrl?: string
-  onQuote?: (text: string) => void
+  onReply?: (target: ReplyTarget) => void
 }) {
   const org = useOrg()
   const sync = useZulipSync()
   const platform = usePlatform()
+  const nav = useNavigation()
   const [editing, setEditing] = createSignal(false)
   const [editContent, setEditContent] = createSignal("")
   const [saving, setSaving] = createSignal(false)
@@ -112,6 +118,15 @@ export function MessageItem(props: {
     }
   }
 
+  const navigateToConversationLink = (link: ParsedZulipConversationLink) => {
+    if (link.messageId !== undefined) {
+      nav.navigateToMessage(link.narrow, link.messageId)
+      return
+    }
+
+    nav.setActiveNarrow(link.narrow)
+  }
+
   const handleContentClick = (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
@@ -121,6 +136,14 @@ export function MessageItem(props: {
 
     const href = link.getAttribute("href")
     if (!href) return
+
+    const messageDeepLink = parseMessageDeepLinkUrl(href)
+    if (messageDeepLink) {
+      event.preventDefault()
+      event.stopPropagation()
+      publishDeepLinks([href])
+      return
+    }
 
     if (isMessageImageLink(link, serverUrl())) {
       // If the image is inside a gallery, let the gallery handle it
@@ -141,6 +164,17 @@ export function MessageItem(props: {
         onViewerImageChange: () => refreshAuthenticatedImages(),
         serverUrl: serverUrl(),
       })
+      return
+    }
+
+    const internalConversationLink = parseZulipConversationLink(href, {
+      realmUrl: serverUrl(),
+      subscriptions: sync.store.subscriptions,
+    })
+    if (internalConversationLink) {
+      event.preventDefault()
+      event.stopPropagation()
+      navigateToConversationLink(internalConversationLink)
       return
     }
 
@@ -384,7 +418,7 @@ export function MessageItem(props: {
         message={props.message}
         currentUserId={currentUserId() ?? undefined}
         onStartEdit={startEdit}
-        onQuote={props.onQuote}
+        onReply={props.onReply}
       />
     </div>
   )

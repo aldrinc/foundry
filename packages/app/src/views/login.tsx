@@ -193,7 +193,7 @@ export function LoginView(props: {
   }
 
   onMount(() => {
-    void handleDeepLinks(consumePendingDeepLinks())
+    void handleDeepLinks(consumePendingDeepLinks((url) => parseSsoCallbackUrl(url) !== null))
 
     const unsubscribe = subscribeToDeepLinks((urls) => {
       void handleDeepLinks(urls)

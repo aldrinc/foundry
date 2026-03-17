@@ -2,11 +2,13 @@ import { createEffect, createSignal, For, Show, on, onCleanup } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
+import { narrowToApiFilters } from "../context/navigation-utils"
 import { useSupervisor } from "../context/supervisor"
 import { commands } from "@foundry/desktop/bindings"
 import type { NarrowFilter } from "@foundry/desktop/bindings"
 import { MessageItem } from "./message-item"
-import { SearchBar } from "./search-bar"
+import type { ReplyTarget } from "./message-reply"
+import { scrollToMessageWhenReady } from "./message-scroll"
 
 const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
 
@@ -51,7 +53,11 @@ function MessageSkeleton(props: { short?: boolean }) {
   )
 }
 
-export function MessageList(props: { narrow: string; onToggleUserPanel?: () => void }) {
+export function MessageList(props: {
+  narrow: string
+  onReply?: (target: ReplyTarget) => void
+  onToggleUserPanel?: () => void
+}) {
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
@@ -64,8 +70,10 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
 
   const messages = () => sync.store.messages[props.narrow] || []
   const loadState = () => sync.store.messageLoadState[props.narrow] || "idle"
+  const anchorMessageId = () => nav.activeNarrow() === props.narrow ? nav.messageAnchorId() : null
 
   let scrollPollTimer: ReturnType<typeof setInterval> | undefined
+  let lastHandledAnchor: { narrow: string; messageId: number } | null = null
 
   const scrollToBottom = () => {
     if (!scrollContainer) return
@@ -96,30 +104,18 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
     await sync.markMessagesRead(messageIds)
   }
 
-  // Build narrow filters for the API
-  // The Zulip API interprets string operands for "stream" as stream names,
-  // so we must resolve numeric stream IDs to their display names.
-  const narrowFilters = (): NarrowFilter[] => {
-    const filters = nav.narrowToFilters(props.narrow) as NarrowFilter[]
-    return filters.map(f => {
-      if (f.operator === "stream" && typeof f.operand === "string") {
-        const id = parseInt(f.operand as string, 10)
-        if (!isNaN(id)) {
-          const stream = sync.store.subscriptions.find(s => s.stream_id === id)
-          if (stream) {
-            return { ...f, operand: stream.name }
-          }
-        }
-      }
-      return f
-    })
-  }
+  const narrowFilters = (): NarrowFilter[] => narrowToApiFilters(props.narrow, sync.store.subscriptions)
 
   // Fetch messages when narrow changes
-  const fetchMessages = async () => {
+  const fetchMessages = async (targetMessageId: number | null = null) => {
     if (IS_DEMO) {
       setError("")
       setLoading(false)
+      return
+    }
+
+    if (targetMessageId !== null && messages().some((message) => message.id === targetMessageId)) {
+      setError("")
       return
     }
 
@@ -131,6 +127,30 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
     setError("")
 
     try {
+      if (targetMessageId !== null) {
+        const result = await commands.getMessages(
+          org.orgId,
+          narrowFilters(),
+          String(targetMessageId),
+          30,
+          30,
+        )
+
+        if (result.status === "error") {
+          setError(result.error || "Failed to load messages")
+          return
+        }
+
+        sync.addMessages(props.narrow, result.data.messages)
+        sync.setMessageLoadState(props.narrow, result.data.found_oldest ? "loaded-all" : "idle")
+
+        const unreadIds = result.data.messages
+          .filter((message) => !(message.flags || []).includes("read"))
+          .map((message) => message.id)
+        await markMessagesRead(unreadIds)
+        return
+      }
+
       const result = await sync.ensureMessages(
         props.narrow,
         narrowFilters(),
@@ -207,13 +227,31 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
   // Clean up polling on component dispose
   onCleanup(() => { if (scrollPollTimer) clearInterval(scrollPollTimer) })
 
-  // Fetch on mount / narrow change, then scroll to bottom
+  // Fetch on mount / narrow change, and optionally center an anchor message.
   createEffect(on(
-    () => props.narrow,
-    () => {
-      isAtBottom = true
-      void fetchMessages().then(() => {
+    () => [props.narrow, anchorMessageId()] as const,
+    ([narrow, currentAnchorMessageId]) => {
+      if (currentAnchorMessageId === null && lastHandledAnchor?.narrow === narrow) {
+        lastHandledAnchor = null
+        return
+      }
+
+      isAtBottom = currentAnchorMessageId === null
+      if (currentAnchorMessageId !== null) {
+        lastHandledAnchor = { narrow, messageId: currentAnchorMessageId }
+      } else {
+        lastHandledAnchor = null
+      }
+
+      void fetchMessages(currentAnchorMessageId).then(() => {
         requestAnimationFrame(() => {
+          if (currentAnchorMessageId !== null) {
+            void scrollToMessageWhenReady(currentAnchorMessageId).finally(() => {
+              nav.clearMessageAnchor(currentAnchorMessageId)
+            })
+            return
+          }
+
           scrollToBottom()
           // Poll for 3s to catch async content (images, link previews)
           startScrollPolling()
@@ -410,7 +448,11 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
                       <div class="flex-1 h-px bg-[var(--border-default)]" />
                     </div>
                   </Show>
-                  <MessageItem message={message} showSender={showSender()} />
+                  <MessageItem
+                    message={message}
+                    onReply={props.onReply}
+                    showSender={showSender()}
+                  />
                 </>
               )
             }}
@@ -423,7 +465,9 @@ export function MessageList(props: { narrow: string; onToggleUserPanel?: () => v
             <p class="text-sm text-[var(--status-error)]">{error()}</p>
             <button
               class="text-xs text-[var(--interactive-primary)] mt-1 hover:underline"
-              onClick={fetchMessages}
+              onClick={() => {
+                void fetchMessages()
+              }}
             >
               Retry
             </button>

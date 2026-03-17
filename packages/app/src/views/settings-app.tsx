@@ -3,6 +3,7 @@ import { useSettings } from "../context/settings"
 import { usePlatform } from "../context/platform"
 import { commands } from "@foundry/desktop/bindings"
 import { SettingToggle, SettingRow } from "./settings-general"
+import { SettingsUpdateControls } from "./settings-update-controls"
 
 export function SettingsApp() {
   const { store, setSetting, capabilities } = useSettings()
@@ -101,6 +102,8 @@ export function SettingsApp() {
         onChange={(v) => setSetting("betaUpdates", v)}
         disabled={true}
       />
+
+      <SettingsUpdateControls />
 
       <hr class="border-[var(--border-default)]" />
       <div class="text-[10px] font-medium text-[var(--text-tertiary)] uppercase tracking-wider">Editor</div>

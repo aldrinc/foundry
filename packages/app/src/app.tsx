@@ -16,9 +16,8 @@ import type { SettingsRoute, SettingsSection } from "./views/settings"
 import { RecentTopicsView } from "./views/recent-topics"
 import { StarredView } from "./views/starred"
 import { AllMessagesView } from "./views/all-messages"
+import { ConversationView } from "./components/conversation-view"
 import { StreamSidebar } from "./components/stream-sidebar"
-import { MessageList } from "./components/message-list"
-import { ComposeBox } from "./components/compose-box"
 import { SupervisorPanel } from "./components/supervisor"
 import { RightSidebar } from "./components/right-sidebar"
 import { KeyboardShortcutsModal } from "./components/keyboard-shortcuts-modal"
@@ -50,8 +49,16 @@ import {
 } from "./update-prompt-state"
 import { startAutoUpdateScheduler } from "./auto-update-scheduler"
 import { buildAuthInvalidMessage, isAuthInvalidDisconnectPayload } from "./auth-session"
+import {
+  type MessageDeepLinkPayload,
+  messageDeepLinkMatchesTarget,
+  parseMessageDeepLinkUrl,
+  sameMessageDeepLink,
+} from "./message-permalinks"
 import { sanitizeEventId } from "./tauri-event-utils"
+import { consumePendingDeepLinks, subscribeToDeepLinks } from "./zulip-auth"
 import { homeViewToNarrow } from "./home-view"
+import { createDemoLoginResult } from "./demo-login"
 
 // ── Demo mode helpers (browser preview without Tauri backend) ──
 
@@ -64,54 +71,6 @@ type LoginRecoveryState = {
   email: string
   error: string
   serverUrl: string
-}
-
-function createDemoLoginResult(): LoginResult {
-  return {
-    org_id: "demo-org-001",
-    realm_name: "Foundry Demo",
-    realm_icon: "",
-    realm_url: "https://demo.foundry.invalid",
-    zulip_feature_level: 500,
-    max_file_upload_size_mib: 25,
-    realm_video_chat_provider: 1,
-    realm_jitsi_server_url: "https://meet.jit.si",
-    server_jitsi_server_url: "https://meet.jit.si",
-    giphy_api_key: "",
-    tenor_api_key: "",
-    realm_gif_rating_policy: 2,
-    queue_id: "demo-queue",
-    user_id: 100,
-    user_topics: [],
-    unread_msgs: {
-      count: 3,
-      pms: [],
-      streams: [
-        { stream_id: 1, topic: "welcome", unread_message_ids: [1003, 1004, 1005] },
-      ],
-      huddles: [],
-      mentions: [],
-      old_unreads_missing: false,
-    },
-    recent_private_conversations: [
-      { user_ids: [101], max_message_id: 2002 },
-      { user_ids: [102, 103], max_message_id: 2004 },
-    ],
-    subscriptions: [
-      { stream_id: 1, name: "general", color: "#76ce90", pin_to_top: true },
-      { stream_id: 2, name: "engineering", color: "#fae589" },
-      { stream_id: 3, name: "design", color: "#a6c5e2" },
-      { stream_id: 4, name: "product", color: "#e4a5a5" },
-      { stream_id: 5, name: "random", color: "#c2b0e2" },
-      { stream_id: 6, name: "ops", color: "#e0ab76", is_muted: true },
-    ],
-    users: [
-      { user_id: 100, email: "alice@foundry.dev", full_name: "Alice Chen", role: 200, is_active: true },
-      { user_id: 101, email: "bob@foundry.dev", full_name: "Bob Martinez", role: 400, is_active: true },
-      { user_id: 102, email: "carol@foundry.dev", full_name: "Carol Park", role: 400, is_active: true },
-      { user_id: 103, email: "dave@foundry.dev", full_name: "Dave Wilson", role: 400, is_active: true },
-    ],
-  }
 }
 
 function createDemoMessages(): Record<string, Message[]> {
@@ -138,6 +97,8 @@ export function App(props: {
   const [loginEmail, setLoginEmail] = createSignal<string>("")
   const [loginRecovery, setLoginRecovery] = createSignal<LoginRecoveryState | null>(null)
   const [autoLoginLoading, setAutoLoginLoading] = createSignal(true)
+  const [pendingMessageDeepLink, setPendingMessageDeepLink] = createSignal<MessageDeepLinkPayload | null>(null)
+  let pendingMessageDeepLinkSwitchKey: string | null = null
 
   // Try auto-login from saved servers (or use demo mode)
   onMount(async () => {
@@ -227,6 +188,113 @@ export function App(props: {
     window.location.reload()
   }
 
+  const handleMessageDeepLinks = (urls: string[]) => {
+    const deepLink = [...urls]
+      .reverse()
+      .map(parseMessageDeepLinkUrl)
+      .find((payload): payload is MessageDeepLinkPayload => payload !== null)
+
+    if (!deepLink) {
+      return
+    }
+
+    setPendingMessageDeepLink(deepLink)
+    pendingMessageDeepLinkSwitchKey = null
+
+    if (!loginResult() && deepLink.realm) {
+      setLoginRecovery((current) => current ?? {
+        email: "",
+        error: "",
+        serverUrl: deepLink.realm!,
+      })
+    }
+  }
+
+  onMount(() => {
+    handleMessageDeepLinks(consumePendingDeepLinks((url) => parseMessageDeepLinkUrl(url) !== null))
+
+    const unsubscribe = subscribeToDeepLinks((urls) => {
+      handleMessageDeepLinks(urls)
+    })
+
+    onCleanup(unsubscribe)
+  })
+
+  createEffect(() => {
+    const deepLink = pendingMessageDeepLink()
+    const currentLogin = loginResult()
+
+    if (!deepLink || autoLoginLoading()) {
+      pendingMessageDeepLinkSwitchKey = null
+      return
+    }
+
+    if (!currentLogin) {
+      if (deepLink.realm) {
+        setLoginRecovery((current) => current ?? {
+          email: "",
+          error: "",
+          serverUrl: deepLink.realm!,
+        })
+      }
+      return
+    }
+
+    if (messageDeepLinkMatchesTarget(deepLink, {
+      orgId: currentLogin.org_id,
+      realmUrl: currentLogin.realm_url,
+    })) {
+      pendingMessageDeepLinkSwitchKey = null
+      return
+    }
+
+    const switchKey = deepLink.realm || deepLink.orgId
+    if (pendingMessageDeepLinkSwitchKey === switchKey) {
+      return
+    }
+
+    pendingMessageDeepLinkSwitchKey = switchKey
+
+    void commands.getSavedServerStatuses().then((result) => {
+      if (result.status !== "ok") {
+        return
+      }
+
+      const matchingServer = result.data.find((server) => messageDeepLinkMatchesTarget(deepLink, {
+        orgId: server.org_id || server.id,
+        realmUrl: server.url,
+      }))
+
+      if (!matchingServer) {
+        if (deepLink.realm) {
+          setLoginRecovery((current) => current ?? {
+            email: "",
+            error: "",
+            serverUrl: deepLink.realm!,
+          })
+        }
+        return
+      }
+
+      return handleSwitchOrg(matchingServer)
+    }).catch(() => {}).finally(() => {
+      const currentDeepLink = pendingMessageDeepLink()
+      const current = loginResult()
+
+      if (!currentDeepLink || switchKey !== (currentDeepLink.realm || currentDeepLink.orgId)) {
+        pendingMessageDeepLinkSwitchKey = null
+        return
+      }
+
+      if (!current || !messageDeepLinkMatchesTarget(currentDeepLink, {
+        orgId: current.org_id,
+        realmUrl: current.realm_url,
+      })) {
+        pendingMessageDeepLinkSwitchKey = null
+      }
+    })
+  })
+
   createEffect(() => {
     const currentLogin = loginResult()
     if (IS_DEMO || !HAS_TAURI_BRIDGE || !currentLogin) {
@@ -309,6 +377,12 @@ export function App(props: {
                           <AppShell
                             loginResult={result}
                             loginEmail={loginEmail()}
+                            pendingMessageDeepLink={pendingMessageDeepLink()}
+                            onMessageDeepLinkHandled={(handledLink) => {
+                              setPendingMessageDeepLink((current) =>
+                                sameMessageDeepLink(current, handledLink) ? null : current,
+                              )
+                            }}
                             onLogout={handleManualLogout}
                             onSwitchOrg={handleSwitchOrg}
                           />
@@ -343,6 +417,8 @@ function LoadingSplash() {
 function AppShell(props: {
   loginResult: LoginResult
   loginEmail: string
+  pendingMessageDeepLink?: MessageDeepLinkPayload | null
+  onMessageDeepLinkHandled?: (link: MessageDeepLinkPayload) => void
   onLogout: () => void
   onSwitchOrg?: (server: SavedServerStatus) => void
 }) {
@@ -449,6 +525,24 @@ function AppShell(props: {
       // Navigate to the welcome topic
       nav.setActiveNarrow("stream:1/topic:welcome")
     }
+  })
+
+  createEffect(() => {
+    const deepLink = props.pendingMessageDeepLink
+    if (!deepLink) {
+      return
+    }
+
+    if (!messageDeepLinkMatchesTarget(deepLink, {
+      orgId: props.loginResult.org_id,
+      realmUrl: org.realmUrl || props.loginResult.realm_url || "",
+    })) {
+      return
+    }
+
+    initialHomeApplied = true
+    nav.navigateToMessage(deepLink.narrow, deepLink.messageId)
+    props.onMessageDeepLinkHandled?.(deepLink)
   })
 
   createEffect(() => {
@@ -696,8 +790,7 @@ function AppShell(props: {
     // Stream, topic, DM narrows — show messages + compose
     return (
       <>
-        <MessageList narrow={narrow} onToggleUserPanel={() => setShowRightSidebar(s => !s)} />
-        <ComposeBox narrow={narrow} />
+        <ConversationView narrow={narrow} onToggleUserPanel={() => setShowRightSidebar(s => !s)} />
       </>
     )
   }

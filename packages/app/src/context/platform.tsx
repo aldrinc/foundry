@@ -9,6 +9,7 @@ export interface Platform {
   platform: "desktop" | "web"
   os?: "macos" | "windows" | "linux"
   version?: string
+  tauriVersion?: string
 
   // Navigation
   openLink(url: string): void

@@ -36,6 +36,8 @@ import {
   captureTextareaSelection,
   restoreTextareaSelection,
 } from "./upload-utils"
+import { buildReplyMessage, type ReplyTarget } from "./message-reply"
+import { transformZulipConversationLinkToMarkdown } from "./zulip-link-utils"
 
 type ComposeDialog =
   | "poll"
@@ -44,7 +46,11 @@ type ComposeDialog =
   | "save-snippet"
   | "edit-snippet"
 
-export function ComposeBox(props: { narrow: string }) {
+export function ComposeBox(props: {
+  narrow: string
+  onClearReply?: () => void
+  replyTarget?: ReplyTarget | null
+}) {
   const sync = useZulipSync()
   const org = useOrg()
   const nav = useNavigation()
@@ -165,6 +171,21 @@ export function ComposeBox(props: { narrow: string }) {
 
   const parsed = () => nav.parseNarrow(props.narrow)
 
+  createEffect(on(
+    () => props.replyTarget?.messageId,
+    () => {
+      const target = props.replyTarget
+      if (!target) return
+
+      const current = parsed()
+      if (current?.type === "stream" && target.topicName) {
+        setTopic(target.topicName)
+      }
+
+      requestAnimationFrame(() => textareaRef?.focus())
+    },
+  ))
+
   const messageTarget = () => {
     const p = parsed()
     if (!p) return null
@@ -180,7 +201,7 @@ export function ComposeBox(props: { narrow: string }) {
 
     if (p.type === "stream") {
       const stream = sync.store.subscriptions.find(s => s.stream_id === p.streamId)
-      const t = topic().trim() || "(no topic)"
+      const t = topic().trim() || props.replyTarget?.topicName?.trim() || "(no topic)"
       return {
         msgType: "stream",
         to: stream?.name || String(p.streamId),
@@ -320,6 +341,15 @@ export function ComposeBox(props: { narrow: string }) {
     const selectionEnd = textareaRef?.selectionEnd ?? current.length
     const next = buildBlockInsert(current, selectionStart, selectionEnd, insertion)
     applyInsertion(next.value, next.selectionStart, next.selectionEnd)
+  }
+
+  const replaceSelection = (replacement: string) => {
+    const current = content()
+    const selectionStart = textareaRef?.selectionStart ?? current.length
+    const selectionEnd = textareaRef?.selectionEnd ?? current.length
+    const nextValue = current.slice(0, selectionStart) + replacement + current.slice(selectionEnd)
+    const nextCursor = selectionStart + replacement.length
+    applyInsertion(nextValue, nextCursor, nextCursor)
   }
 
   // ── Typing indicators ──
@@ -527,14 +557,26 @@ export function ComposeBox(props: { narrow: string }) {
   // ── Paste handler (Ctrl+V / Cmd+V with files) ──
 
   const handlePaste = async (e: ClipboardEvent) => {
-    if (!canUpload()) return
     const items = e.clipboardData?.files
-    if (!items || items.length === 0) return
+    if (items && items.length > 0) {
+      if (!canUpload()) return
+
+      e.preventDefault()
+      for (const file of Array.from(items)) {
+        await uploadBlobFile(file)
+      }
+      return
+    }
+
+    const pastedText = e.clipboardData?.getData("text/plain") || e.clipboardData?.getData("text") || ""
+    const markdownLink = transformZulipConversationLinkToMarkdown(pastedText, {
+      realmUrl: org.realmUrl,
+      subscriptions: sync.store.subscriptions,
+    })
+    if (!markdownLink) return
 
     e.preventDefault()
-    for (const file of Array.from(items)) {
-      await uploadBlobFile(file)
-    }
+    replaceSelection(markdownLink)
   }
 
   // Upload a File/Blob by saving to temp then uploading
@@ -939,17 +981,21 @@ export function ComposeBox(props: { narrow: string }) {
       setError("Cannot determine message destination")
       return
     }
+    const resolvedTopic = target.topic?.trim() || ""
 
     sendTypingStop()
     setSending(true)
     setError("")
 
     try {
+      const outboundText = props.replyTarget
+        ? buildReplyMessage(props.replyTarget, text)
+        : text
       const result = await commands.sendMessage(
         org.orgId,
         target.msgType,
         target.to,
-        text,
+        outboundText,
         target.topic,
       )
 
@@ -958,9 +1004,9 @@ export function ComposeBox(props: { narrow: string }) {
         return
       }
 
-      if (currentNarrow?.type === "stream" && currentNarrow.streamId && topic().trim()) {
+      if (currentNarrow?.type === "stream" && currentNarrow.streamId && resolvedTopic) {
         const streamId = currentNarrow.streamId
-        const nextTopic = topic().trim()
+        const nextTopic = resolvedTopic
         sync.upsertStreamTopic(streamId, nextTopic, result.data.id)
         sync.invalidateStreamTopics(streamId)
         sync.markNarrowHydrated(`stream:${streamId}`, false)
@@ -974,6 +1020,7 @@ export function ComposeBox(props: { narrow: string }) {
       setContent("")
       setUploadedImages([])
       sync.clearDraft(props.narrow)
+      props.onClearReply?.()
     } catch (e: any) {
       setError(e?.toString() || "Failed to send message")
     } finally {
@@ -1136,6 +1183,40 @@ export function ComposeBox(props: { narrow: string }) {
               onSubmit={() => textareaRef?.focus()}
             />
           </div>
+        </Show>
+
+        <Show when={props.replyTarget}>
+          {(target) => (
+            <div class="flex items-center gap-2.5 rounded-t-[var(--radius-lg)] border-b border-[var(--border-default)] bg-[var(--compose-accent)]/6 px-3 py-2.5">
+                {/* Reply icon */}
+                <div class="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-[var(--compose-accent)]/12 flex items-center justify-center">
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" class="text-[var(--compose-accent)]">
+                    <path d="M6 3.5 2.5 7 6 10.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M3 7h4.75c1.8 0 3.25 1.45 3.25 3.25V11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-xs font-semibold text-[var(--compose-accent)]">
+                      {target().senderFullName}
+                    </span>
+                  </div>
+                  <p class="mt-0.5 text-xs text-[var(--text-secondary)] line-clamp-2 leading-relaxed">
+                    {target().previewText}
+                  </p>
+                </div>
+              <button
+                type="button"
+                class="shrink-0 ml-auto p-1 rounded-[var(--radius-sm)] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+                onClick={() => props.onClearReply?.()}
+                title="Cancel reply"
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M4 4l6 6M10 4 4 10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
         </Show>
 
         {/* Textarea — borderless, transparent */}

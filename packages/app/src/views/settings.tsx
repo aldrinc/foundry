@@ -1,4 +1,5 @@
 import { createEffect, createSignal, Show, For, type JSX } from "solid-js"
+import { usePlatform } from "../context/platform"
 import { SettingsGeneral } from "./settings-general"
 import { SettingsNotifications } from "./settings-notifications"
 import { SettingsAccount } from "./settings-account"
@@ -17,6 +18,7 @@ import { SettingsBots } from "./settings-bots"
 import { SettingsApp } from "./settings-app"
 import { SettingsNetwork } from "./settings-network"
 import { SettingsServers } from "./settings-servers"
+import { SettingsUpdateControls } from "./settings-update-controls"
 import type { SavedServerStatus } from "@foundry/desktop/bindings"
 
 export type SettingsSection =
@@ -211,6 +213,8 @@ function SvgIcon(props: { children: JSX.Element }) {
 }
 
 function SettingsAbout() {
+  const platform = usePlatform()
+
   return (
     <div class="space-y-4">
       <h3 class="text-sm font-semibold text-[var(--text-primary)]">About</h3>
@@ -231,11 +235,11 @@ function SettingsAbout() {
       <div class="space-y-2">
         <div class="flex items-center justify-between text-xs">
           <span class="text-[var(--text-secondary)]">Version</span>
-          <span class="text-[var(--text-primary)] font-mono">1.0.0</span>
+          <span class="text-[var(--text-primary)] font-mono">{platform.version ?? "Unknown"}</span>
         </div>
         <div class="flex items-center justify-between text-xs">
           <span class="text-[var(--text-secondary)]">Tauri</span>
-          <span class="text-[var(--text-primary)] font-mono">2.x</span>
+          <span class="text-[var(--text-primary)] font-mono">{platform.tauriVersion ?? "Unknown"}</span>
         </div>
         <div class="flex items-center justify-between text-xs">
           <span class="text-[var(--text-secondary)]">Platform</span>
@@ -243,9 +247,7 @@ function SettingsAbout() {
         </div>
       </div>
 
-      <button class="w-full px-3 py-1.5 text-xs rounded-[var(--radius-sm)] border border-[var(--border-default)] text-[var(--text-secondary)] hover:bg-[var(--background-elevated)] transition-colors">
-        Check for updates
-      </button>
+      <SettingsUpdateControls layout="stack" />
     </div>
   )
 }
