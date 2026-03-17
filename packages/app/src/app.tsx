@@ -24,6 +24,7 @@ import { KeyboardShortcutsModal } from "./components/keyboard-shortcuts-modal"
 import { GearMenu } from "./components/gear-menu"
 import { HelpMenu } from "./components/help-menu"
 import { LeftBar } from "./components/left-bar"
+import { SearchBar } from "./components/search-bar"
 import {
   clearManualLogout,
   markManualLogout,
@@ -805,9 +806,15 @@ function AppShell(props: {
         {/* Top bar — blends with outer bg, OUTSIDE the inset container */}
         <div
           data-tauri-drag-region
-          class="flex items-center justify-end"
-          style={{ height: "36px", "flex-shrink": "0", background: "var(--surface-outer-bg)", "padding-right": "12px" }}
+          class="flex items-center"
+          style={{ height: "36px", "flex-shrink": "0", background: "var(--surface-outer-bg)", "padding-left": "12px", "padding-right": "12px" }}
         >
+          {/* Search bar — centered in the top bar */}
+          <div class="flex-1 flex justify-center" style={{ "-webkit-app-region": "no-drag" }}>
+            <div style={{ width: "min(600px, 70%)" }}>
+              <SearchBar darkBackground={outerFrameIsDark()} />
+            </div>
+          </div>
           <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
             <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} darkBackground={outerFrameIsDark()} />
             <GearMenu onOpenSettings={() => openSettings()} darkBackground={outerFrameIsDark()} />

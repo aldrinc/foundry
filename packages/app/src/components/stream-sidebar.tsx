@@ -178,7 +178,7 @@ export function StreamSidebar(props: {
       {/* Expandable search bar */}
       <Show when={showSearch()}>
         <div class="px-2 pb-2">
-          <SearchBar onClose={() => setShowSearch(false)} />
+          <SearchBar onClose={() => setShowSearch(false)} autofocus />
         </div>
       </Show>
 
