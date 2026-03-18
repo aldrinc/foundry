@@ -544,7 +544,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-align: center;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-actions {
@@ -989,16 +988,10 @@
 
   /* ===== MESSAGE LIST LOADING — layout shift prevention ===== */
 
-  /* Isolate each message item's layout so async content (images, link
-     previews) loading in one message doesn't reflow all siblings below it. */
-  [data-component="message-item"] {
-    contain: content;
-  }
-
-  /* Reserve vertical space for inline images while they load.
-     Excludes gallery thumbs (fixed aspect-ratio containers) and
-     lightbox images (positioned absolutely). */
-  [data-component="message-content"] img:not(.foundry-image-gallery-thumb img):not(.foundry-image-lightbox-image) {
+  /* Reserve vertical space for standard inline images while they load.
+     Targets only Zulip's .message_inline_image wrappers — gallery thumbs
+     and lightbox images already have explicit sizing. */
+  [data-component="message-content"] .message_inline_image img {
     min-height: 100px;
   }
 

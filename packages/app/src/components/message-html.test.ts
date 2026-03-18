@@ -382,3 +382,104 @@ describe("hydrateMessageImageCarousels", () => {
     cleanup()
   })
 })
+
+describe("lightbox regression — layout and positioning", () => {
+  test("lightbox toolbar renders counter, then filename, then actions in order", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `
+      <p><a href="https://example.com/image-1.png"><img src="https://example.com/thumb-1.png" alt="Image 1"></a></p>
+      <p><a href="https://example.com/image-2.png"><img src="https://example.com/thumb-2.png" alt="Image 2"></a></p>
+    `
+
+    const cleanup = hydrateMessageImageCarousels(container, {
+      serverUrl: "https://example.com",
+    })
+
+    const thumb = container.querySelector<HTMLButtonElement>(".foundry-image-gallery-thumb")!
+    click(thumb)
+
+    const toolbar = container.querySelector(".foundry-image-lightbox-toolbar")!
+    const children = Array.from(toolbar.children)
+
+    expect(children).toHaveLength(3)
+    expect(children[0].className).toBe("foundry-image-lightbox-counter")
+    expect(children[1].className).toBe("foundry-image-lightbox-filename")
+    expect(children[2].className).toBe("foundry-image-lightbox-actions")
+
+    cleanup()
+  })
+
+  test("standalone viewer toolbar also renders counter before filename", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `
+      <p>
+        <a href="https://example.com/photo.png">
+          <img src="https://example.com/photo-thumb.png" alt="Photo">
+        </a>
+      </p>
+    `
+
+    const link = container.querySelector<HTMLAnchorElement>("a")!
+    openMessageImageViewerFromLink(container, link, {
+      serverUrl: "https://example.com",
+    })
+
+    const toolbar = container.querySelector(".foundry-image-lightbox-toolbar")!
+    const children = Array.from(toolbar.children)
+
+    expect(children[0].className).toBe("foundry-image-lightbox-counter")
+    expect(children[1].className).toBe("foundry-image-lightbox-filename")
+    expect(children[2].className).toBe("foundry-image-lightbox-actions")
+
+    const closeButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-close")!
+    click(closeButton)
+  })
+
+  test("lightbox filename displays the image filename from the URL", () => {
+    const container = document.createElement("div")
+    container.innerHTML = `
+      <p>
+        <a href="https://example.com/uploads/SCR-20260310-photo.jpg">
+          <img src="https://example.com/uploads/SCR-20260310-photo-thumb.jpg" alt="Screenshot">
+        </a>
+      </p>
+    `
+
+    const link = container.querySelector<HTMLAnchorElement>("a")!
+    openMessageImageViewerFromLink(container, link, {
+      serverUrl: "https://example.com",
+    })
+
+    const filename = container.querySelector(".foundry-image-lightbox-filename")
+    expect(filename?.textContent).toBe("SCR-20260310-photo.jpg")
+
+    const closeButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-close")!
+    click(closeButton)
+  })
+})
+
+describe("CSS regression — no contain:content on message items", () => {
+  test("styles.css does not apply contain:content to message items", async () => {
+    const fs = await import("fs")
+    const path = await import("path")
+    const cssPath = path.resolve(import.meta.dir, "../../../desktop/src/styles.css")
+    const css = fs.readFileSync(cssPath, "utf-8")
+
+    // contain: content on message-item breaks position:fixed lightbox overlays
+    const containRule = /\[data-component="message-item"\]\s*\{[^}]*contain\s*:\s*content/
+    expect(css).not.toMatch(containRule)
+  })
+
+  test("inline image min-height targets only .message_inline_image, not gallery thumbs", async () => {
+    const fs = await import("fs")
+    const path = await import("path")
+    const cssPath = path.resolve(import.meta.dir, "../../../desktop/src/styles.css")
+    const css = fs.readFileSync(cssPath, "utf-8")
+
+    // The :not(.foundry-image-gallery-thumb img) selector is invalid CSS —
+    // :not() does not accept descendant selectors. Ensure we target
+    // .message_inline_image img specifically instead.
+    expect(css).not.toMatch(/img:not\(\.foundry-image-gallery-thumb img\)/)
+    expect(css).toMatch(/\.message_inline_image img/)
+  })
+})
