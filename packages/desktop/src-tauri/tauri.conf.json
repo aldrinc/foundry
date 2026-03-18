@@ -3,7 +3,7 @@
   "productName": "Foundry",
   "identifier": "org.foundry.desktop",
   "mainBinaryName": "Foundry",
-  "version": "0.16.2",
+  "version": "0.16.3",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",

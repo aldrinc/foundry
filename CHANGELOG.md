@@ -9,6 +9,13 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 
 - Public repository polish, launch checklist, support routing, and issue templates
 
+## 0.16.3 - 2026-03-17
+
+- Moved the conversation search bar into the top bar with a cleaner layout that keeps filtering controls visible while reading.
+- Fixed message list layout shifting while conversations load so the reading position stays visually stable.
+- Fixed the message action hover bar positioning so reply and copy actions stay aligned to the selected message.
+- Updated the desktop application bundle metadata to version `0.16.3`.
+
 ## 0.16.2 - 2026-03-17
 
 - Added desktop message permalinks that copy as `foundry://message` deep links and reopen the matching conversation in-app.

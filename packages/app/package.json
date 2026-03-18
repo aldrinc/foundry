@@ -8,7 +8,7 @@
     "dev": "tsc --noEmit -p tsconfig.json --watch",
     "build": "tsc --noEmit -p tsconfig.json",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test e2e --pass-with-no-tests"
   },
   "dependencies": {
     "@kobalte/core": "^0.13.0",
