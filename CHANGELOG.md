@@ -14,6 +14,7 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 - Moved the conversation search bar into the top bar with a cleaner layout that keeps filtering controls visible while reading.
 - Fixed message list layout shifting while conversations load so the reading position stays visually stable.
 - Fixed the message action hover bar positioning so reply and copy actions stay aligned to the selected message.
+- Restored the classic blue styling for inline message links and @mention pills in the Foundry theme.
 - Updated the desktop application bundle metadata to version `0.16.3`.
 
 ## 0.16.2 - 2026-03-17

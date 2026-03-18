@@ -246,6 +246,11 @@
     --surface-input: #163338;
     --surface-sidebar: #1a3a3f;
   }
+
+  :root[data-theme="foundry"] [data-component="message-content"] {
+    --message-content-accent: #6493f9;
+    --message-content-accent-hover: #4f7de8;
+  }
 }
 
 @layer base {
@@ -318,14 +323,14 @@
 
   /* Links */
   [data-component="message-content"] a {
-    color: var(--interactive-primary);
+    color: var(--message-content-accent, var(--interactive-primary));
     text-decoration: underline;
     text-underline-offset: 2px;
     cursor: pointer;
   }
 
   [data-component="message-content"] a:hover {
-    color: var(--interactive-primary-hover);
+    color: var(--message-content-accent-hover, var(--interactive-primary-hover));
   }
 
   /* Images */
@@ -862,8 +867,8 @@
   /* Mentions (@user, @group) */
   [data-component="message-content"] .user-mention,
   [data-component="message-content"] .user-group-mention {
-    background: color-mix(in srgb, var(--interactive-primary) 12%, transparent);
-    color: var(--interactive-primary);
+    background: color-mix(in srgb, var(--message-content-accent, var(--interactive-primary)) 12%, transparent);
+    color: var(--message-content-accent, var(--interactive-primary));
     padding: 0.0625rem 0.25rem;
     border-radius: var(--radius-sm);
     font-weight: 500;
