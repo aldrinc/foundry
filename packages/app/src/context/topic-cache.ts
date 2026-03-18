@@ -1,3 +1,5 @@
+import { normalizeTopicName } from "../topic-identity"
+
 export interface CacheableTopic {
   name: string
   max_id: number
@@ -19,19 +21,24 @@ export function mergeTopicsByName<T extends CacheableTopic>(existing: T[], incom
   const merged = new Map<string, T>()
 
   for (const topic of existing) {
-    merged.set(topic.name, topic)
+    merged.set(normalizeTopicName(topic.name), topic)
   }
 
   for (const topic of incoming) {
-    const current = merged.get(topic.name)
+    const key = normalizeTopicName(topic.name)
+    const current = merged.get(key)
     if (!current) {
-      merged.set(topic.name, topic)
+      merged.set(key, topic)
       continue
     }
 
-    merged.set(topic.name, {
-      ...current,
-      ...topic,
+    const preferIncoming = topic.max_id >= current.max_id
+    const preferred = preferIncoming ? topic : current
+    const fallback = preferIncoming ? current : topic
+
+    merged.set(key, {
+      ...fallback,
+      ...preferred,
       max_id: Math.max(current.max_id, topic.max_id),
     })
   }

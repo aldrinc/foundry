@@ -39,6 +39,8 @@ import {
   type RecentDirectMessageSnapshot,
 } from "./recent-dms"
 import { mergeTopicsByName, upsertTopicByName } from "./topic-cache"
+import { parseNarrow } from "./navigation-utils"
+import { sameTopicName } from "../topic-identity"
 
 export type { UnreadItem } from "./unread-state"
 
@@ -295,7 +297,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
 
   const getTopicVisibility = (streamId: number, topic: string): UserTopicVisibilityPolicy => {
     const userTopic = store.userTopics.find(
-      entry => entry.stream_id === streamId && entry.topic_name === topic,
+      entry => entry.stream_id === streamId && sameTopicName(entry.topic_name, topic),
     )
     return (userTopic?.visibility_policy as UserTopicVisibilityPolicy) || "Inherit"
   }
@@ -635,10 +637,24 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
 
       // Check if the user is currently viewing this conversation
       const activeNarrow = _getActiveNarrow?.() ?? null
+      const activeParsed = activeNarrow ? parseNarrow(activeNarrow) : null
       const messageNarrow = primaryNarrowForMessage(msg)
-      const isViewingConversation = activeNarrow != null && messageNarrow != null && (
-        activeNarrow === messageNarrow
-        || (activeNarrow.startsWith("stream:") && !activeNarrow.includes("/topic:") && messageNarrow.startsWith(`${activeNarrow}/topic:`))
+      const messageParsed = messageNarrow ? parseNarrow(messageNarrow) : null
+      const isViewingConversation = Boolean(
+        activeParsed
+        && messageParsed
+        && (
+          (activeParsed.type === "topic"
+            && messageParsed.type === "topic"
+            && activeParsed.streamId === messageParsed.streamId
+            && sameTopicName(activeParsed.topic || "", messageParsed.topic || ""))
+          || (activeParsed.type === "stream"
+            && messageParsed.type === "topic"
+            && activeParsed.streamId === messageParsed.streamId)
+          || (activeParsed.type === "dm"
+            && messageParsed.type === "dm"
+            && JSON.stringify(activeParsed.userIds || []) === JSON.stringify(messageParsed.userIds || []))
+        )
       )
       const shouldTrackUnread = shouldAddMessageToUnread(
         msg,
@@ -979,7 +995,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       const { stream_id, topic_name, visibility_policy, last_updated } = data
       setStore(produce(s => {
         const idx = s.userTopics.findIndex(
-          ut => ut.stream_id === stream_id && ut.topic_name === topic_name,
+          ut => ut.stream_id === stream_id && sameTopicName(ut.topic_name, topic_name),
         )
         if (visibility_policy === "Inherit") {
           // Remove — "Inherit" means default (no override)

@@ -146,6 +146,44 @@ fn resolve_realm_media_url(base_url: &str, media_url: &str) -> Result<reqwest::U
     Ok(resolved)
 }
 
+/// Real-time event types the client subscribes to via long-polling.
+const REGISTER_EVENT_TYPES: &[&str] = &[
+    "message",
+    "typing",
+    "presence",
+    "reaction",
+    "subscription",
+    "update_message",
+    "delete_message",
+    "update_message_flags",
+    "realm",
+    "realm_domains",
+    "realm_user",
+    "user_topic",
+    "heartbeat",
+    "video_calls",
+    "giphy",
+    "tenor",
+];
+
+/// Initial-state categories fetched from the register response.
+///
+/// Both `"message"` and `"update_message_flags"` are required for the Zulip
+/// server to populate the `unread_msgs` field (initial unread snapshot).
+const REGISTER_FETCH_EVENT_TYPES: &[&str] = &[
+    "message",
+    "update_message_flags",
+    "subscription",
+    "realm",
+    "realm_domains",
+    "realm_user",
+    "recent_private_conversations",
+    "user_topic",
+    "video_calls",
+    "giphy",
+    "tenor",
+];
+
 impl ZulipClient {
     async fn register_queue_with<T>(
         &self,
@@ -249,39 +287,15 @@ impl ZulipClient {
     }
 
     /// POST /api/v1/register — Register event queue and get initial state
+    ///
+    /// `REGISTER_FETCH_EVENT_TYPES` controls which initial state the Zulip server
+    /// includes in the register response.  Both `"message"` and
+    /// `"update_message_flags"` MUST be present so that the server populates the
+    /// `unread_msgs` field — the initial unread-message snapshot that drives
+    /// sidebar notification badges.
     pub async fn register_queue(&self) -> Result<RegisterResponse, String> {
         let mut response: RegisterResponse = self
-            .register_queue_with(
-                &[
-                    "message",
-                    "typing",
-                    "presence",
-                    "reaction",
-                    "subscription",
-                    "update_message",
-                    "delete_message",
-                    "update_message_flags",
-                    "realm",
-                    "realm_domains",
-                    "realm_user",
-                    "user_topic",
-                    "heartbeat",
-                    "video_calls",
-                    "giphy",
-                    "tenor",
-                ],
-                &[
-                    "subscription",
-                    "realm",
-                    "realm_domains",
-                    "realm_user",
-                    "recent_private_conversations",
-                    "user_topic",
-                    "video_calls",
-                    "giphy",
-                    "tenor",
-                ],
-            )
+            .register_queue_with(REGISTER_EVENT_TYPES, REGISTER_FETCH_EVENT_TYPES)
             .await?;
 
         if response.realm_users.is_empty() {
@@ -2094,5 +2108,35 @@ mod tests {
             followed_from_frontend,
             UserTopicVisibilityPolicy::Followed
         ));
+    }
+
+    #[test]
+    fn regression_fetch_event_types_include_unread_prerequisites() {
+        // The Zulip register API requires both "message" and "update_message_flags"
+        // in fetch_event_types for the server to populate the unread_msgs field.
+        // Without both, the initial unread snapshot is empty and sidebar badges
+        // never appear on login.
+        assert!(
+            REGISTER_FETCH_EVENT_TYPES.contains(&"message"),
+            "fetch_event_types must include 'message' for unread_msgs"
+        );
+        assert!(
+            REGISTER_FETCH_EVENT_TYPES.contains(&"update_message_flags"),
+            "fetch_event_types must include 'update_message_flags' for unread_msgs"
+        );
+    }
+
+    #[test]
+    fn event_types_include_realtime_unread_tracking() {
+        // The event_types list must include "update_message_flags" so the client
+        // receives read/unread flag changes in real time after the initial seed.
+        assert!(
+            REGISTER_EVENT_TYPES.contains(&"update_message_flags"),
+            "event_types must include 'update_message_flags' for realtime unread tracking"
+        );
+        assert!(
+            REGISTER_EVENT_TYPES.contains(&"message"),
+            "event_types must include 'message' for new message delivery"
+        );
     }
 }

@@ -37,7 +37,9 @@ import {
   restoreTextareaSelection,
 } from "./upload-utils"
 import { buildReplyMessage, type ReplyTarget } from "./message-reply"
+import { requestThreadScrollToBottom } from "./thread-scroll"
 import { transformZulipConversationLinkToMarkdown } from "./zulip-link-utils"
+import { loadUploadedImagePreviewUrl } from "./compose-upload-preview"
 
 type ComposeDialog =
   | "poll"
@@ -97,7 +99,7 @@ export function ComposeBox(props: {
     { name: "", description: "" },
     { name: "", description: "" },
   ])
-  const [uploadedImages, setUploadedImages] = createSignal<{ name: string; url: string; markdown: string }[]>([])
+  const [uploadedImages, setUploadedImages] = createSignal<{ name: string; markdown: string; previewUrl: string | null }[]>([])
   let mentionTriggerIndex = -1
 
   let textareaRef!: HTMLTextAreaElement
@@ -430,18 +432,20 @@ export function ComposeBox(props: {
     return IMAGE_EXTENSIONS.has(ext)
   }
 
-  const resolveUploadUrl = (relativePath: string) => {
-    const realmUrl = org.realmUrl?.replace(/\/$/, "")
-    if (!realmUrl || relativePath.startsWith("http")) return relativePath
-    return `${realmUrl}${relativePath}`
-  }
-
   const removeUploadedImage = (markdown: string) => {
     setUploadedImages((prev) => prev.filter((img) => img.markdown !== markdown))
     const current = content()
     const nextContent = current.replace(markdown, "").replace(/\n{2,}/g, "\n").trim()
     setContent(nextContent)
     sync.saveDraft(props.narrow, nextContent)
+  }
+
+  const clearUploadedImagePreview = (markdown: string) => {
+    setUploadedImages((prev) => prev.map((img) => (
+      img.markdown === markdown
+        ? { ...img, previewUrl: null }
+        : img
+    )))
   }
 
   const uploadSingleFile = async (filePath: string) => {
@@ -464,10 +468,11 @@ export function ComposeBox(props: {
         requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
 
         if (isImageFile(fileName)) {
+          const previewUrl = await loadUploadedImagePreviewUrl(org.orgId, result.data.url, org.realmUrl)
           setUploadedImages((prev) => [...prev, {
             name: fileName,
-            url: resolveUploadUrl(result.data.url),
             markdown,
+            previewUrl,
           }])
         }
       } else {
@@ -1021,6 +1026,7 @@ export function ComposeBox(props: {
       setUploadedImages([])
       sync.clearDraft(props.narrow)
       props.onClearReply?.()
+      requestThreadScrollToBottom(props.narrow, "send")
     } catch (e: any) {
       setError(e?.toString() || "Failed to send message")
     } finally {
@@ -1239,11 +1245,27 @@ export function ComposeBox(props: {
             <For each={uploadedImages()}>
               {(img) => (
                 <div class="relative group/img">
-                  <img
-                    src={img.url}
-                    alt={img.name}
-                    class="h-16 w-16 object-cover rounded-[var(--radius-md)] border border-[var(--border-default)]"
-                  />
+                  <Show
+                    when={img.previewUrl}
+                    fallback={
+                      <div class="h-16 w-16 rounded-[var(--radius-md)] border border-[var(--border-default)] bg-[var(--background-surface)] text-[var(--text-tertiary)] flex items-center justify-center">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                          <path d="M3.75 4.5h10.5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H3.75A1.5 1.5 0 0 1 2.25 12V6A1.5 1.5 0 0 1 3.75 4.5Z" stroke="currentColor" stroke-width="1.35" />
+                          <path d="m4.5 11.25 2.625-2.625 1.875 1.875 1.875-1.875 2.625 2.625" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" />
+                          <circle cx="6.375" cy="7.125" r="0.9" fill="currentColor" />
+                        </svg>
+                      </div>
+                    }
+                  >
+                    {(previewUrl) => (
+                      <img
+                        src={previewUrl()}
+                        alt={img.name}
+                        class="h-16 w-16 object-cover rounded-[var(--radius-md)] border border-[var(--border-default)]"
+                        onError={() => clearUploadedImagePreview(img.markdown)}
+                      />
+                    )}
+                  </Show>
                   <button
                     class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--background-elevated)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-tertiary)] hover:text-[var(--status-error)] hover:border-[var(--status-error)] transition-colors opacity-0 group-hover/img:opacity-100"
                     onClick={() => removeUploadedImage(img.markdown)}

@@ -176,6 +176,20 @@ describe("buildUnreadUiState", () => {
     expect(getUnreadMessageIdsForTopic(index, 5, "deploys")).toEqual([1001, 1002])
   })
 
+  test("regression: topic matching is case-insensitive and whitespace-insensitive", () => {
+    const index = buildUnreadIndex({
+      streams: [
+        {
+          stream_id: 9,
+          topic: "  Swipe-image   style testimonials  ",
+          unread_message_ids: [2189, 2190],
+        },
+      ],
+    }, 99)
+
+    expect(getUnreadMessageIdsForTopic(index, 9, "swipe-image style testimonials")).toEqual([2189, 2190])
+  })
+
   test("regression: local read reconciliation clears unread state without waiting for an event", () => {
     const index = buildUnreadIndex({
       streams: [
@@ -200,6 +214,57 @@ describe("buildUnreadUiState", () => {
     expect(index.size).toBe(0)
     expect(cachedMessages["stream:5/topic:deploys"][0]?.flags).toEqual(["read"])
     expect(cachedMessages["all-messages"][0]?.flags).toEqual(["read"])
+  })
+
+  test("regression: full seeding pipeline produces sidebar badge counts from initial snapshot", () => {
+    // Simulates the setConnected → seedUnreadState → syncUnreadUi path.
+    // The Zulip register response includes unread_msgs with streams, pms,
+    // and huddles.  After seeding, buildUnreadUiState must produce non-zero
+    // unreadCounts so sidebar badges render on login.
+    const snapshot = {
+      streams: [
+        { stream_id: 9, topic: "Swipe-image style testimonials", unread_message_ids: [2189, 2190] },
+        { stream_id: 9, topic: "product ideas", unread_message_ids: [2195] },
+        { stream_id: 5, topic: "deploys", unread_message_ids: [1001] },
+      ],
+      pms: [
+        { other_user_id: 42, unread_message_ids: [3001, 3002] },
+      ],
+      huddles: [
+        { user_ids_string: "10,42,77", unread_message_ids: [4001] },
+      ],
+    }
+
+    const index = buildUnreadIndex(snapshot, 10)
+    const state = buildUnreadUiState(
+      index,
+      [
+        { stream_id: 9, name: "mos-general", color: "#0aa" },
+        { stream_id: 5, name: "eng", color: "#abc" },
+      ],
+      [
+        { user_id: 10, full_name: "Me" },
+        { user_id: 42, full_name: "Alice" },
+        { user_id: 77, full_name: "Bob" },
+      ],
+      10,
+    )
+
+    // Stream-level counts used by sidebar badges
+    expect(state.unreadCounts[9]).toBe(3)
+    expect(state.unreadCounts[5]).toBe(1)
+
+    // Topic-level items used by expanded topic badges
+    const mosGeneralItems = state.unreadItems.filter(
+      i => i.kind === "stream" && i.stream_id === 9
+    )
+    expect(mosGeneralItems.length).toBe(2)
+    expect(mosGeneralItems.find(i => i.kind === "stream" && i.topic === "Swipe-image style testimonials")?.count).toBe(2)
+    expect(mosGeneralItems.find(i => i.kind === "stream" && i.topic === "product ideas")?.count).toBe(1)
+
+    // DM items
+    const dmItems = state.unreadItems.filter(i => i.kind === "dm")
+    expect(dmItems.length).toBe(2)
   })
 
   test("regression: viewed, read, and self-authored messages never create unread badges", () => {

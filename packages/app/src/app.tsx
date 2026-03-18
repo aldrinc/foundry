@@ -809,15 +809,20 @@ function AppShell(props: {
           class="flex items-center"
           style={{ height: "36px", "flex-shrink": "0", background: "var(--surface-outer-bg)", "padding-left": "12px", "padding-right": "12px" }}
         >
-          {/* Search bar — centered in the top bar */}
-          <div class="flex-1 flex justify-center" style={{ "-webkit-app-region": "no-drag" }}>
-            <div style={{ width: "min(600px, 70%)" }}>
-              <SearchBar darkBackground={outerFrameIsDark()} />
-            </div>
+          {/* Left spacer — draggable */}
+          <div data-tauri-drag-region class="flex-1 h-full" />
+
+          {/* Search bar — centered in the top bar, NOT draggable */}
+          <div style={{ width: "min(600px, 70%)", "-webkit-app-region": "no-drag" }}>
+            <SearchBar darkBackground={outerFrameIsDark()} />
           </div>
-          <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
-            <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} darkBackground={outerFrameIsDark()} />
-            <GearMenu onOpenSettings={() => openSettings()} darkBackground={outerFrameIsDark()} />
+
+          {/* Right area — empty space is draggable, buttons are NOT */}
+          <div data-tauri-drag-region class="flex-1 flex justify-end items-center h-full">
+            <div class="flex items-center gap-1" style={{ "-webkit-app-region": "no-drag" }}>
+              <HelpMenu onShowShortcuts={() => setShowShortcuts(true)} darkBackground={outerFrameIsDark()} />
+              <GearMenu onOpenSettings={() => openSettings()} darkBackground={outerFrameIsDark()} />
+            </div>
           </div>
         </div>
 

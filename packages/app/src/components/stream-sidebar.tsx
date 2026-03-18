@@ -12,6 +12,7 @@ import { getUnreadTotalCount } from "../context/unread-state"
 import { buildTopicSidebarSections, isResolvedTopicName, resolveTopicName, unresolveTopicName } from "./topic-sidebar-state"
 import type { SettingsRoute, SettingsSection } from "../views/settings"
 import { buildStreamLinkMarkdown, buildTopicLinkMarkdown } from "./zulip-link-utils"
+import { sameTopicName } from "../topic-identity"
 
 export function StreamSidebar(props: {
   onOpenSettings?: (route?: SettingsSection | SettingsRoute) => void
@@ -269,6 +270,12 @@ function StreamItem(props: {
     topics(),
     sync.store.unreadItems,
   ))
+  const isTopicActive = (topicName: string) => {
+    const active = nav.parseNarrow(nav.activeNarrow() || "")
+    return active?.type === "topic"
+      && active.streamId === props.stream.stream_id
+      && sameTopicName(active.topic || "", topicName)
+  }
 
   /** Fetch topics if not already loaded */
   const ensureTopicsLoaded = async (force = false) => {
@@ -536,7 +543,7 @@ function StreamItem(props: {
                 class="group/topic w-full flex items-center gap-2 px-3 py-1 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--background-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                 classList={{
                   "text-[var(--text-primary)] bg-[var(--background-surface)]":
-                    nav.activeNarrow() === `stream:${props.stream.stream_id}/topic:${topic.name}`,
+                    isTopicActive(topic.name),
                 }}
                 onClick={() => handleTopicClick(topic.name)}
                 onContextMenu={(e) => openContextMenu(e, "topic", topic.name)}
@@ -576,7 +583,7 @@ function StreamItem(props: {
                 class="group/topic w-full flex items-center gap-2 px-3 py-1 text-left text-xs text-[var(--text-secondary)] hover:bg-[var(--background-surface)] hover:text-[var(--text-primary)] transition-colors cursor-pointer"
                 classList={{
                   "text-[var(--text-primary)] bg-[var(--background-surface)]":
-                    nav.activeNarrow() === `stream:${props.stream.stream_id}/topic:${topic.name}`,
+                    isTopicActive(topic.name),
                 }}
                 onClick={() => handleTopicClick(topic.name)}
                 onContextMenu={(e) => openContextMenu(e, "topic", topic.name)}

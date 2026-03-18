@@ -9,6 +9,7 @@ import type { NarrowFilter } from "@foundry/desktop/bindings"
 import { MessageItem } from "./message-item"
 import type { ReplyTarget } from "./message-reply"
 import { scrollToMessageWhenReady } from "./message-scroll"
+import { THREAD_SCROLL_TO_BOTTOM_EVENT, type ThreadScrollDetail } from "./thread-scroll"
 
 const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
 
@@ -226,6 +227,36 @@ export function MessageList(props: {
 
   // Clean up polling on component dispose
   onCleanup(() => { if (scrollPollTimer) clearInterval(scrollPollTimer) })
+
+  // Auto-scroll when content height grows (reactions, images, etc.) while at bottom
+  let resizeObserver: ResizeObserver | undefined
+  createEffect(() => {
+    if (!scrollContainer) return
+    resizeObserver?.disconnect()
+    let lastHeight = scrollContainer.scrollHeight
+    resizeObserver = new ResizeObserver(() => {
+      const newHeight = scrollContainer.scrollHeight
+      if (newHeight > lastHeight && isAtBottom) {
+        requestAnimationFrame(() => scrollToBottom())
+      }
+      lastHeight = newHeight
+    })
+    // Observe the content inside the scroll container
+    for (const child of scrollContainer.children) {
+      resizeObserver.observe(child)
+    }
+  })
+  onCleanup(() => resizeObserver?.disconnect())
+
+  // Scroll to bottom when compose box sends a message
+  const handleThreadScroll = (e: Event) => {
+    const detail = (e as CustomEvent<ThreadScrollDetail>).detail
+    if (detail.narrow === props.narrow) {
+      requestAnimationFrame(() => scrollToBottom())
+    }
+  }
+  window.addEventListener(THREAD_SCROLL_TO_BOTTOM_EVENT, handleThreadScroll)
+  onCleanup(() => window.removeEventListener(THREAD_SCROLL_TO_BOTTOM_EVENT, handleThreadScroll))
 
   // Fetch on mount / narrow change, and optionally center an anchor message.
   createEffect(on(

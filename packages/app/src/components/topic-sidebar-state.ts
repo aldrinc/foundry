@@ -1,5 +1,6 @@
 import type { Topic } from "@foundry/desktop/bindings"
 import type { UnreadItem } from "../context/unread-state"
+import { normalizeTopicName } from "../topic-identity"
 
 export const RESOLVED_TOPIC_PREFIX = "✔ "
 
@@ -52,24 +53,29 @@ export function buildTopicSidebarSections(
   topics: Topic[],
   unreadItems: UnreadItem[],
 ): TopicSidebarSections {
-  const unreadByTopic = new Map<string, { count: number; lastMessageId: number }>()
+  const unreadByTopic = new Map<string, { count: number; lastMessageId: number; topicName: string }>()
 
   for (const item of unreadItems) {
     if (item.kind !== "stream" || item.stream_id !== streamId) {
       continue
     }
 
-    unreadByTopic.set(item.topic, {
-      count: item.count,
-      lastMessageId: item.last_message_id,
+    const key = normalizeTopicName(item.topic)
+    const existing = unreadByTopic.get(key)
+
+    unreadByTopic.set(key, {
+      count: (existing?.count || 0) + item.count,
+      lastMessageId: Math.max(existing?.lastMessageId || 0, item.last_message_id),
+      topicName: item.last_message_id >= (existing?.lastMessageId || 0) ? item.topic : (existing?.topicName || item.topic),
     })
   }
 
   const entries = new Map<string, TopicSidebarEntry>()
 
   for (const topic of topics) {
-    const unread = unreadByTopic.get(topic.name)
-    entries.set(topic.name, {
+    const key = normalizeTopicName(topic.name)
+    const unread = unreadByTopic.get(key)
+    entries.set(key, {
       name: topic.name,
       label: stripResolvedTopicPrefix(topic.name),
       maxId: topic.max_id,
@@ -79,18 +85,18 @@ export function buildTopicSidebarSections(
     })
   }
 
-  for (const [topicName, unread] of unreadByTopic.entries()) {
-    if (entries.has(topicName)) {
+  for (const [key, unread] of unreadByTopic.entries()) {
+    if (entries.has(key)) {
       continue
     }
 
-    entries.set(topicName, {
-      name: topicName,
-      label: stripResolvedTopicPrefix(topicName),
+    entries.set(key, {
+      name: unread.topicName,
+      label: stripResolvedTopicPrefix(unread.topicName),
       maxId: unread.lastMessageId,
       lastMessageId: unread.lastMessageId,
       unreadCount: unread.count,
-      resolved: isResolvedTopicName(topicName),
+      resolved: isResolvedTopicName(unread.topicName),
     })
   }
 

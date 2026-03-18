@@ -91,6 +91,34 @@ describe("topic sidebar state", () => {
     expect(sections.completed).toEqual([])
   })
 
+  test("matches unread topics even when Zulip casing or whitespace differs", () => {
+    const sections = buildTopicSidebarSections(9, [
+      { name: "swipe-image style testimonials", max_id: 2188 },
+    ], [
+      {
+        kind: "stream",
+        stream_id: 9,
+        stream_name: "mos-general",
+        stream_color: "#0aa",
+        topic: "  Swipe-image   style testimonials  ",
+        count: 2,
+        last_message_id: 2190,
+        message_ids: [2189, 2190],
+      },
+    ])
+
+    expect(sections.active).toEqual([
+      {
+        name: "swipe-image style testimonials",
+        label: "swipe-image style testimonials",
+        maxId: 2188,
+        lastMessageId: 2190,
+        unreadCount: 2,
+        resolved: false,
+      },
+    ])
+  })
+
   test("matches the desktop backend resolved-topic naming", () => {
     expect(isResolvedTopicName("✔ shipped")).toBe(true)
     expect(isResolvedTopicName("✅ shipped")).toBe(false)

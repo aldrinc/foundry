@@ -1,3 +1,5 @@
+import { normalizeTopicName } from "../topic-identity"
+
 export interface UnreadMessagesSnapshot {
   pms?: Array<{
     other_user_id?: number | null
@@ -74,7 +76,7 @@ export interface CachedMessageLike {
 }
 
 function topicKey(streamId: number, topic: string): string {
-  return `${streamId}:${topic}`
+  return `${streamId}:${normalizeTopicName(topic)}`
 }
 
 function dmKey(userIds: number[]): string {
@@ -160,7 +162,11 @@ export function addUnreadStreamMessage(
   topic: string,
 ): boolean {
   const existing = index.get(messageId)
-  if (existing?.kind === "stream" && existing.streamId === streamId && existing.topic === topic) {
+  if (
+    existing?.kind === "stream"
+    && existing.streamId === streamId
+    && normalizeTopicName(existing.topic) === normalizeTopicName(topic)
+  ) {
     return false
   }
 
@@ -215,7 +221,10 @@ export function updateUnreadStreamMessage(
     topic: updates.topic ?? existing.topic,
   }
 
-  if (next.streamId === existing.streamId && next.topic === existing.topic) {
+  if (
+    next.streamId === existing.streamId
+    && normalizeTopicName(next.topic) === normalizeTopicName(existing.topic)
+  ) {
     return false
   }
 
@@ -242,7 +251,10 @@ export function buildUnreadUiState(
       const existing = grouped.get(key)
       if (existing?.kind === "stream") {
         existing.count += 1
-        existing.last_message_id = Math.max(existing.last_message_id, messageId)
+        if (messageId >= existing.last_message_id) {
+          existing.topic = entry.topic
+          existing.last_message_id = messageId
+        }
         existing.message_ids.push(messageId)
         continue
       }
@@ -350,7 +362,11 @@ export function getUnreadMessageIdsForTopic(
   const messageIds: number[] = []
 
   for (const [messageId, entry] of index.entries()) {
-    if (entry.kind === "stream" && entry.streamId === streamId && entry.topic === topic) {
+    if (
+      entry.kind === "stream"
+      && entry.streamId === streamId
+      && normalizeTopicName(entry.topic) === normalizeTopicName(topic)
+    ) {
       messageIds.push(messageId)
     }
   }

@@ -9,6 +9,15 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 
 - Public repository polish, launch checklist, support routing, and issue templates
 
+## 0.16.4 - 2026-03-18
+
+- Fixed topic matching so sidebar selection, unread counts, visibility rules, and live sync stay correct even when Zulip topic names differ only by case or extra whitespace.
+- Added authenticated inline previews for newly uploaded compose images, with graceful fallback when preview loading fails.
+- Fixed conversation scrolling so sent messages snap to the bottom and content growth keeps the view pinned when you were already reading at the end.
+- Restored draggable top-bar space around the centered desktop search field while keeping settings and help controls interactive.
+- Expanded desktop Zulip event subscriptions so message and read-flag updates stay in sync.
+- Updated the desktop application bundle metadata to version `0.16.4`.
+
 ## 0.16.3 - 2026-03-17
 
 - Moved the conversation search bar into the top bar with a cleaner layout that keeps filtering controls visible while reading.

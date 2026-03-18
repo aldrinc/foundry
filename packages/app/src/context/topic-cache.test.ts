@@ -30,4 +30,14 @@ describe("topic cache helpers", () => {
       { name: "alpha", max_id: 2 },
     ])
   })
+
+  test("merges logically identical topic names that differ only by case or whitespace", () => {
+    expect(mergeTopicsByName([
+      { name: "swipe-image style testimonials", max_id: 2188 },
+    ], [
+      { name: "  Swipe-image   style testimonials  ", max_id: 2190 },
+    ])).toEqual([
+      { name: "  Swipe-image   style testimonials  ", max_id: 2190 },
+    ])
+  })
 })
