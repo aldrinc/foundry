@@ -9,6 +9,12 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 
 - Public repository polish, launch checklist, support routing, and issue templates
 
+## 0.16.7 - 2026-03-19
+
+- Reissued the desktop release again after upgrading the GitHub Tauri release action so OTA metadata and release assets publish with the expected updater files.
+- No additional app behavior changes beyond `0.16.5`; this release exists to restore a healthy production desktop updater feed.
+- Updated the desktop application bundle metadata to version `0.16.7`.
+
 ## 0.16.6 - 2026-03-19
 
 - Reissued the desktop release after fixing the GitHub OTA workflow so the updater manifest and platform assets publish cleanly from one tag.
