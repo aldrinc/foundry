@@ -76,6 +76,22 @@ impl ZulipClient {
             .basic_auth(&self.email, Some(&self.api_key))
     }
 
+    /// Build a GET request for an absolute or resolved URL. Same-origin URLs
+    /// are authenticated with the current org credentials; foreign origins are
+    /// fetched without auth.
+    pub fn get_url(&self, url: reqwest::Url) -> reqwest::RequestBuilder {
+        let same_origin = reqwest::Url::parse(&self.base_url)
+            .map(|base| base.origin() == url.origin())
+            .unwrap_or(false);
+
+        let request = self.client.get(url);
+        if same_origin {
+            request.basic_auth(&self.email, Some(&self.api_key))
+        } else {
+            request
+        }
+    }
+
     /// Build a POST request with authentication
     pub fn post(&self, path: &str) -> reqwest::RequestBuilder {
         self.client

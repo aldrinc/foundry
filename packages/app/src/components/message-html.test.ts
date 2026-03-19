@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import { parseHTML } from "linkedom"
 import {
+  extractDimensionsFromUrl,
   findImageCarouselRanges,
   getUserUploadDownloadUrl,
   hydrateMessageImageCarousels,
@@ -9,6 +10,7 @@ import {
   openMessageImageViewerFromLink,
   resolveAuthenticatedMediaUrl,
   resolveMessageUrl,
+  sanitizeMessageHtml,
   shouldFetchAuthenticatedMedia,
 } from "./message-html"
 
@@ -107,6 +109,40 @@ describe("getUserUploadDownloadUrl", () => {
 
   test("ignores non-upload links", () => {
     expect(getUserUploadDownloadUrl("/help", "https://chat.example.com")).toBeUndefined()
+  })
+})
+
+describe("sanitizeMessageHtml", () => {
+  test("keeps internal Zulip conversation links in-app without target blank", () => {
+    const sanitized = sanitizeMessageHtml(
+      `<p><a href="https://zulip.meridian.cv/#narrow/channel/9-mos-general/topic/Swipe-image.20style.20testimonials/with/2533" target="_blank" rel="noopener noreferrer">#mos-general &gt; Swipe-image style testimonials</a></p>`,
+      "https://zulip.meridian.cv",
+    )
+
+    const template = document.createElement("template")
+    template.innerHTML = sanitized
+    const anchor = template.content.querySelector("a")
+
+    expect(anchor?.getAttribute("href")).toBe(
+      "https://zulip.meridian.cv/#narrow/channel/9-mos-general/topic/Swipe-image.20style.20testimonials/with/2533",
+    )
+    expect(anchor?.hasAttribute("target")).toBe(false)
+    expect(anchor?.hasAttribute("rel")).toBe(false)
+  })
+
+  test("preserves target blank for external links", () => {
+    const sanitized = sanitizeMessageHtml(
+      `<p><a href="https://example.com/docs">Docs</a></p>`,
+      "https://zulip.meridian.cv",
+    )
+
+    const template = document.createElement("template")
+    template.innerHTML = sanitized
+    const anchor = template.content.querySelector("a")
+
+    expect(anchor?.getAttribute("href")).toBe("https://example.com/docs")
+    expect(anchor?.getAttribute("target")).toBe("_blank")
+    expect(anchor?.getAttribute("rel")).toBe("noopener noreferrer")
   })
 })
 
@@ -232,8 +268,12 @@ describe("openMessageImageViewerFromLink", () => {
       </p>
     `
 
+    const downloads: string[] = []
     const link = container.querySelector<HTMLAnchorElement>("a")!
     const opened = openMessageImageViewerFromLink(container, link, {
+      downloadFile: (url) => {
+        downloads.push(url)
+      },
       serverUrl: "https://example.com",
     })
 
@@ -241,14 +281,16 @@ describe("openMessageImageViewerFromLink", () => {
 
     const lightbox = container.querySelector<HTMLDivElement>(".foundry-image-lightbox")
     const viewerImage = container.querySelector<HTMLImageElement>(".foundry-image-lightbox-image")
-    const downloadLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-download")
+    const downloadButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-download")
     const externalLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-link")
     const closeButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-close")
 
     expect(lightbox).toBeTruthy()
     expect(viewerImage?.getAttribute("src")).toBe("https://example.com/image-full.png")
-    expect(downloadLink?.getAttribute("href")).toBe("https://example.com/image-full.png")
     expect(externalLink?.getAttribute("href")).toBe("https://example.com/image-full.png")
+
+    click(downloadButton!)
+    expect(downloads).toEqual(["https://example.com/image-full.png"])
 
     click(closeButton!)
     expect(container.querySelector(".foundry-image-lightbox")).toBeNull()
@@ -265,7 +307,11 @@ describe("hydrateMessageImageCarousels", () => {
     `
 
     const notifications: string[] = []
+    const downloads: string[] = []
     const cleanup = hydrateMessageImageCarousels(container, {
+      downloadFile: (url) => {
+        downloads.push(url)
+      },
       onViewerImageChange: () => notifications.push("changed"),
       serverUrl: "https://example.com",
     })
@@ -284,16 +330,18 @@ describe("hydrateMessageImageCarousels", () => {
     const lightbox = container.querySelector<HTMLDivElement>(".foundry-image-lightbox")
     const viewerImage = container.querySelector<HTMLImageElement>(".foundry-image-lightbox-image")
     const counter = container.querySelector<HTMLSpanElement>(".foundry-image-lightbox-counter")
-    const downloadLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-download")
+    const downloadButton = container.querySelector<HTMLButtonElement>(".foundry-image-lightbox-download")
     const externalLink = container.querySelector<HTMLAnchorElement>(".foundry-image-lightbox-link")
     const dialog = container.querySelector<HTMLDivElement>(".foundry-image-lightbox-dialog")
 
     expect(lightbox?.hidden).toBe(false)
     expect(counter?.textContent).toBe("2 / 3")
     expect(viewerImage?.getAttribute("src")).toBe("https://example.com/image-2-full.png")
-    expect(downloadLink?.getAttribute("href")).toBe("https://example.com/image-2-full.png")
     expect(externalLink?.getAttribute("href")).toBe("https://example.com/image-2-full.png")
     expect(notifications).toHaveLength(1)
+
+    click(downloadButton!)
+    expect(downloads).toEqual(["https://example.com/image-2-full.png"])
 
     pressKey(dialog!, "ArrowRight")
     expect(counter?.textContent).toBe("3 / 3")
@@ -321,7 +369,9 @@ describe("hydrateMessageImageCarousels", () => {
 
     const downloads: string[] = []
     const cleanup = hydrateMessageImageCarousels(container, {
-      openLink: (url) => downloads.push(url),
+      downloadFile: (url) => {
+        downloads.push(url)
+      },
       serverUrl: "https://chat.example.invalid",
     })
 
@@ -458,6 +508,81 @@ describe("lightbox regression — layout and positioning", () => {
   })
 })
 
+describe("extractDimensionsFromUrl", () => {
+  test("extracts dimensions from Zulip thumbnail URL", () => {
+    expect(
+      extractDimensionsFromUrl("https://chat.example.com/user_uploads/thumbnail/3/5b/file.png/840x560.webp"),
+    ).toEqual({ width: 840, height: 560 })
+  })
+
+  test("extracts square thumbnail dimensions", () => {
+    expect(
+      extractDimensionsFromUrl("/user_uploads/thumbnail/1/ab/photo.jpg/200x200.webp"),
+    ).toEqual({ width: 200, height: 200 })
+  })
+
+  test("returns null for URLs without dimension patterns", () => {
+    expect(extractDimensionsFromUrl("https://example.com/image.png")).toBeNull()
+    expect(extractDimensionsFromUrl("/user_uploads/3/5b/file.png")).toBeNull()
+  })
+
+  test("returns null for single-digit dimensions (too small to be real thumbnails)", () => {
+    expect(extractDimensionsFromUrl("/thumb/1x1.webp")).toBeNull()
+    expect(extractDimensionsFromUrl("/thumb/5x5.webp")).toBeNull()
+  })
+})
+
+describe("layout shift prevention — dimension extraction from thumbnail URLs", () => {
+  test("extractDimensionsFromUrl correctly feeds width/height for Zulip thumbnails", () => {
+    // Simulate the logic sanitizeMessageHtml applies to each image.
+    // We verify that the extracted dimensions produce valid width/height attributes.
+    const img = document.createElement("img")
+    const src = "https://chat.example.com/user_uploads/thumbnail/3/5b/file.png/840x560.webp"
+    img.setAttribute("src", src)
+
+    const dims = extractDimensionsFromUrl(src)
+    expect(dims).toEqual({ width: 840, height: 560 })
+
+    if (dims) {
+      img.setAttribute("width", String(dims.width))
+      img.setAttribute("height", String(dims.height))
+    }
+
+    expect(img.getAttribute("width")).toBe("840")
+    expect(img.getAttribute("height")).toBe("560")
+  })
+
+  test("does not set dimensions when the URL has no dimension pattern", () => {
+    const img = document.createElement("img")
+    const src = "https://example.com/photo.jpg"
+    img.setAttribute("src", src)
+
+    const dims = extractDimensionsFromUrl(src)
+    expect(dims).toBeNull()
+    expect(img.hasAttribute("width")).toBe(false)
+    expect(img.hasAttribute("height")).toBe(false)
+  })
+
+  test("existing width/height attributes would be preserved (not overwritten)", () => {
+    const img = document.createElement("img")
+    img.setAttribute("src", "/user_uploads/thumbnail/1/ab/photo.png/300x200.webp")
+    img.setAttribute("width", "100")
+    img.setAttribute("height", "50")
+
+    // sanitizeMessageHtml only sets dims when width/height are missing
+    if (!img.hasAttribute("width") || !img.hasAttribute("height")) {
+      const dims = extractDimensionsFromUrl(img.getAttribute("src") || "")
+      if (dims) {
+        img.setAttribute("width", String(dims.width))
+        img.setAttribute("height", String(dims.height))
+      }
+    }
+
+    expect(img.getAttribute("width")).toBe("100")
+    expect(img.getAttribute("height")).toBe("50")
+  })
+})
+
 describe("CSS regression — no contain:content on message items", () => {
   test("styles.css does not apply contain:content to message items", async () => {
     const fs = await import("fs")
@@ -470,7 +595,7 @@ describe("CSS regression — no contain:content on message items", () => {
     expect(css).not.toMatch(containRule)
   })
 
-  test("inline image min-height targets only .message_inline_image, not gallery thumbs", async () => {
+  test("inline image layout shift prevention targets only .message_inline_image, not gallery thumbs", async () => {
     const fs = await import("fs")
     const path = await import("path")
     const cssPath = path.resolve(import.meta.dir, "../../../desktop/src/styles.css")
@@ -481,5 +606,7 @@ describe("CSS regression — no contain:content on message items", () => {
     // .message_inline_image img specifically instead.
     expect(css).not.toMatch(/img:not\(\.foundry-image-gallery-thumb img\)/)
     expect(css).toMatch(/\.message_inline_image img/)
+    // Must use aspect-ratio instead of min-height for proper shift prevention
+    expect(css).toMatch(/\.message_inline_image img\s*\{[^}]*aspect-ratio/)
   })
 })

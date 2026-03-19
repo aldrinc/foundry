@@ -141,7 +141,7 @@ export function MessageActions(props: {
   }
 
   return (
-    <div class="absolute top-1 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex items-center gap-0.5 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-sm px-1 py-0.5"
+    <div class="absolute top-1 right-2 z-10 flex items-center gap-0.5 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-sm px-1 py-0.5"
       data-component="message-actions"
     >
       {/* React button */}
@@ -162,7 +162,7 @@ export function MessageActions(props: {
         <Portal>
           <div class="fixed inset-0 z-[9999]" onClick={closePicker} />
           <div
-            class="fixed z-[10000]"
+            class="fixed z-[10000] picker-enter"
             style={{ top: `${pickerPos().top}px`, left: `${pickerPos().left}px` }}
           >
             <EmojiPicker

@@ -83,13 +83,11 @@ export function RightSidebar(props: { show: boolean; onClose: () => void }) {
     }
   }
 
-  // Use <Show> for reactivity — SolidJS components run once, so early returns
-  // like `if (!props.show) return null` break reactivity.
   return (
-    <Show when={props.show}>
       <aside
-        class="w-[240px] border-l border-[var(--border-default)] bg-[var(--surface-sidebar)] flex flex-col shrink-0"
+        class="border-l border-[var(--border-default)] bg-[var(--surface-sidebar)] flex flex-col shrink-0"
         data-component="right-sidebar"
+        data-visible={props.show ? "true" : "false"}
       >
         {/* Header */}
         <div class="h-12 px-3 border-b border-[var(--border-default)] flex items-center justify-between">
@@ -145,7 +143,6 @@ export function RightSidebar(props: { show: boolean; onClose: () => void }) {
           </Show>
         </div>
       </aside>
-    </Show>
   )
 }
 

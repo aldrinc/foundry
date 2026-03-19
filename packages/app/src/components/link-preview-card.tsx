@@ -150,9 +150,9 @@ export function LinkPreviewCard(props: {
         style={{ "min-height": "68px" }}
       >
         <div class="px-3 py-2 flex flex-col gap-1">
-          <div class="w-16 h-2.5 rounded bg-[var(--background-elevated)] animate-pulse" />
-          <div class="w-48 h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" />
-          <div class="w-32 h-3 rounded bg-[var(--background-elevated)] animate-pulse" />
+          <div class="w-16 h-2.5 rounded skeleton-shimmer" />
+          <div class="w-48 h-3.5 rounded skeleton-shimmer" />
+          <div class="w-32 h-3 rounded skeleton-shimmer" />
         </div>
       </div>
     </Show>

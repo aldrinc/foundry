@@ -11,7 +11,6 @@ import {
   buildUploadTooLargeMessage,
   bytesFromMebibytes,
   captureTextareaSelection,
-  restoreTextareaSelection,
 } from "../upload-utils"
 
 export function SupervisorComposer() {
@@ -119,7 +118,13 @@ export function SupervisorComposer() {
         const preservedSelection = captureTextareaSelection(textareaRef)
         const nextText = appendUploadMarkdown(current, markdown)
         setText(nextText)
-        requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
+        requestAnimationFrame(() => {
+          textareaRef?.focus()
+          if (preservedSelection) {
+            textareaRef.setSelectionRange(preservedSelection.start, preservedSelection.end)
+            textareaRef.scrollTop = preservedSelection.scrollTop
+          }
+        })
       } else {
         setUploadError(result.error || "Upload failed")
       }

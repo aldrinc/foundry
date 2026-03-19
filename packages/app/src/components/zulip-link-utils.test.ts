@@ -5,6 +5,7 @@ import {
   buildStreamLinkMarkdown,
   buildTopicLinkMarkdown,
   parseZulipConversationLink,
+  parseSameOriginHashRoute,
   transformZulipConversationLinkToMarkdown,
 } from "./zulip-link-utils"
 
@@ -103,6 +104,76 @@ describe("parseZulipConversationLink", () => {
         subscriptions: [{ stream_id: 9, name: "announce" }],
       },
     )).toBeNull()
+  })
+})
+
+describe("parseSameOriginHashRoute", () => {
+  const realm = "https://zulip.meridian.cv"
+
+  test("maps #recent to recent-topics", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#recent`, realm))
+      .toEqual({ narrow: "recent-topics" })
+  })
+
+  test("maps #all to all-messages", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#all`, realm))
+      .toEqual({ narrow: "all-messages" })
+  })
+
+  test("maps #starred to starred", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#starred`, realm))
+      .toEqual({ narrow: "starred" })
+  })
+
+  test("maps #inbox to null (inbox view)", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#inbox`, realm))
+      .toEqual({ narrow: null })
+  })
+
+  test("maps same-origin link with no hash to inbox", () => {
+    expect(parseSameOriginHashRoute(realm, realm))
+      .toEqual({ narrow: null })
+  })
+
+  test("maps same-origin link with empty hash to inbox", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#`, realm))
+      .toEqual({ narrow: null })
+  })
+
+  test("returns null for same-origin non-root paths without a handled hash", () => {
+    expect(parseSameOriginHashRoute(`${realm}/user_uploads/1/file.txt`, realm))
+      .toBeNull()
+    expect(parseSameOriginHashRoute(`${realm}/settings`, realm))
+      .toBeNull()
+  })
+
+  test("returns null for handled hashes on a different same-origin path", () => {
+    expect(parseSameOriginHashRoute(`${realm}/help#recent`, realm))
+      .toBeNull()
+  })
+
+  test("matches a realm served from a subpath", () => {
+    const subpathRealm = "https://zulip.meridian.cv/tenant"
+
+    expect(parseSameOriginHashRoute(`${subpathRealm}/#recent`, subpathRealm))
+      .toEqual({ narrow: "recent-topics" })
+    expect(parseSameOriginHashRoute("https://zulip.meridian.cv/#recent", subpathRealm))
+      .toBeNull()
+  })
+
+  test("returns null for foreign-origin links", () => {
+    expect(parseSameOriginHashRoute("https://other.example/#recent", realm))
+      .toBeNull()
+  })
+
+  test("returns null for unrecognized hashes", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#settings`, realm))
+      .toBeNull()
+  })
+
+  test("returns null when realmUrl is undefined", () => {
+    expect(parseSameOriginHashRoute(`${realm}/#recent`, undefined))
+      .toBeNull()
   })
 })
 

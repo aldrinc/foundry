@@ -1,4 +1,4 @@
-import { Show, For, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, For, createEffect, createSignal, onCleanup, onMount, createMemo } from "solid-js"
 import type { Message, Reaction } from "../context/zulip-sync"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
@@ -20,8 +20,9 @@ import {
 } from "./message-html"
 import { hydrateCodeBlocks } from "./code-block-enhancer"
 import { hydrateFileAttachmentCards } from "./file-attachment-card"
+import { hydrateReplyQuotes } from "./reply-quote-card"
 import { LinkPreviewCard, extractFirstUrl } from "./link-preview-card"
-import { parseZulipConversationLink, type ParsedZulipConversationLink } from "./zulip-link-utils"
+import { parseZulipConversationLink, parseSameOriginHashRoute, type ParsedZulipConversationLink } from "./zulip-link-utils"
 import type { ReplyTarget } from "./message-reply"
 
 /** Convert an emoji hex code to its Unicode character(s) */
@@ -127,6 +128,20 @@ export function MessageItem(props: {
     nav.setActiveNarrow(link.narrow)
   }
 
+  const downloadMessageFile = async (url: string) => {
+    try {
+      const result = await commands.downloadFile(org.orgId, url, null)
+      if (result.status === "error") {
+        console.error("Download failed:", result.error)
+        await platform.notify("Download failed", result.error, { silent: true }).catch(() => undefined)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error"
+      console.error("Download failed:", error)
+      await platform.notify("Download failed", message, { silent: true }).catch(() => undefined)
+    }
+  }
+
   const handleContentClick = (event: MouseEvent) => {
     const target = event.target
     if (!(target instanceof Element)) return
@@ -160,6 +175,7 @@ export function MessageItem(props: {
       event.preventDefault()
       event.stopPropagation()
       openMessageImageViewerFromLink(contentEl, link, {
+        downloadFile: (url) => downloadMessageFile(url),
         openLink: (url) => platform.openLink(url),
         onViewerImageChange: () => refreshAuthenticatedImages(),
         serverUrl: serverUrl(),
@@ -178,15 +194,25 @@ export function MessageItem(props: {
       return
     }
 
+    const sameOriginRoute = parseSameOriginHashRoute(href, serverUrl())
+    if (sameOriginRoute) {
+      event.preventDefault()
+      event.stopPropagation()
+      nav.setActiveNarrow(sameOriginRoute.narrow)
+      return
+    }
+
     event.preventDefault()
     event.stopPropagation()
 
     const resolvedHref = resolveMessageUrl(href, serverUrl())
-    const downloadHref = shouldOpenUserUploadAsDownload(link, serverUrl())
-      ? getUserUploadDownloadUrl(href, serverUrl())
-      : undefined
+    if (shouldOpenUserUploadAsDownload(link, serverUrl())) {
+      const downloadHref = getUserUploadDownloadUrl(href, serverUrl()) || resolvedHref
+      void downloadMessageFile(downloadHref)
+      return
+    }
 
-    platform.openLink(downloadHref || resolvedHref)
+    platform.openLink(resolvedHref)
   }
 
   createEffect(() => {
@@ -217,12 +243,16 @@ export function MessageItem(props: {
     }
     refreshAuthenticatedImages = rehydrateImages
     const cleanupCarousel = hydrateMessageImageCarousels(contentEl, {
+      downloadFile: (url) => downloadMessageFile(url),
       openLink: (url) => platform.openLink(url),
       onViewerImageChange: rehydrateImages,
       serverUrl: serverUrl(),
     })
     const cleanupCodeBlocks = hydrateCodeBlocks(contentEl)
-    const cleanupFileCards = hydrateFileAttachmentCards(contentEl, serverUrl())
+    const cleanupFileCards = hydrateFileAttachmentCards(contentEl, serverUrl(), {
+      downloadFile: (url) => downloadMessageFile(url),
+    })
+    const cleanupReplyCards = hydrateReplyQuotes(contentEl)
 
     // Strip href from remaining inline image links (those not consumed by
     // gallery carousels) so Tauri's native navigation doesn't open them
@@ -240,6 +270,7 @@ export function MessageItem(props: {
         // Temporarily restore href so the viewer can extract image source
         link.setAttribute("href", link.dataset.originalHref || "")
         openMessageImageViewerFromLink(contentEl, link, {
+          downloadFile: (url) => downloadMessageFile(url),
           openLink: (url) => platform.openLink(url),
           onViewerImageChange: () => refreshAuthenticatedImages(),
           serverUrl: serverUrl(),
@@ -258,13 +289,14 @@ export function MessageItem(props: {
       cleanupCarousel()
       cleanupCodeBlocks()
       cleanupFileCards()
+      cleanupReplyCards()
       inlineImageCleanups.forEach((fn) => fn())
     })
   })
 
   return (
     <div
-      class="group relative flex gap-3 px-5 py-1 hover:bg-[var(--background-surface)]/50"
+      class="group relative flex gap-3 px-5 py-1 hover:bg-[var(--background-surface)]/50 transition-colors"
       classList={{ "pt-5": props.showSender, "pt-1": !props.showSender }}
       data-component="message-item"
       data-message-id={props.message.id}
@@ -391,9 +423,24 @@ export function MessageItem(props: {
                   return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} reacted with ${emojiLabel}`
                 }
 
+                let countRef!: HTMLSpanElement
+                const [prevCount, setPrevCount] = createSignal(reaction.count)
+                createEffect(() => {
+                  const curr = reaction.count
+                  if (curr !== prevCount()) {
+                    setPrevCount(curr)
+                    if (countRef) {
+                      countRef.classList.remove("reaction-count-bump")
+                      // Force reflow to re-trigger animation
+                      void countRef.offsetWidth
+                      countRef.classList.add("reaction-count-bump")
+                    }
+                  }
+                })
+
                 return (
                   <button
-                    class={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
+                    class={`reaction-enter inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
                       isOwn()
                         ? "bg-[var(--interactive-primary)]/10 border-[var(--interactive-primary)]/30 text-[var(--interactive-primary)]"
                         : "bg-[var(--background-surface)] border-[var(--border-default)] text-[var(--text-primary)]"
@@ -403,7 +450,7 @@ export function MessageItem(props: {
                     onClick={() => handleToggleReaction(reaction.emoji_name, reaction.emoji_code)}
                   >
                     <span aria-hidden="true">{emojiCodeToChar(reaction.emoji_code)}</span>
-                    <span class="text-[var(--text-tertiary)]">{reaction.count}</span>
+                    <span ref={countRef!} class="text-[var(--text-tertiary)]">{reaction.count}</span>
                   </button>
                 )
               }}

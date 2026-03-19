@@ -106,11 +106,11 @@ export function SettingsProfile() {
     try {
       const result = await commands.deleteAvatar(org.orgId)
       if (result.status === "ok") {
-        // Clear avatar URL locally
+        // Keep the local store in sync with the server-provided fallback avatar.
         sync.replaceUsers(
           sync.store.users.map(u =>
             u.user_id === sync.store.currentUserId
-              ? { ...u, avatar_url: null }
+              ? { ...u, avatar_url: result.data }
               : u
           )
         )

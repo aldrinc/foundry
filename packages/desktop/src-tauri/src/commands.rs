@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex as StdMutex, OnceLock};
 use std::time::Duration;
@@ -8,6 +9,7 @@ use serde::Serialize;
 use specta::Type;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{Emitter, Manager, State, Url, WebviewUrl};
+use tokio::io::AsyncWriteExt;
 
 use crate::server::load_desktop_settings;
 use crate::zulip::types::*;
@@ -1101,6 +1103,227 @@ pub async fn save_temp_file(file_name: String, data: Vec<u8>) -> Result<String, 
         .ok_or_else(|| "Invalid temp path".to_string())
 }
 
+fn resolve_download_directory(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let settings = load_desktop_settings(app)?;
+    let configured = settings.download_location.trim();
+    if !configured.is_empty() {
+        return Ok(PathBuf::from(configured));
+    }
+
+    app.path()
+        .download_dir()
+        .map_err(|e| format!("Failed to resolve download directory: {}", e))
+}
+
+fn sanitize_download_file_name(file_name: &str) -> String {
+    let trimmed = file_name.trim().trim_matches('"');
+    let basename = Path::new(trimmed)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or(trimmed);
+
+    let sanitized = basename
+        .chars()
+        .map(|ch| match ch {
+            '/' | '\\' | '\0' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+            _ => ch,
+        })
+        .collect::<String>()
+        .trim()
+        .trim_matches('.')
+        .to_string();
+
+    if sanitized.is_empty() {
+        "download".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn decode_download_filename(value: &str) -> Option<String> {
+    urlencoding::decode(value)
+        .ok()
+        .map(|decoded| sanitize_download_file_name(decoded.as_ref()))
+        .filter(|decoded| !decoded.is_empty())
+}
+
+fn extract_filename_from_content_disposition(header_value: &str) -> Option<String> {
+    for part in header_value.split(';').map(str::trim) {
+        let Some(encoded_name) = part.strip_prefix("filename*=") else {
+            continue;
+        };
+        let value = encoded_name.trim_matches('"');
+        let encoded = value
+            .split_once("''")
+            .map(|(_, encoded)| encoded)
+            .unwrap_or(value);
+        if let Some(decoded) = decode_download_filename(encoded) {
+            return Some(decoded);
+        }
+    }
+
+    for part in header_value.split(';').map(str::trim) {
+        let Some(file_name) = part.strip_prefix("filename=") else {
+            continue;
+        };
+        let value = file_name.trim_matches('"');
+        let sanitized = sanitize_download_file_name(value);
+        if !sanitized.is_empty() {
+            return Some(sanitized);
+        }
+    }
+
+    None
+}
+
+fn infer_download_file_name(
+    download_url: &reqwest::Url,
+    content_disposition: Option<&reqwest::header::HeaderValue>,
+    suggested_file_name: Option<&str>,
+) -> String {
+    if let Some(suggested) = suggested_file_name {
+        let sanitized = sanitize_download_file_name(suggested);
+        if !sanitized.is_empty() {
+            return sanitized;
+        }
+    }
+
+    if let Some(header) = content_disposition.and_then(|value| value.to_str().ok()) {
+        if let Some(file_name) = extract_filename_from_content_disposition(header) {
+            return file_name;
+        }
+    }
+
+    if let Some(segment) = download_url
+        .path_segments()
+        .and_then(|mut segments| segments.next_back())
+    {
+        if let Some(decoded) = decode_download_filename(segment) {
+            return decoded;
+        }
+    }
+
+    "download".to_string()
+}
+
+fn pick_available_download_path(directory: &Path, file_name: &str) -> PathBuf {
+    let candidate = directory.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+
+    let stem = candidate
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("download");
+    let extension = candidate
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| format!(".{}", value))
+        .unwrap_or_default();
+
+    for index in 1u32.. {
+        let numbered = directory.join(format!("{stem} ({index}){extension}"));
+        if !numbered.exists() {
+            return numbered;
+        }
+    }
+
+    candidate
+}
+
+fn resolve_download_request_url(client: &ZulipClient, url: &str) -> Result<reqwest::Url, String> {
+    if let Ok(parsed) = reqwest::Url::parse(url) {
+        return Ok(parsed);
+    }
+
+    let base = reqwest::Url::parse(&client.base_url)
+        .map_err(|error| format!("Invalid org base URL: {}", error))?;
+    base.join(url)
+        .map_err(|error| format!("Invalid download URL: {}", error))
+}
+
+/// Download a message file/image directly to the configured local download directory.
+#[tauri::command]
+#[specta::specta]
+pub async fn download_file(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    org_id: String,
+    url: String,
+    suggested_file_name: Option<String>,
+) -> Result<String, String> {
+    let download_dir = resolve_download_directory(&app)?;
+
+    with_org_client(&app, state.inner(), &org_id, move |client| async move {
+        tokio::fs::create_dir_all(&download_dir)
+            .await
+            .map_err(|error| format!("Failed to create download directory: {}", error))?;
+
+        let request_url = resolve_download_request_url(&client, &url)?;
+        let mut response = client
+            .get_url(request_url.clone())
+            .send()
+            .await
+            .map_err(|error| format!("Download request failed: {}", error))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            let message = body.trim();
+            return Err(if message.is_empty() {
+                format!("{} while downloading file", status)
+            } else {
+                format!("{} while downloading file: {}", status, message)
+            });
+        }
+
+        let file_name = infer_download_file_name(
+            &request_url,
+            response.headers().get(reqwest::header::CONTENT_DISPOSITION),
+            suggested_file_name.as_deref(),
+        );
+        let target_path = pick_available_download_path(&download_dir, &file_name);
+        let temp_path = target_path.with_file_name(format!(
+            "{}.part",
+            target_path
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("download")
+        ));
+
+        let mut file = tokio::fs::File::create(&temp_path)
+            .await
+            .map_err(|error| format!("Failed to create download file: {}", error))?;
+
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("Failed to read download stream: {}", error))?
+        {
+            file.write_all(&chunk)
+                .await
+                .map_err(|error| format!("Failed to write download file: {}", error))?;
+        }
+
+        file.flush()
+            .await
+            .map_err(|error| format!("Failed to flush download file: {}", error))?;
+        drop(file);
+
+        if let Err(error) = tokio::fs::rename(&temp_path, &target_path).await {
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            return Err(format!("Failed to finalize download: {}", error));
+        }
+
+        target_path
+            .to_str()
+            .map(|path| path.to_string())
+            .ok_or_else(|| "Invalid download path".to_string())
+    })
+    .await
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn get_file_size_bytes(file_path: String) -> Result<u64, String> {
@@ -1432,7 +1655,7 @@ pub async fn delete_avatar(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     org_id: String,
-) -> Result<(), String> {
+) -> Result<String, String> {
     with_org_client(&app, state.inner(), &org_id, move |client| async move {
         client.delete_avatar().await
     })
@@ -1782,7 +2005,8 @@ fn get_current_user_id(state: &AppState, org_id: &str) -> Result<Option<u64>, St
 #[cfg(test)]
 mod tests {
     use super::{
-        infer_priority_status, is_sso_callback_url, looks_like_foundry_cloud_login_html,
+        extract_filename_from_content_disposition, infer_download_file_name, infer_priority_status,
+        is_sso_callback_url, looks_like_foundry_cloud_login_html, sanitize_download_file_name,
         strip_html, truncate_text, InboxPriorityCandidate, PriorityMessageContext,
     };
     use tauri::Url;
@@ -1853,5 +2077,37 @@ mod tests {
             }],
         );
         assert_eq!(status, "needs_decision");
+    }
+
+    #[test]
+    fn sanitizes_download_file_names() {
+        assert_eq!(
+            sanitize_download_file_name("../quarterly:report?.pdf"),
+            "quarterly_report_.pdf"
+        );
+        assert_eq!(sanitize_download_file_name("   "), "download");
+    }
+
+    #[test]
+    fn extracts_download_file_name_from_content_disposition() {
+        assert_eq!(
+            extract_filename_from_content_disposition(
+                "attachment; filename*=UTF-8''Quarterly%20Plan.pdf"
+            ),
+            Some("Quarterly Plan.pdf".to_string())
+        );
+        assert_eq!(
+            extract_filename_from_content_disposition("attachment; filename=\"notes.txt\""),
+            Some("notes.txt".to_string())
+        );
+    }
+
+    #[test]
+    fn infers_download_file_name_from_url_when_header_missing() {
+        let url = reqwest::Url::parse(
+            "https://chat.example.invalid/user_uploads/download/1/files/roadmap.png",
+        )
+        .unwrap();
+        assert_eq!(infer_download_file_name(&url, None, None), "roadmap.png");
     }
 }

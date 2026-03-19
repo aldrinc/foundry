@@ -135,9 +135,9 @@ export function SettingsView(props: {
   }
 
   return (
-    <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={props.onClose}>
+    <div class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 modal-backdrop-enter" onClick={props.onClose}>
       <div
-        class="w-[720px] max-h-[85vh] bg-[var(--background-surface)] rounded-[var(--radius-lg)] shadow-lg border border-[var(--border-default)] flex flex-col overflow-hidden"
+        class="w-[720px] max-h-[85vh] bg-[var(--background-surface)] rounded-[var(--radius-lg)] shadow-lg border border-[var(--border-default)] flex flex-col overflow-hidden modal-content-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

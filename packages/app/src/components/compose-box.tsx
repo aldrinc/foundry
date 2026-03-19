@@ -34,12 +34,12 @@ import {
   buildUploadTooLargeMessage,
   bytesFromMebibytes,
   captureTextareaSelection,
-  restoreTextareaSelection,
 } from "./upload-utils"
 import { buildReplyMessage, type ReplyTarget } from "./message-reply"
 import { requestThreadScrollToBottom } from "./thread-scroll"
 import { transformZulipConversationLinkToMarkdown } from "./zulip-link-utils"
 import { loadUploadedImagePreviewUrl } from "./compose-upload-preview"
+import { handleNarrowChange } from "./compose-narrow-change"
 
 type ComposeDialog =
   | "poll"
@@ -61,6 +61,7 @@ export function ComposeBox(props: {
 
   const [content, setContent] = createSignal("")
   const [sending, setSending] = createSignal(false)
+  const [sendFlash, setSendFlash] = createSignal(false)
   const [error, setError] = createSignal("")
   const [uploading, setUploading] = createSignal(false)
   const [uploadLabel, setUploadLabel] = createSignal("")
@@ -116,15 +117,21 @@ export function ComposeBox(props: {
   const canType = () => caps()?.typing_notifications !== false && settings.sendTyping
   const uploadLimitBytes = () => bytesFromMebibytes(org.maxFileUploadSizeMib)
 
-  // Load draft when narrow changes
+  // Load draft and focus compose when narrow changes
   createEffect(on(
     () => props.narrow,
     (narrow) => {
-      const draft = sync.store.drafts[narrow]
-      setContent(draft || "")
-      setError("")
-      setUploadError("")
-      setUploadedImages([])
+      handleNarrowChange(
+        narrow,
+        sync.store.drafts,
+        setContent,
+        setError,
+        setUploadError,
+        setUploadedImages,
+        () => setTimeout(() => {
+          document.querySelector<HTMLTextAreaElement>('[data-component="compose-box"] textarea')?.focus()
+        }, 0),
+      )
     },
   ))
 
@@ -465,7 +472,13 @@ export function ComposeBox(props: {
         const nextContent = appendUploadMarkdown(current, markdown)
         setContent(nextContent)
         sync.saveDraft(props.narrow, nextContent)
-        requestAnimationFrame(() => restoreTextareaSelection(textareaRef, preservedSelection))
+        requestAnimationFrame(() => {
+          textareaRef?.focus()
+          if (preservedSelection) {
+            textareaRef.setSelectionRange(preservedSelection.start, preservedSelection.end)
+            textareaRef.scrollTop = preservedSelection.scrollTop
+          }
+        })
 
         if (isImageFile(fileName)) {
           const previewUrl = await loadUploadedImagePreviewUrl(org.orgId, result.data.url, org.realmUrl)
@@ -1027,6 +1040,10 @@ export function ComposeBox(props: {
       sync.clearDraft(props.narrow)
       props.onClearReply?.()
       requestThreadScrollToBottom(props.narrow, "send")
+
+      // Compose send flash feedback
+      setSendFlash(true)
+      setTimeout(() => setSendFlash(false), 300)
     } catch (e: any) {
       setError(e?.toString() || "Failed to send message")
     } finally {
@@ -1162,6 +1179,7 @@ export function ComposeBox(props: {
         classList={{
           "ring-2 ring-[var(--compose-accent)]": dragOver(),
           "focus-within:border-[var(--compose-accent)]": true,
+          "compose-send-flash": sendFlash(),
         }}
         onDragEnter={handleDragEnter}
         onDragOver={handleDragOver}

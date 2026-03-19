@@ -1,5 +1,6 @@
 import DOMPurify from "dompurify"
 import { commands } from "@foundry/desktop/bindings"
+import { parseSameOriginHashRoute, parseZulipConversationLink } from "./zulip-link-utils"
 
 const ABSOLUTE_URL_PATTERN = /^(?:[a-z][a-z\d+\-.]*:|\/\/|#)/i
 const AUTHENTICATED_MEDIA_PATHS = [
@@ -7,6 +8,8 @@ const AUTHENTICATED_MEDIA_PATHS = [
   "/external_content/",
 ]
 const IMAGE_EXTENSION_PATTERN = /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)(?:$|[?#])/i
+const TRANSPARENT_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+const THUMBNAIL_DIMENSIONS_PATTERN = /\/(\d{2,5})x(\d{2,5})\.\w+$/
 
 const ALLOWED_TAGS = [
   "p", "br", "strong", "em", "code", "pre", "a", "img", "ul", "ol", "li",
@@ -16,8 +19,33 @@ const ALLOWED_TAGS = [
 
 const ALLOWED_ATTR = [
   "href", "src", "alt", "title", "class", "target", "rel",
-  "data-user-id", "data-stream-id",
+  "data-user-id", "data-stream-id", "data-original-src",
+  "width", "height",
 ]
+
+function sanitizeWithDomPurify(html: string): string {
+  const purifier = (DOMPurify as typeof DOMPurify & {
+    sanitize?: (typeof DOMPurify extends { sanitize: infer T } ? T : never)
+    default?: {
+      sanitize?: (typeof DOMPurify extends { sanitize: infer T } ? T : never)
+    }
+  })
+
+  let sanitize = purifier.sanitize ?? purifier.default?.sanitize
+  if (typeof sanitize !== "function" && typeof purifier === "function" && typeof window !== "undefined") {
+    const instance = purifier(window)
+    sanitize = instance?.sanitize?.bind(instance)
+  }
+
+  if (typeof sanitize !== "function") {
+    throw new TypeError("DOMPurify sanitize is unavailable")
+  }
+
+  return sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+  })
+}
 
 export function resolveMessageUrl(url: string, serverUrl?: string): string {
   const trimmed = url.trim()
@@ -55,11 +83,22 @@ export function getUserUploadDownloadUrl(url: string, serverUrl?: string): strin
   }
 }
 
+/**
+ * Extract width/height from Zulip thumbnail URL patterns like
+ * `/user_uploads/thumbnail/3/5b/file.png/840x560.webp`.
+ * Returns null for URLs without a recognisable dimension segment.
+ */
+export function extractDimensionsFromUrl(url: string): { width: number; height: number } | null {
+  const match = url.match(THUMBNAIL_DIMENSIONS_PATTERN)
+  if (!match) return null
+  const width = parseInt(match[1], 10)
+  const height = parseInt(match[2], 10)
+  if (width > 0 && height > 0) return { width, height }
+  return null
+}
+
 export function sanitizeMessageHtml(html: string, serverUrl?: string): string {
-  const sanitized = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS,
-    ALLOWED_ATTR,
-  })
+  const sanitized = sanitizeWithDomPurify(html)
 
   if (typeof document === "undefined") {
     return sanitized
@@ -72,7 +111,20 @@ export function sanitizeMessageHtml(html: string, serverUrl?: string): string {
     const href = anchor.getAttribute("href")
     if (!href) continue
 
-    anchor.setAttribute("href", resolveMessageUrl(href, serverUrl))
+    const resolvedHref = resolveMessageUrl(href, serverUrl)
+    anchor.setAttribute("href", resolvedHref)
+
+    const isInAppLink = Boolean(
+      parseZulipConversationLink(resolvedHref, { realmUrl: serverUrl })
+      || parseSameOriginHashRoute(resolvedHref, serverUrl),
+    )
+
+    if (isInAppLink) {
+      anchor.removeAttribute("target")
+      anchor.removeAttribute("rel")
+      continue
+    }
+
     anchor.setAttribute("target", "_blank")
     anchor.setAttribute("rel", "noopener noreferrer")
   }
@@ -81,11 +133,25 @@ export function sanitizeMessageHtml(html: string, serverUrl?: string): string {
     const src = image.getAttribute("src")
     if (!src) continue
 
-    image.setAttribute("src", resolveMessageUrl(src, serverUrl))
+    const resolvedSrc = resolveMessageUrl(src, serverUrl)
+    image.setAttribute("src", resolvedSrc)
     image.setAttribute("loading", "lazy")
+
+    // Extract dimensions from Zulip thumbnail URL pattern for layout shift
+    // prevention. Sets width/height attributes so browsers compute the
+    // intrinsic aspect ratio before the image loads (responsive images spec).
+    if (!image.hasAttribute("width") || !image.hasAttribute("height")) {
+      const dims = extractDimensionsFromUrl(resolvedSrc)
+      if (dims) {
+        image.setAttribute("width", String(dims.width))
+        image.setAttribute("height", String(dims.height))
+      }
+    }
   }
 
-  return template.innerHTML
+  const container = document.createElement("div")
+  container.appendChild(template.content.cloneNode(true))
+  return container.innerHTML
 }
 
 export function shouldFetchAuthenticatedMedia(url: string, serverUrl?: string): boolean {
@@ -154,7 +220,13 @@ export function hydrateAuthenticatedMessageImages(
     )
     if (!requestUrl) continue
 
+    // Replace src with a transparent placeholder to prevent broken image
+    // icons during the authenticated fetch. CSS background + width/height
+    // attributes provide a skeleton rectangle while we wait for the data URL.
+    image.classList.add("image-loading-placeholder")
     image.setAttribute("data-foundry-auth-media-url", requestUrl)
+    image.setAttribute("src", TRANSPARENT_PIXEL)
+
     void fetchAuthenticatedMediaDataUrl(orgId, requestUrl).then((dataUrl) => {
       if (disposed || !dataUrl || !image.isConnected) return
       if (image.getAttribute("data-foundry-auth-media-url") !== requestUrl) return
@@ -223,6 +295,161 @@ const CHEVRON_RIGHT_PATH = "M8.25 4.5 15.75 12l-7.5 7.5"
 const DOWNLOAD_ICON_PATH = "M12 3.75V14.25 M8.25 10.5 12 14.25 15.75 10.5 M5.25 18.75H18.75"
 const EXTERNAL_LINK_PATH = "M13.5 4.5H19.5V10.5 M10.5 13.5L19.5 4.5 M16.5 13.5V18C16.5 18.8284 15.8284 19.5 15 19.5H6C5.17157 19.5 4.5 18.8284 4.5 18V9C4.5 8.17157 5.17157 7.5 6 7.5H10.5"
 const CLOSE_ICON_PATH = "M6 6L18 18 M18 6L6 18"
+const ZOOM_IN_ICON_PATH = "M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM10.5 7.5v6m3-3h-6"
+const ZOOM_OUT_ICON_PATH = "M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607ZM13.5 10.5h-6"
+
+const ZOOM_MIN = 1
+const ZOOM_MAX = 10
+const ZOOM_STEP = 1.25
+
+type ZoomPanControls = {
+  cleanup: () => void
+  reset: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+}
+
+function attachImageZoomPan(
+  frame: HTMLElement,
+  image: HTMLImageElement,
+  zoomLevelEl?: HTMLElement,
+): ZoomPanControls {
+  let scale = 1
+  let panX = 0
+  let panY = 0
+  let isPanning = false
+  let startX = 0
+  let startY = 0
+  let startPanX = 0
+  let startPanY = 0
+
+  function updateDisplay() {
+    if (scale <= 1) {
+      image.style.transform = ""
+      frame.classList.remove("is-zoomed", "is-panning")
+    } else {
+      image.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`
+      frame.classList.toggle("is-zoomed", true)
+    }
+    if (zoomLevelEl) {
+      zoomLevelEl.textContent = `${Math.round(scale * 100)}%`
+    }
+  }
+
+  function clampPan() {
+    if (scale <= 1) {
+      panX = 0
+      panY = 0
+      return
+    }
+    const imgW = image.offsetWidth
+    const imgH = image.offsetHeight
+    const frameW = frame.offsetWidth
+    const frameH = frame.offsetHeight
+    const maxPanX = Math.max(0, (scale * imgW - frameW) / 2)
+    const maxPanY = Math.max(0, (scale * imgH - frameH) / 2)
+    panX = Math.max(-maxPanX, Math.min(maxPanX, panX))
+    panY = Math.max(-maxPanY, Math.min(maxPanY, panY))
+  }
+
+  function resetZoom() {
+    scale = 1
+    panX = 0
+    panY = 0
+    updateDisplay()
+  }
+
+  function zoomTo(newScale: number, anchorX?: number, anchorY?: number) {
+    const clamped = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, newScale))
+    if (clamped === scale) return
+
+    if (anchorX !== undefined && anchorY !== undefined) {
+      const ratio = clamped / scale
+      panX = anchorX - (anchorX - panX) * ratio
+      panY = anchorY - (anchorY - panY) * ratio
+    }
+
+    scale = clamped
+    clampPan()
+    updateDisplay()
+  }
+
+  function zoomIn() {
+    zoomTo(scale * ZOOM_STEP)
+  }
+
+  function zoomOut() {
+    zoomTo(scale / ZOOM_STEP)
+  }
+
+  function handleWheel(event: WheelEvent) {
+    event.preventDefault()
+    const rect = frame.getBoundingClientRect()
+    const anchorX = event.clientX - rect.left - rect.width / 2
+    const anchorY = event.clientY - rect.top - rect.height / 2
+    const direction = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
+    zoomTo(scale * direction, anchorX, anchorY)
+  }
+
+  function handlePointerDown(event: PointerEvent) {
+    if (scale <= 1) return
+    if (event.button !== 0) return
+    isPanning = true
+    startX = event.clientX
+    startY = event.clientY
+    startPanX = panX
+    startPanY = panY
+    frame.classList.add("is-panning")
+    frame.setPointerCapture(event.pointerId)
+    event.preventDefault()
+  }
+
+  function handlePointerMove(event: PointerEvent) {
+    if (!isPanning) return
+    panX = startPanX + (event.clientX - startX)
+    panY = startPanY + (event.clientY - startY)
+    clampPan()
+    updateDisplay()
+  }
+
+  function handlePointerUp() {
+    if (!isPanning) return
+    isPanning = false
+    frame.classList.remove("is-panning")
+  }
+
+  function handleDoubleClick(event: MouseEvent) {
+    event.preventDefault()
+    if (scale > 1) {
+      resetZoom()
+    } else {
+      const rect = frame.getBoundingClientRect()
+      const anchorX = event.clientX - rect.left - rect.width / 2
+      const anchorY = event.clientY - rect.top - rect.height / 2
+      zoomTo(2, anchorX, anchorY)
+    }
+  }
+
+  frame.addEventListener("wheel", handleWheel, { passive: false })
+  frame.addEventListener("pointerdown", handlePointerDown)
+  frame.addEventListener("pointermove", handlePointerMove)
+  frame.addEventListener("pointerup", handlePointerUp)
+  frame.addEventListener("pointercancel", handlePointerUp)
+  frame.addEventListener("dblclick", handleDoubleClick)
+
+  const cleanup = () => {
+    frame.removeEventListener("wheel", handleWheel)
+    frame.removeEventListener("pointerdown", handlePointerDown)
+    frame.removeEventListener("pointermove", handlePointerMove)
+    frame.removeEventListener("pointerup", handlePointerUp)
+    frame.removeEventListener("pointercancel", handlePointerUp)
+    frame.removeEventListener("dblclick", handleDoubleClick)
+    resetZoom()
+  }
+
+  updateDisplay()
+  return { cleanup, reset: resetZoom, zoomIn, zoomOut }
+}
 
 function extractFilenameFromUrl(url: string): string {
   try {
@@ -247,6 +474,7 @@ function getImageFilename(source: GalleryImageSource): string {
 }
 
 type MessageImageCarouselOptions = {
+  downloadFile?: (url: string) => void | Promise<void>
   openLink?: (url: string) => void
   onViewerImageChange?: () => void
   serverUrl?: string
@@ -265,6 +493,7 @@ type GalleryImageSource = {
 type GalleryImageItem = GalleryImageSource & {
   thumbnailButton: HTMLButtonElement
   thumbnailImage: HTMLImageElement
+  tileDownloadButton: HTMLButtonElement
 }
 
 export function normalizeGalleryIndex(nextIndex: number, itemCount: number): number {
@@ -291,6 +520,35 @@ function createIcon(pathDefinition: string): SVGSVGElement {
 
 function resolveGalleryDownloadHref(url: string, serverUrl?: string): string {
   return getUserUploadDownloadUrl(url, serverUrl) || resolveMessageUrl(url, serverUrl)
+}
+
+function triggerMessageDownload(url: string, options?: MessageImageCarouselOptions) {
+  if (!url) return
+  if (options?.downloadFile) {
+    void options.downloadFile(url)
+    return
+  }
+  if (options?.openLink) {
+    options.openLink(url)
+    return
+  }
+  window.open(url, "_blank", "noopener,noreferrer")
+}
+
+function runAnimationCompletion(element: HTMLElement, onComplete: () => void) {
+  if (typeof AnimationEvent === "undefined") {
+    onComplete()
+    return
+  }
+
+  let completed = false
+  const finish = () => {
+    if (completed) return
+    completed = true
+    onComplete()
+  }
+
+  element.addEventListener("animationend", finish, { once: true })
 }
 
 function extractGalleryImageSource(
@@ -408,11 +666,10 @@ export function openMessageImageViewerFromLink(
   const actions = document.createElement("div")
   actions.className = "foundry-image-lightbox-actions"
 
-  const downloadLink = document.createElement("a")
-  downloadLink.className = "foundry-image-lightbox-download"
-  downloadLink.setAttribute("target", "_blank")
-  downloadLink.setAttribute("rel", "noopener noreferrer")
-  downloadLink.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
+  const downloadButton = document.createElement("button")
+  downloadButton.type = "button"
+  downloadButton.className = "foundry-image-lightbox-download"
+  downloadButton.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
 
   const externalLink = document.createElement("a")
   externalLink.className = "foundry-image-lightbox-link"
@@ -430,7 +687,28 @@ export function openMessageImageViewerFromLink(
   filenameEl.className = "foundry-image-lightbox-filename"
   filenameEl.textContent = getImageFilename(source)
 
-  actions.append(downloadLink, externalLink, closeButton)
+  const zoomControls = document.createElement("div")
+  zoomControls.className = "foundry-image-lightbox-zoom-controls"
+
+  const zoomOutButton = document.createElement("button")
+  zoomOutButton.type = "button"
+  zoomOutButton.className = "foundry-image-lightbox-zoom-btn"
+  zoomOutButton.setAttribute("aria-label", "Zoom out")
+  zoomOutButton.appendChild(createIcon(ZOOM_OUT_ICON_PATH))
+
+  const zoomLevelEl = document.createElement("span")
+  zoomLevelEl.className = "foundry-image-lightbox-zoom-level"
+  zoomLevelEl.textContent = "100%"
+  zoomLevelEl.setAttribute("title", "Reset zoom")
+
+  const zoomInButton = document.createElement("button")
+  zoomInButton.type = "button"
+  zoomInButton.className = "foundry-image-lightbox-zoom-btn"
+  zoomInButton.setAttribute("aria-label", "Zoom in")
+  zoomInButton.appendChild(createIcon(ZOOM_IN_ICON_PATH))
+
+  zoomControls.append(zoomOutButton, zoomLevelEl, zoomInButton)
+  actions.append(downloadButton, externalLink, closeButton)
   toolbar.append(counter, filenameEl, actions)
 
   const stage = document.createElement("div")
@@ -456,48 +734,79 @@ export function openMessageImageViewerFromLink(
   viewerImage.setAttribute("loading", "eager")
   viewerFrame.appendChild(viewerImage)
 
-  stage.append(prevButton, viewerFrame, nextButton)
+  stage.append(prevButton, viewerFrame, nextButton, zoomControls)
   dialog.append(toolbar, stage)
   lightbox.append(lightboxBackdrop, dialog)
   container.appendChild(lightbox)
 
+  const zoomPan = attachImageZoomPan(viewerFrame, viewerImage, zoomLevelEl)
+
   const setActiveSource = () => {
     setViewerImageSource(viewerImage, source, options?.serverUrl)
-    downloadLink.hidden = !source.downloadHref
-    downloadLink.setAttribute("href", source.downloadHref || "#")
-    downloadLink.setAttribute("aria-label", "Download image")
+    downloadButton.hidden = !source.downloadHref
+    downloadButton.setAttribute("aria-label", "Download image")
     externalLink.hidden = !source.externalHref
     externalLink.setAttribute("href", source.externalHref || "#")
     externalLink.setAttribute("aria-label", "Open image in browser")
     options?.onViewerImageChange?.()
   }
 
-  const cleanup = () => {
-    lightboxBackdrop.removeEventListener("click", handleClose)
-    closeButton.removeEventListener("click", handleClose)
-    dialog.removeEventListener("keydown", handleKeyDown)
-  }
-
   const restoreFocus = link.querySelector<HTMLElement>("img") || link
   const handleClose = () => {
     cleanup()
     viewerImage.removeAttribute("data-foundry-auth-prefer-original")
-    lightbox.remove()
-    restoreFocus.focus?.()
+    lightbox.classList.add("is-closing")
+    runAnimationCompletion(lightbox, () => {
+      lightbox.remove()
+      restoreFocus.focus?.({ preventScroll: true })
+    })
   }
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Escape") return
+    if (event.key === "Escape") {
+      event.preventDefault()
+      handleClose()
+    }
+    if (event.key === "=" || event.key === "+") {
+      event.preventDefault()
+      zoomPan.zoomIn()
+    }
+    if (event.key === "-") {
+      event.preventDefault()
+      zoomPan.zoomOut()
+    }
+    if (event.key === "0") {
+      event.preventDefault()
+      zoomPan.reset()
+    }
+  }
+  const handleDownload = (event: Event) => {
     event.preventDefault()
-    handleClose()
+    event.stopPropagation()
+    triggerMessageDownload(source.downloadHref, options)
+  }
+
+  const cleanup = () => {
+    zoomPan.cleanup()
+    lightboxBackdrop.removeEventListener("click", handleClose)
+    closeButton.removeEventListener("click", handleClose)
+    dialog.removeEventListener("keydown", handleKeyDown)
+    downloadButton.removeEventListener("click", handleDownload)
+    zoomInButton.removeEventListener("click", zoomPan.zoomIn)
+    zoomOutButton.removeEventListener("click", zoomPan.zoomOut)
+    zoomLevelEl.removeEventListener("click", zoomPan.reset)
   }
 
   lightboxBackdrop.addEventListener("click", handleClose)
   closeButton.addEventListener("click", handleClose)
   dialog.addEventListener("keydown", handleKeyDown)
+  downloadButton.addEventListener("click", handleDownload)
+  zoomInButton.addEventListener("click", zoomPan.zoomIn)
+  zoomOutButton.addEventListener("click", zoomPan.zoomOut)
+  zoomLevelEl.addEventListener("click", zoomPan.reset)
 
   setActiveSource()
-  queueMicrotask(() => dialog.focus())
+  queueMicrotask(() => dialog.focus({ preventScroll: true }))
   return true
 }
 
@@ -541,7 +850,7 @@ function renderActiveGalleryImage(
   viewerImage: HTMLImageElement,
   counter: HTMLElement,
   filenameEl: HTMLElement,
-  downloadLink: HTMLAnchorElement,
+  downloadButton: HTMLButtonElement,
   externalLink: HTMLAnchorElement,
   nextIndex: number,
   options?: MessageImageCarouselOptions,
@@ -559,9 +868,8 @@ function renderActiveGalleryImage(
   counter.textContent = `${activeIndex + 1} / ${items.length}`
   filenameEl.textContent = getImageFilename(activeItem)
   filenameEl.title = getImageFilename(activeItem)
-  downloadLink.hidden = !activeItem.downloadHref
-  downloadLink.setAttribute("href", activeItem.downloadHref || "#")
-  downloadLink.setAttribute("aria-label", `Download image ${activeIndex + 1}`)
+  downloadButton.hidden = !activeItem.downloadHref
+  downloadButton.setAttribute("aria-label", `Download image ${activeIndex + 1}`)
   externalLink.hidden = !activeItem.externalHref
   externalLink.setAttribute("href", activeItem.externalHref || "#")
   externalLink.setAttribute("aria-label", `Open image ${activeIndex + 1} in browser`)
@@ -698,11 +1006,10 @@ export function hydrateMessageImageCarousels(
       const actions = document.createElement("div")
       actions.className = "foundry-image-lightbox-actions"
 
-      const downloadLink = document.createElement("a")
-      downloadLink.className = "foundry-image-lightbox-download"
-      downloadLink.setAttribute("target", "_blank")
-      downloadLink.setAttribute("rel", "noopener noreferrer")
-      downloadLink.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
+      const downloadButton = document.createElement("button")
+      downloadButton.type = "button"
+      downloadButton.className = "foundry-image-lightbox-download"
+      downloadButton.append(createIcon(DOWNLOAD_ICON_PATH), document.createTextNode("Download"))
 
       const externalLink = document.createElement("a")
       externalLink.className = "foundry-image-lightbox-link"
@@ -719,7 +1026,28 @@ export function hydrateMessageImageCarousels(
       const filenameEl = document.createElement("span")
       filenameEl.className = "foundry-image-lightbox-filename"
 
-      actions.append(downloadLink, externalLink, closeButton)
+      const zoomControls = document.createElement("div")
+      zoomControls.className = "foundry-image-lightbox-zoom-controls"
+
+      const zoomOutButton = document.createElement("button")
+      zoomOutButton.type = "button"
+      zoomOutButton.className = "foundry-image-lightbox-zoom-btn"
+      zoomOutButton.setAttribute("aria-label", "Zoom out")
+      zoomOutButton.appendChild(createIcon(ZOOM_OUT_ICON_PATH))
+
+      const zoomLevelEl = document.createElement("span")
+      zoomLevelEl.className = "foundry-image-lightbox-zoom-level"
+      zoomLevelEl.textContent = "100%"
+      zoomLevelEl.setAttribute("title", "Reset zoom")
+
+      const zoomInButton = document.createElement("button")
+      zoomInButton.type = "button"
+      zoomInButton.className = "foundry-image-lightbox-zoom-btn"
+      zoomInButton.setAttribute("aria-label", "Zoom in")
+      zoomInButton.appendChild(createIcon(ZOOM_IN_ICON_PATH))
+
+      zoomControls.append(zoomOutButton, zoomLevelEl, zoomInButton)
+      actions.append(downloadButton, externalLink, closeButton)
       toolbar.append(counter, filenameEl, actions)
 
       const stage = document.createElement("div")
@@ -747,7 +1075,7 @@ export function hydrateMessageImageCarousels(
       viewerImage.setAttribute("loading", "eager")
       viewerFrame.appendChild(viewerImage)
 
-      stage.append(prevButton, viewerFrame, nextButton)
+      stage.append(prevButton, viewerFrame, nextButton, zoomControls)
       dialog.append(toolbar, stage)
       lightbox.append(lightboxBackdrop, dialog)
 
@@ -772,13 +1100,11 @@ export function hydrateMessageImageCarousels(
         const tileActions = document.createElement("div")
         tileActions.className = "foundry-image-gallery-item-actions"
 
-        const tileDownloadLink = document.createElement("a")
-        tileDownloadLink.className = "foundry-image-gallery-download"
-        tileDownloadLink.setAttribute("href", source.downloadHref)
-        tileDownloadLink.setAttribute("target", "_blank")
-        tileDownloadLink.setAttribute("rel", "noopener noreferrer")
-        tileDownloadLink.setAttribute("aria-label", `Download image ${index + 1}`)
-        tileDownloadLink.appendChild(createIcon(DOWNLOAD_ICON_PATH))
+        const tileDownloadButton = document.createElement("button")
+        tileDownloadButton.type = "button"
+        tileDownloadButton.className = "foundry-image-gallery-download"
+        tileDownloadButton.setAttribute("aria-label", `Download image ${index + 1}`)
+        tileDownloadButton.appendChild(createIcon(DOWNLOAD_ICON_PATH))
 
         const tileExternalLink = document.createElement("a")
         tileExternalLink.className = "foundry-image-gallery-open"
@@ -788,7 +1114,7 @@ export function hydrateMessageImageCarousels(
         tileExternalLink.setAttribute("aria-label", `Open image ${index + 1} in browser`)
         tileExternalLink.appendChild(createIcon(EXTERNAL_LINK_PATH))
 
-        tileActions.append(tileDownloadLink, tileExternalLink)
+        tileActions.append(tileDownloadButton, tileExternalLink)
         tile.append(thumbnailButton, tileActions)
         grid.appendChild(tile)
 
@@ -796,6 +1122,7 @@ export function hydrateMessageImageCarousels(
           ...source,
           thumbnailButton,
           thumbnailImage,
+          tileDownloadButton,
         }
       })
 
@@ -804,16 +1131,19 @@ export function hydrateMessageImageCarousels(
       redundantBlocks.forEach((block) => block.remove())
       wrapper.append(header, grid, lightbox)
 
+      const zoomPan = attachImageZoomPan(viewerFrame, viewerImage, zoomLevelEl)
+
       let activeIndex = 0
       let lastTrigger: HTMLButtonElement | null = null
 
       const render = (nextIndex: number) => {
+        zoomPan.reset()
         activeIndex = renderActiveGalleryImage(
           items,
           viewerImage,
           counter,
           filenameEl,
-          downloadLink,
+          downloadButton,
           externalLink,
           nextIndex,
           options,
@@ -825,19 +1155,24 @@ export function hydrateMessageImageCarousels(
         lightbox.hidden = false
         wrapper.dataset.viewerOpen = "true"
         render(nextIndex)
-        queueMicrotask(() => dialog.focus())
+        queueMicrotask(() => dialog.focus({ preventScroll: true }))
       }
 
       const closeViewer = () => {
-        lightbox.hidden = true
-        wrapper.dataset.viewerOpen = "false"
+        zoomPan.reset()
         viewerImage.removeAttribute("data-foundry-auth-prefer-original")
-        // Reset all thumbnail active states so none stays highlighted
-        for (const item of items) {
-          item.thumbnailButton.dataset.active = "false"
-          item.thumbnailButton.setAttribute("aria-current", "false")
-        }
-        lastTrigger?.focus()
+        lightbox.classList.add("is-closing")
+        runAnimationCompletion(lightbox, () => {
+          lightbox.hidden = true
+          lightbox.classList.remove("is-closing")
+          wrapper.dataset.viewerOpen = "false"
+          // Reset all thumbnail active states so none stays highlighted
+          for (const item of items) {
+            item.thumbnailButton.dataset.active = "false"
+            item.thumbnailButton.setAttribute("aria-current", "false")
+          }
+          lastTrigger?.focus({ preventScroll: true })
+        })
       }
 
       const handlePrev = () => render(activeIndex - 1)
@@ -848,12 +1183,15 @@ export function hydrateMessageImageCarousels(
 
         for (const item of items) {
           if (!item.downloadHref) continue
-          if (options?.openLink) {
-            options.openLink(item.downloadHref)
-            continue
-          }
-          window.open(item.downloadHref, "_blank", "noopener,noreferrer")
+          triggerMessageDownload(item.downloadHref, options)
         }
+      }
+      const handleViewerDownload = (event: Event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        const activeItem = items[activeIndex]
+        if (!activeItem?.downloadHref) return
+        triggerMessageDownload(activeItem.downloadHref, options)
       }
       const handleBackdropClick = () => closeViewer()
       const handleClose = () => closeViewer()
@@ -870,28 +1208,56 @@ export function hydrateMessageImageCarousels(
           event.preventDefault()
           handleNext()
         }
+        if (event.key === "=" || event.key === "+") {
+          event.preventDefault()
+          zoomPan.zoomIn()
+        }
+        if (event.key === "-") {
+          event.preventDefault()
+          zoomPan.zoomOut()
+        }
+        if (event.key === "0") {
+          event.preventDefault()
+          zoomPan.reset()
+        }
       }
 
       prevButton.addEventListener("click", handlePrev)
       nextButton.addEventListener("click", handleNext)
       downloadAllButton.addEventListener("click", handleDownloadAll)
+      downloadButton.addEventListener("click", handleViewerDownload)
       lightboxBackdrop.addEventListener("click", handleBackdropClick)
       closeButton.addEventListener("click", handleClose)
       dialog.addEventListener("keydown", handleDialogKeyDown)
+      zoomInButton.addEventListener("click", zoomPan.zoomIn)
+      zoomOutButton.addEventListener("click", zoomPan.zoomOut)
+      zoomLevelEl.addEventListener("click", zoomPan.reset)
 
       items.forEach((item, itemIndex) => {
         const handleClick = () => openViewer(itemIndex, item.thumbnailButton)
+        const handleDownloadClick = (event: Event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          triggerMessageDownload(item.downloadHref, options)
+        }
         item.thumbnailButton.addEventListener("click", handleClick)
+        item.tileDownloadButton.addEventListener("click", handleDownloadClick)
         cleanups.push(() => item.thumbnailButton.removeEventListener("click", handleClick))
+        cleanups.push(() => item.tileDownloadButton.removeEventListener("click", handleDownloadClick))
       })
 
       cleanups.push(() => {
+        zoomPan.cleanup()
         prevButton.removeEventListener("click", handlePrev)
         nextButton.removeEventListener("click", handleNext)
         downloadAllButton.removeEventListener("click", handleDownloadAll)
+        downloadButton.removeEventListener("click", handleViewerDownload)
         lightboxBackdrop.removeEventListener("click", handleBackdropClick)
         closeButton.removeEventListener("click", handleClose)
         dialog.removeEventListener("keydown", handleDialogKeyDown)
+        zoomInButton.removeEventListener("click", zoomPan.zoomIn)
+        zoomOutButton.removeEventListener("click", zoomPan.zoomOut)
+        zoomLevelEl.removeEventListener("click", zoomPan.reset)
       })
     }
   }

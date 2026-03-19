@@ -1,4 +1,4 @@
-import { type JSX, createSignal, createEffect, Show, onMount, onCleanup } from "solid-js"
+import { type JSX, createSignal, createEffect, Show, onMount, onCleanup, on } from "solid-js"
 import { listen } from "@tauri-apps/api/event"
 import { ZulipSyncProvider, useZulipSync, registerActiveNarrowGetter } from "./context/zulip-sync"
 import { OrgProvider, useOrg } from "./context/org"
@@ -9,6 +9,7 @@ import { SettingsProvider, useSettings } from "./context/settings"
 import { PresenceProvider } from "./context/presence"
 import { getUnreadTotalCount } from "./context/unread-state"
 import { usePlatform } from "./context/platform"
+import { ToastProvider } from "./components/toast-provider"
 import { LoginView } from "./views/login"
 import { InboxView } from "./views/inbox"
 import { SettingsView, normalizeSettingsRoute } from "./views/settings"
@@ -375,6 +376,7 @@ export function App(props: {
                     <ZulipSyncProvider orgId={result.org_id}>
                       <NavigationProvider>
                         <SupervisorProvider orgId={result.org_id}>
+                        <ToastProvider>
                           <AppShell
                             loginResult={result}
                             loginEmail={loginEmail()}
@@ -387,6 +389,7 @@ export function App(props: {
                             onLogout={handleManualLogout}
                             onSwitchOrg={handleSwitchOrg}
                           />
+                        </ToastProvider>
                         </SupervisorProvider>
                       </NavigationProvider>
                     </ZulipSyncProvider>
@@ -746,7 +749,7 @@ function AppShell(props: {
 
       if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
         // Focus search
-        const searchEl = document.querySelector<HTMLInputElement>('[data-component="stream-search"] input')
+        const searchEl = document.querySelector<HTMLInputElement>('[data-component="search-bar"] input')
         if (searchEl) {
           e.preventDefault()
           searchEl.focus()
@@ -846,7 +849,26 @@ function AppShell(props: {
 
           {/* Main content */}
           <main class="flex-1 flex flex-col min-w-0" data-component="main-content">
-            {renderMainContent(nav)}
+            {(() => {
+              let mainRef!: HTMLDivElement
+              let isFirst = true
+              // Re-trigger view-enter animation on narrow change (skip first render)
+              createEffect(on(
+                () => nav.activeNarrow(),
+                () => {
+                  if (isFirst) { isFirst = false; return }
+                  if (!mainRef) return
+                  mainRef.classList.remove("view-enter")
+                  void mainRef.offsetWidth // force reflow
+                  mainRef.classList.add("view-enter")
+                },
+              ))
+              return (
+                <div ref={mainRef!} class="flex-1 flex flex-col min-h-0">
+                  {renderMainContent(nav)}
+                </div>
+              )
+            })()}
           </main>
 
           {/* Right sidebar (user list) */}

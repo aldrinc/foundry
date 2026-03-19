@@ -40,6 +40,11 @@ struct CallLinkResponse {
     url: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct AvatarUrlResponse {
+    avatar_url: String,
+}
+
 fn is_resolved_topic(topic_name: &str) -> bool {
     topic_name.starts_with(RESOLVED_TOPIC_PREFIX)
 }
@@ -1906,12 +1911,7 @@ impl ZulipClient {
             return Err(format!("Upload avatar failed: {}", body));
         }
 
-        #[derive(Deserialize)]
-        struct AvatarResponse {
-            avatar_url: String,
-        }
-
-        let parsed: AvatarResponse = resp
+        let parsed: AvatarUrlResponse = resp
             .json()
             .await
             .map_err(|e| format!("Failed to parse avatar response: {}", e))?;
@@ -1920,7 +1920,7 @@ impl ZulipClient {
     }
 
     /// DELETE /api/v1/users/me/avatar — Delete user avatar (revert to default)
-    pub async fn delete_avatar(&self) -> Result<(), String> {
+    pub async fn delete_avatar(&self) -> Result<String, String> {
         let resp = self
             .delete("/api/v1/users/me/avatar")
             .send()
@@ -1932,7 +1932,12 @@ impl ZulipClient {
             return Err(format!("Delete avatar failed: {}", body));
         }
 
-        Ok(())
+        let parsed: AvatarUrlResponse = resp
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse avatar delete response: {}", e))?;
+
+        Ok(parsed.avatar_url)
     }
 }
 

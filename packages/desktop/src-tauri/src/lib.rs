@@ -163,6 +163,7 @@ fn create_specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::update_presence,
         commands::send_typing,
         commands::save_temp_file,
+        commands::download_file,
         commands::get_file_size_bytes,
         commands::upload_file,
         commands::fetch_authenticated_media_data_url,

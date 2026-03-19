@@ -120,7 +120,23 @@ function normalizeUploadPath(url: string): string {
   }
 }
 
-export function hydrateFileAttachmentCards(container: HTMLElement, serverUrl?: string): () => void {
+function triggerFileDownload(
+  url: string,
+  options?: { downloadFile?: (url: string) => void | Promise<void> },
+) {
+  if (!url) return
+  if (options?.downloadFile) {
+    void options.downloadFile(url)
+    return
+  }
+  window.open(url, "_blank", "noopener,noreferrer")
+}
+
+export function hydrateFileAttachmentCards(
+  container: HTMLElement,
+  serverUrl?: string,
+  options?: { downloadFile?: (url: string) => void | Promise<void> },
+): () => void {
   const cleanups: Array<() => void> = []
 
   // Collect upload paths already displayed in image galleries or as inline
@@ -207,14 +223,20 @@ export function hydrateFileAttachmentCards(container: HTMLElement, serverUrl?: s
 
     infoSection.append(nameEl, metaEl)
 
-    const downloadBtn = document.createElement("a")
+    const downloadBtn = document.createElement("button")
+    downloadBtn.type = "button"
     downloadBtn.className = "file-attachment-download"
-    downloadBtn.href = href
-    downloadBtn.setAttribute("target", "_blank")
-    downloadBtn.setAttribute("rel", "noopener noreferrer")
     downloadBtn.setAttribute("aria-label", `Download ${filename}`)
     downloadBtn.setAttribute("title", "Download")
     downloadBtn.appendChild(createDownloadIcon())
+
+    const handleDownload = (event: Event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      triggerFileDownload(href, options)
+    }
+    downloadBtn.addEventListener("click", handleDownload)
+    cleanups.push(() => downloadBtn.removeEventListener("click", handleDownload))
 
     card.append(iconSection, infoSection, downloadBtn)
 

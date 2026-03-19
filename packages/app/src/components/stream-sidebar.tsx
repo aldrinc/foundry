@@ -511,7 +511,8 @@ function StreamItem(props: {
 
       {/* Topics list */}
       <Show when={expanded()}>
-        <div class="ml-6 border-l border-[var(--border-default)]">
+        <div class="sidebar-section-collapse" data-expanded="true">
+          <div class="ml-6 border-l border-[var(--border-default)]">
           <Show when={loadingTopics()}>
             <div class="text-[11px] text-[var(--text-tertiary)] px-3 py-1">Loading topics...</div>
           </Show>
@@ -630,6 +631,7 @@ function StreamItem(props: {
               <span class="flex-1 truncate">New topic</span>
             </div>
           </Show>
+          </div>
         </div>
       </Show>
 
@@ -637,7 +639,7 @@ function StreamItem(props: {
       <Show when={contextMenu()}>
         {(ctx) => (
           <div
-            class="fixed z-50 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-md py-1 min-w-[180px]"
+            class="fixed z-50 bg-[var(--background-surface)] border border-[var(--border-default)] rounded-[var(--radius-md)] shadow-md py-1 min-w-[180px] context-menu-enter"
             style={{ left: `${ctx().x}px`, top: `${ctx().y}px` }}
           >
             <Show when={ctx().type === "stream"}>

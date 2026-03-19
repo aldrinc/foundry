@@ -206,6 +206,17 @@ async saveTempFile(fileName: string, data: number[]) : Promise<Result<string, st
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Download a message file/image directly to the configured local download directory.
+ */
+async downloadFile(orgId: string, url: string, suggestedFileName: string | null) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("download_file", { orgId, url, suggestedFileName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getFileSizeBytes(filePath: string) : Promise<Result<number, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_file_size_bytes", { filePath }) };
@@ -438,7 +449,7 @@ async uploadAvatar(orgId: string, filePath: string) : Promise<Result<string, str
 /**
  * Delete the current user's avatar (revert to default)
  */
-async deleteAvatar(orgId: string) : Promise<Result<null, string>> {
+async deleteAvatar(orgId: string) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("delete_avatar", { orgId }) };
 } catch (e) {

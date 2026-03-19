@@ -2,13 +2,14 @@ import { createEffect, createSignal, For, Show, on, onCleanup } from "solid-js"
 import { useZulipSync } from "../context/zulip-sync"
 import { useOrg } from "../context/org"
 import { useNavigation } from "../context/navigation"
-import { narrowToApiFilters } from "../context/navigation-utils"
+import { narrowToApiFilters, parseNarrow } from "../context/navigation-utils"
 import { useSupervisor } from "../context/supervisor"
 import { commands } from "@foundry/desktop/bindings"
 import type { NarrowFilter } from "@foundry/desktop/bindings"
 import { MessageItem } from "./message-item"
 import type { ReplyTarget } from "./message-reply"
 import { scrollToMessageWhenReady } from "./message-scroll"
+import { countNewlyAppendedMessages } from "./message-list-utils"
 import { THREAD_SCROLL_TO_BOTTOM_EVENT, type ThreadScrollDetail } from "./thread-scroll"
 
 const IS_DEMO = typeof window !== "undefined" && window.location.search.includes("demo")
@@ -37,16 +38,16 @@ function isDifferentDay(ts1: number, ts2: number): boolean {
 function MessageSkeleton(props: { short?: boolean }) {
   return (
     <div class="flex gap-3 px-5 py-1 pt-4">
-      <div class="w-9 h-9 rounded-full bg-[var(--background-elevated)] animate-pulse shrink-0" />
+      <div class="w-9 h-9 rounded-full skeleton-shimmer shrink-0" />
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
-          <div class="w-24 h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" />
-          <div class="w-10 h-3 rounded bg-[var(--background-elevated)] animate-pulse" />
+          <div class="w-24 h-3.5 rounded skeleton-shimmer" />
+          <div class="w-10 h-3 rounded skeleton-shimmer" />
         </div>
         <div class="space-y-1.5">
-          <div class="h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" style={{ width: props.short ? "40%" : "85%" }} />
+          <div class="h-3.5 rounded skeleton-shimmer" style={{ width: props.short ? "40%" : "85%" }} />
           <Show when={!props.short}>
-            <div class="h-3.5 rounded bg-[var(--background-elevated)] animate-pulse" style={{ width: "60%" }} />
+            <div class="h-3.5 rounded skeleton-shimmer" style={{ width: "60%" }} />
           </Show>
         </div>
       </div>
@@ -68,6 +69,8 @@ export function MessageList(props: {
   const [error, setError] = createSignal("")
   let scrollContainer!: HTMLDivElement
   let isAtBottom = true
+  const [showScrollBtn, setShowScrollBtn] = createSignal(false)
+  const [newMsgCount, setNewMsgCount] = createSignal(0)
 
   const messages = () => sync.store.messages[props.narrow] || []
   const loadState = () => sync.store.messageLoadState[props.narrow] || "idle"
@@ -208,6 +211,11 @@ export function MessageList(props: {
     if (!scrollContainer) return
     const { scrollTop, scrollHeight, clientHeight } = scrollContainer
     isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+    setShowScrollBtn(!isAtBottom)
+
+    if (isAtBottom) {
+      setNewMsgCount(0)
+    }
 
     // Load older messages when scrolled to top
     if (scrollTop < 100 && loadState() === "idle" && !loading()) {
@@ -216,14 +224,21 @@ export function MessageList(props: {
   }
 
   // Auto-scroll to bottom on new messages if already at bottom
-  createEffect(() => {
-    const _ = messages().length
-    if (isAtBottom && scrollContainer) {
-      requestAnimationFrame(() => {
-        scrollToBottom()
-      })
-    }
-  })
+  createEffect(on(
+    messages,
+    (nextMessages, previousMessages) => {
+      if (isAtBottom && scrollContainer) {
+        requestAnimationFrame(() => {
+          scrollToBottom()
+        })
+      } else {
+        const appendedCount = countNewlyAppendedMessages(previousMessages, nextMessages)
+        if (appendedCount > 0) {
+          setNewMsgCount(c => c + appendedCount)
+        }
+      }
+    },
+  ))
 
   // Clean up polling on component dispose
   onCleanup(() => { if (scrollPollTimer) clearInterval(scrollPollTimer) })
@@ -319,8 +334,17 @@ export function MessageList(props: {
     return sync.store.subscriptions.find(s => s.stream_id === parsed.streamId)?.color
   }
 
+  // Stream-level topic dividers
+  const isStreamNarrow = () => parseNarrow(props.narrow)?.type === "stream"
+  const streamNarrowId = () => parseNarrow(props.narrow)?.streamId
+
+  const needsTopicDivider = (msg: { subject: string; stream_id: number | null }, prev: { subject: string; stream_id: number | null } | null) => {
+    if (!prev) return true
+    return msg.subject !== prev.subject
+  }
+
   return (
-    <div class="flex-1 flex flex-col min-h-0" data-component="message-list">
+    <div class="flex-1 flex flex-col min-h-0 relative" data-component="message-list">
       {/* Header */}
       <header class="h-12 flex items-center gap-2 px-4 border-b border-[var(--border-default)] bg-[var(--background-surface)] shrink-0">
         <Show when={headerColor()}>
@@ -455,12 +479,14 @@ export function MessageList(props: {
             <For each={messages()}>
               {(message, idx) => {
                 const prev = () => idx() > 0 ? messages()[idx() - 1] : null
+                const showTopicDivider = () => isStreamNarrow() && needsTopicDivider(message, prev())
                 const showDateSeparator = () => {
                   const p = prev()
                   if (!p) return true
                   return isDifferentDay(p.timestamp, message.timestamp)
                 }
                 const showSender = () => {
+                  if (showTopicDivider()) return true
                   if (showDateSeparator()) return true
                   const p = prev()
                   if (!p) return true
@@ -471,10 +497,32 @@ export function MessageList(props: {
 
                 return (
                   <>
-                    <Show when={showDateSeparator()}>
+                    <Show when={showTopicDivider()}>
+                      <button
+                        class="w-full flex items-center gap-1.5 px-4 py-1.5 text-left bg-[var(--background-surface)] border-b border-t border-[var(--border-default)] hover:bg-[var(--background-elevated)] transition-colors sticky top-0 z-10"
+                        data-component="topic-divider"
+                        onClick={() => {
+                          const sid = streamNarrowId()
+                          if (sid != null) nav.setActiveNarrow(`stream:${sid}/topic:${message.subject}`)
+                        }}
+                      >
+                        <Show when={headerColor()}>
+                          {(color) => (
+                            <span class="w-2 h-2 rounded-full shrink-0" style={{ "background-color": color() }} />
+                          )}
+                        </Show>
+                        <span class="text-xs font-medium text-[var(--text-secondary)] truncate">
+                          {message.subject}
+                        </span>
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" class="shrink-0 text-[var(--text-quaternary)] ml-auto">
+                          <path d="M3.5 2l3.5 3-3.5 3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                      </button>
+                    </Show>
+                    <Show when={showDateSeparator() && !showTopicDivider()}>
                       <div class="flex items-center px-5 pt-6 pb-2 select-none" data-component="date-separator">
                         <div class="flex-1 h-px bg-[var(--border-default)]" />
-                        <span class="text-xs font-semibold text-[var(--text-secondary)] whitespace-nowrap px-3 py-0.5 rounded-full border border-[var(--border-default)] bg-[var(--background-base)]">
+                        <span class="text-sm font-semibold text-[var(--text-primary)] whitespace-nowrap px-4 py-1 rounded-full border border-[var(--border-default)] bg-[var(--background-base)]">
                           {formatDateSeparator(message.timestamp)}
                         </span>
                         <div class="flex-1 h-px bg-[var(--border-default)]" />
@@ -519,6 +567,28 @@ export function MessageList(props: {
           <div style={{ height: "16px" }} />
         </Show>
       </div>
+
+      {/* Scroll-to-bottom floating button */}
+      <Show when={showScrollBtn()}>
+        <button
+          class="scroll-to-bottom-btn absolute bottom-4 right-4 z-20 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--background-surface)] border border-[var(--border-default)] shadow-md text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--background-elevated)] transition-colors"
+          onClick={() => {
+            scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: "smooth" })
+            setShowScrollBtn(false)
+            setNewMsgCount(0)
+          }}
+          title="Scroll to bottom"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M6 2v8M3 7l3 3 3-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <Show when={newMsgCount() > 0}>
+            <span class="px-1.5 py-0.5 rounded-full bg-[var(--interactive-primary)] text-[var(--interactive-primary-text)] text-[10px] font-medium">
+              {newMsgCount()}
+            </span>
+          </Show>
+        </button>
+      </Show>
     </div>
   )
 }

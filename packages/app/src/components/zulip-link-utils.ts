@@ -297,6 +297,67 @@ export function parseZulipConversationLink(
   return null
 }
 
+export interface ParsedSameOriginRoute {
+  narrow: string | null
+}
+
+const SAME_ORIGIN_HASH_ROUTES: Record<string, string | null> = {
+  "#recent": "recent-topics",
+  "#all": "all-messages",
+  "#starred": "starred",
+  "#inbox": null,
+}
+
+function normalizePathname(pathname: string): string {
+  if (pathname === "/") return pathname
+  return pathname.replace(/\/+$/, "")
+}
+
+/**
+ * Catch same-origin links that point back to the realm but weren't matched by
+ * `parseZulipConversationLink` (which only handles `#narrow/…` hashes).
+ *
+ * Returns a route when the link is a same-origin URL we can handle in-app,
+ * or `null` when the link should fall through to the browser.
+ */
+export function parseSameOriginHashRoute(
+  rawLink: string,
+  realmUrl: string | undefined,
+): ParsedSameOriginRoute | null {
+  if (!realmUrl) return null
+
+  const trimmed = rawLink.trim()
+  if (!trimmed) return null
+
+  let url: URL
+  let realm: URL
+  try {
+    url = new URL(trimmed, realmUrl)
+    realm = new URL(realmUrl)
+  } catch {
+    return null
+  }
+
+  if (url.origin !== realm.origin) return null
+
+  const samePath = normalizePathname(url.pathname) === normalizePathname(realm.pathname)
+  const sameSearch = url.search === realm.search
+  if (!samePath || !sameSearch) return null
+
+  // Known hash routes
+  const hash = url.hash
+  if (hash in SAME_ORIGIN_HASH_ROUTES) {
+    return { narrow: SAME_ORIGIN_HASH_ROUTES[hash] }
+  }
+
+  // Same-origin link with no hash or empty hash → inbox
+  if (!hash || hash === "#") {
+    return { narrow: null }
+  }
+
+  return null
+}
+
 export function transformZulipConversationLinkToMarkdown(
   rawLink: string,
   options: ParseLinkOptions = {},

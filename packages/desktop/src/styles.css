@@ -348,7 +348,8 @@
   }
 
   [data-component="message-content"] .foundry-image-gallery {
-    max-width: min(100%, 640px);
+    max-width: 100%;
+    width: fit-content;
     margin-top: 0.5rem;
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
@@ -398,15 +399,17 @@
   }
 
   [data-component="message-content"] .foundry-image-gallery-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 0.5rem;
     padding: 0.625rem;
   }
 
   [data-component="message-content"] .foundry-image-gallery-item {
     position: relative;
-    aspect-ratio: 1 / 1;
+    width: 13.125rem;
+    height: 13.125rem;
+    flex-shrink: 0;
   }
 
   [data-component="message-content"] .foundry-image-gallery-thumb {
@@ -456,10 +459,12 @@
     border-radius: 999px;
     background: color-mix(in srgb, black 58%, transparent 42%);
     color: white;
-    opacity: 0.84;
+    opacity: 0;
     box-shadow: 0 0.5rem 1rem rgba(15, 23, 42, 0.28);
     transition: opacity 140ms ease, transform 140ms ease, border-color 140ms ease;
     text-decoration: none;
+    cursor: pointer;
+    padding: 0;
   }
 
   [data-component="message-content"] .foundry-image-gallery-item:hover .foundry-image-gallery-download,
@@ -481,6 +486,7 @@
   [data-component="message-content"] .foundry-image-lightbox-download svg,
   [data-component="message-content"] .foundry-image-lightbox-link svg,
   [data-component="message-content"] .foundry-image-lightbox-close svg,
+  [data-component="message-content"] .foundry-image-lightbox-zoom-btn svg,
   [data-component="message-content"] .foundry-image-lightbox-nav svg {
     width: 1rem;
     height: 1rem;
@@ -505,38 +511,52 @@
     position: absolute;
     inset: 0;
     border: none;
-    background: color-mix(in srgb, var(--surface-left-bar) 84%, transparent 16%);
+    background: color-mix(in srgb, var(--surface-left-bar) 60%, transparent 40%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     cursor: pointer;
     padding: 0;
+    animation: lightbox-backdrop-in 220ms ease-out both;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-dialog {
     position: relative;
     z-index: 1;
-    width: min(92vw, 64rem);
-    max-height: min(88vh, 52rem);
+    width: calc(100vw - 3rem);
+    height: calc(100vh - 3rem);
     display: flex;
     flex-direction: column;
-    gap: 0.875rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--border-default) 88%, white 12%);
-    border-radius: calc(var(--radius-lg) + 0.125rem);
-    background: var(--background-base);
-    box-shadow: 0 1.5rem 4rem color-mix(in srgb, var(--surface-left-bar) 34%, transparent 66%);
+    border: none;
+    border-radius: var(--radius-lg);
+    background: transparent;
     outline: none;
+    animation: lightbox-content-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-toolbar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 2;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    opacity: 0;
+    transition: opacity 180ms ease;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-dialog:hover .foundry-image-lightbox-toolbar,
+  [data-component="message-content"] .foundry-image-lightbox-toolbar:focus-within {
+    opacity: 1;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-counter {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
     flex-shrink: 0;
   }
 
@@ -545,7 +565,7 @@
     min-width: 0;
     font-size: 0.75rem;
     font-weight: 500;
-    color: var(--text-tertiary);
+    color: rgba(255, 255, 255, 0.5);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -560,16 +580,17 @@
   [data-component="message-content"] .foundry-image-lightbox-download,
   [data-component="message-content"] .foundry-image-lightbox-link,
   [data-component="message-content"] .foundry-image-lightbox-close,
+  [data-component="message-content"] .foundry-image-lightbox-zoom-btn,
   [data-component="message-content"] .foundry-image-lightbox-nav {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
-    transition: background 140ms ease, color 140ms ease;
+    transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
     text-decoration: none;
   }
 
@@ -582,6 +603,7 @@
   }
 
   [data-component="message-content"] .foundry-image-lightbox-close,
+  [data-component="message-content"] .foundry-image-lightbox-zoom-btn,
   [data-component="message-content"] .foundry-image-lightbox-nav {
     width: 2rem;
     height: 2rem;
@@ -591,26 +613,30 @@
   [data-component="message-content"] .foundry-image-lightbox-download:hover,
   [data-component="message-content"] .foundry-image-lightbox-link:hover,
   [data-component="message-content"] .foundry-image-lightbox-close:hover,
+  [data-component="message-content"] .foundry-image-lightbox-zoom-btn:hover,
   [data-component="message-content"] .foundry-image-lightbox-nav:hover {
-    background: var(--background-surface);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: white;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-stage {
     position: relative;
-    min-height: min(68vh, 38rem);
+    flex: 1;
+    min-height: 0;
+    padding-top: 3rem;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-frame {
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: inherit;
-    border: 1px solid color-mix(in srgb, var(--border-default) 86%, white 14%);
-    border-radius: var(--radius-lg);
-    background: var(--background-surface);
+    height: 100%;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
     overflow: hidden;
-    padding: 1rem 4rem;
+    padding: 0;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-nav {
@@ -618,6 +644,12 @@
     top: 50%;
     transform: translateY(-50%);
     z-index: 1;
+    opacity: 0;
+    transition: opacity 180ms ease, background 140ms ease, color 140ms ease, border-color 140ms ease;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-dialog:hover .foundry-image-lightbox-nav:not([hidden]) {
+    opacity: 1;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-nav.is-prev {
@@ -631,11 +663,64 @@
   [data-component="message-content"] .foundry-image-lightbox-image {
     width: auto;
     max-width: 100%;
-    max-height: min(72vh, 44rem);
+    max-height: 100%;
+    object-fit: contain;
     margin-top: 0;
     border: none;
     border-radius: 0;
     background: transparent;
+    opacity: 0;
+    transition: opacity 200ms ease-out, transform 80ms ease-out;
+    transform-origin: center center;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-frame.is-zoomed {
+    cursor: grab;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-frame.is-panning {
+    cursor: grabbing;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-frame.is-zoomed .foundry-image-lightbox-image {
+    will-change: transform;
+    transition: opacity 200ms ease-out;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-zoom-controls {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    padding: 0.2rem;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-zoom-level {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    min-width: 2.5rem;
+    text-align: center;
+    cursor: pointer;
+    padding: 0.25rem 0.125rem;
+    border-radius: var(--radius-sm);
+    transition: color 140ms ease;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-zoom-level:hover {
+    color: white;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox-image.is-loaded {
+    opacity: 1;
   }
 
   [data-component="message-content"] .foundry-image-lightbox-image.image-loading-placeholder {
@@ -653,17 +738,17 @@
     }
 
     [data-component="message-content"] .foundry-image-lightbox-dialog {
-      width: 100%;
-      padding: 0.75rem;
+      width: calc(100vw - 1.5rem);
+      height: calc(100vh - 1.5rem);
+    }
+
+    [data-component="message-content"] .foundry-image-lightbox-toolbar {
+      padding: 0.5rem 0.625rem;
     }
 
     [data-component="message-content"] .foundry-image-lightbox-download,
     [data-component="message-content"] .foundry-image-lightbox-link {
       padding: 0.375rem 0.625rem;
-    }
-
-    [data-component="message-content"] .foundry-image-lightbox-frame {
-      padding: 1rem 3rem;
     }
 
     [data-component="message-content"] .foundry-image-lightbox-nav.is-prev {
@@ -787,6 +872,64 @@
   [data-component="message-content"] blockquote blockquote {
     border-left-color: var(--border-strong);
     background: transparent;
+  }
+
+  /* Reply quote cards — Slack-style block reply indicators */
+  .foundry-reply-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-left: 4px solid var(--border-strong);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    margin: 4px 0 6px 0;
+    padding: 8px 12px;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--background-surface) 85%, var(--background-elevated) 15%);
+  }
+
+  .foundry-reply-icon {
+    flex-shrink: 0;
+    color: var(--interactive-primary);
+    width: 20px;
+    height: 20px;
+    margin-top: 1px;
+  }
+
+  .foundry-reply-content {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .foundry-reply-sender {
+    font-weight: 700;
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .foundry-reply-text {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .foundry-reply-meta {
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    text-decoration: none;
+    margin-top: 2px;
+  }
+
+  .foundry-reply-meta:hover {
+    color: var(--interactive-primary);
+    text-decoration: underline;
   }
 
   /* Lists — restore bullets/numbers stripped by Tailwind reset */
@@ -950,8 +1093,12 @@
     width: 1.75rem;
     height: 1.75rem;
     flex-shrink: 0;
+    border: none;
     border-radius: var(--radius-sm);
+    background: transparent;
     color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0;
     text-decoration: none;
     transition: color 140ms ease, background 140ms ease;
   }
@@ -993,11 +1140,21 @@
 
   /* ===== MESSAGE LIST LOADING — layout shift prevention ===== */
 
-  /* Reserve vertical space for standard inline images while they load.
-     Targets only Zulip's .message_inline_image wrappers — gallery thumbs
-     and lightbox images already have explicit sizing. */
+  /* Reserve vertical space for inline images while they load.
+     Zulip wraps uploaded images in .message_inline_image. We set a
+     fallback aspect-ratio so the box occupies the right shape before
+     load. The `auto` prefix means the intrinsic ratio (from width/
+     height attributes or the loaded image) takes over once available.
+     Gallery thumbs and lightbox images already have explicit sizing. */
   [data-component="message-content"] .message_inline_image img {
-    min-height: 100px;
+    aspect-ratio: auto 16 / 10;
+  }
+
+  /* Loading placeholder for images awaiting authenticated fetch.
+     The transparent pixel src + background-surface shows a clean
+     skeleton rectangle instead of a broken image icon. */
+  [data-component="message-content"] img.image-loading-placeholder {
+    opacity: 0.5;
   }
 
   /* Respect reduced-motion preference (WCAG SC 2.3.3) */
@@ -1043,16 +1200,14 @@
   @keyframes message-list-fade-in {
     from {
       opacity: 0;
-      transform: translateY(4px);
     }
     to {
       opacity: 1;
-      transform: translateY(0);
     }
   }
 
   .message-list-enter {
-    animation: message-list-fade-in 180ms ease-out both;
+    animation: message-list-fade-in 180ms ease-out backwards;
   }
 
   /* Link preview card fade-in */
@@ -1063,6 +1218,239 @@
 
   .link-preview-enter {
     animation: link-preview-fade-in 150ms ease-out both;
+  }
+
+  /* ===== MICRO-INTERACTION ANIMATIONS ===== */
+
+  /* Emoji reaction pop-in — slight overshoot for playful feel */
+  @keyframes reaction-pop-in {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .reaction-enter {
+    animation: reaction-pop-in 140ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Reaction count bump when count changes */
+  @keyframes reaction-count-bump {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  .reaction-count-bump {
+    animation: reaction-count-bump 120ms ease-out;
+  }
+
+  /* Message action bar float-up on hover */
+  [data-component="message-actions"] {
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 140ms ease, transform 140ms ease;
+  }
+
+  .group:hover > [data-component="message-actions"],
+  [data-component="message-actions"]:focus-within {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Action button micro-scale on hover/active */
+  [data-component="message-actions"] button {
+    transition: color 140ms ease, background 140ms ease, transform 100ms ease;
+  }
+
+  [data-component="message-actions"] button:hover {
+    transform: scale(1.08);
+  }
+
+  [data-component="message-actions"] button:active {
+    transform: scale(0.95);
+  }
+
+  /* Skeleton shimmer effect (replaces animate-pulse) */
+  @keyframes skeleton-shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--background-elevated) 25%,
+      color-mix(in srgb, var(--background-elevated) 50%, var(--background-surface) 50%) 50%,
+      var(--background-elevated) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+  }
+
+  /* Emoji picker drop-in animation */
+  @keyframes picker-drop-in {
+    from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .picker-enter {
+    animation: picker-drop-in 140ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Context menu pop-in */
+  @keyframes menu-pop-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .context-menu-enter {
+    animation: menu-pop-in 100ms ease-out both;
+    transform-origin: top left;
+  }
+
+  /* Right sidebar slide-in/out */
+  [data-component="right-sidebar"] {
+    transition: width 180ms ease, opacity 180ms ease;
+    overflow: hidden;
+  }
+
+  [data-component="right-sidebar"][data-visible="false"] {
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-component="right-sidebar"][data-visible="true"] {
+    width: 240px;
+    opacity: 1;
+  }
+
+  /* Sidebar section expand/collapse with grid-template-rows trick */
+  .sidebar-section-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 180ms ease, opacity 180ms ease;
+    opacity: 0;
+  }
+
+  .sidebar-section-collapse[data-expanded="true"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+  }
+
+  .sidebar-section-collapse > div {
+    overflow: hidden;
+  }
+
+  /* Modal backdrop + content enter/exit */
+  @keyframes modal-backdrop-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes modal-content-in {
+    from { opacity: 0; transform: scale(0.97) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-backdrop-enter {
+    animation: modal-backdrop-in 180ms ease-out both;
+  }
+
+  .modal-content-enter {
+    animation: modal-content-in 180ms ease-out both;
+  }
+
+  /* Lightbox enter/exit animations */
+  @keyframes lightbox-backdrop-in {
+    from { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+    to   { opacity: 1; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  }
+
+  @keyframes lightbox-content-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes lightbox-backdrop-out {
+    from { opacity: 1; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+    to   { opacity: 0; backdrop-filter: blur(0px); -webkit-backdrop-filter: blur(0px); }
+  }
+
+  @keyframes lightbox-content-out {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0; transform: scale(0.96); }
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox.is-closing .foundry-image-lightbox-backdrop {
+    animation: lightbox-backdrop-out 160ms ease-in both;
+  }
+
+  [data-component="message-content"] .foundry-image-lightbox.is-closing .foundry-image-lightbox-dialog {
+    animation: lightbox-content-out 160ms ease-in both;
+  }
+
+  /* View/page crossfade on narrow change */
+  @keyframes view-enter {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  .view-enter {
+    animation: view-enter 140ms ease-out both;
+  }
+
+  /* Compose box send flash */
+  @keyframes compose-send-flash {
+    0% {
+      border-color: var(--compose-accent);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--compose-accent) 20%, transparent);
+    }
+    100% {
+      border-color: var(--border-default);
+      box-shadow: none;
+    }
+  }
+
+  .compose-send-flash {
+    animation: compose-send-flash 300ms ease-out both;
+  }
+
+  /* Sent message slide-in */
+  @keyframes message-sent-enter {
+    from { opacity: 0.5; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message-just-sent {
+    animation: message-sent-enter 180ms ease-out both;
+  }
+
+  /* Scroll-to-bottom floating button */
+  @keyframes scroll-btn-enter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .scroll-to-bottom-btn {
+    animation: scroll-btn-enter 180ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  /* Toast notification enter/exit */
+  @keyframes toast-enter {
+    from { transform: translateX(calc(100% + 1rem)); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+
+  @keyframes toast-exit {
+    from { transform: translateX(0); opacity: 1; }
+    to { transform: translateX(calc(100% + 1rem)); opacity: 0; }
+  }
+
+  .toast-enter {
+    animation: toast-enter 200ms ease-out both;
+  }
+
+  .toast-exit {
+    animation: toast-exit 180ms ease-in both;
   }
 
   /* Supervisor content: rendered markdown styles */

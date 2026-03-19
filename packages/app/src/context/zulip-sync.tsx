@@ -11,6 +11,7 @@ import {
   buildNotificationTitle,
   shouldNotifyMessage,
 } from "./notification-policy"
+import { isMessageInActiveConversation } from "./active-conversation"
 import {
   STARRED_NARROW,
   cacheKeysForMessage,
@@ -635,27 +636,8 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
         sync.addMessages(narrow, [msg])
       }
 
-      // Check if the user is currently viewing this conversation
       const activeNarrow = _getActiveNarrow?.() ?? null
-      const activeParsed = activeNarrow ? parseNarrow(activeNarrow) : null
-      const messageNarrow = primaryNarrowForMessage(msg)
-      const messageParsed = messageNarrow ? parseNarrow(messageNarrow) : null
-      const isViewingConversation = Boolean(
-        activeParsed
-        && messageParsed
-        && (
-          (activeParsed.type === "topic"
-            && messageParsed.type === "topic"
-            && activeParsed.streamId === messageParsed.streamId
-            && sameTopicName(activeParsed.topic || "", messageParsed.topic || ""))
-          || (activeParsed.type === "stream"
-            && messageParsed.type === "topic"
-            && activeParsed.streamId === messageParsed.streamId)
-          || (activeParsed.type === "dm"
-            && messageParsed.type === "dm"
-            && JSON.stringify(activeParsed.userIds || []) === JSON.stringify(messageParsed.userIds || []))
-        )
-      )
+      const isViewingConversation = isMessageInActiveConversation(activeNarrow, msg)
       const shouldTrackUnread = shouldAddMessageToUnread(
         msg,
         store.currentUserId,
@@ -973,6 +955,7 @@ export function ZulipSyncProvider(props: { orgId: string; children: JSX.Element 
       setStore(produce(s => {
         if (data.subscriptions) s.subscriptions = data.subscriptions
         s.users = nextUsers
+        if (Array.isArray(data.user_topics)) s.userTopics = data.user_topics
         // Clear messages to force refetch
         s.messages = {}
         s.messageLoadState = {}
