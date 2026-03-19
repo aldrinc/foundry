@@ -9,6 +9,15 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 
 - Public repository polish, launch checklist, support routing, and issue templates
 
+## 0.16.5 - 2026-03-19
+
+- Added a redesigned image gallery and lightbox with smoother loading placeholders, zoom controls, pan support, and direct local downloads.
+- Added reply quote cards, stream topic dividers, and a floating scroll-to-bottom control so long conversations are easier to scan and navigate.
+- Fixed internal Foundry conversation links so same-realm stream, topic, direct-message, and message links stay inside the desktop app instead of opening the browser.
+- Fixed compose focus and upload cursor restoration when switching conversations or attaching files, and added clearer send feedback plus in-app toast notifications.
+- Fixed desktop download handling so attachments and media save through the configured local download directory, and kept avatar deletes synced to the server-provided fallback image.
+- Updated the desktop application bundle metadata to version `0.16.5`.
+
 ## 0.16.4 - 2026-03-18
 
 - Fixed topic matching so sidebar selection, unread counts, visibility rules, and live sync stay correct even when Zulip topic names differ only by case or extra whitespace.
