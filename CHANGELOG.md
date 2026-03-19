@@ -9,6 +9,12 @@ Desktop release artifacts are published on [GitHub Releases](https://github.com/
 
 - Public repository polish, launch checklist, support routing, and issue templates
 
+## 0.16.6 - 2026-03-19
+
+- Reissued the desktop release after fixing the GitHub OTA workflow so the updater manifest and platform assets publish cleanly from one tag.
+- No additional app behavior changes beyond `0.16.5`; this release exists to complete the production desktop rollout.
+- Updated the desktop application bundle metadata to version `0.16.6`.
+
 ## 0.16.5 - 2026-03-19
 
 - Added a redesigned image gallery and lightbox with smoother loading placeholders, zoom controls, pan support, and direct local downloads.

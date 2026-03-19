@@ -205,7 +205,5 @@ jobs:
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           args: ${{ matrix.args }}
           # Retrying after partial asset publication can fail on duplicate uploads.
-          uploadUpdaterJson: ${{ matrix.publish_updater_json }}
-          uploadUpdaterSignatures: true
-          uploadWorkflowArtifacts: true
+          includeUpdaterJson: ${{ matrix.publish_updater_json }}
           updaterJsonPreferNsis: true
